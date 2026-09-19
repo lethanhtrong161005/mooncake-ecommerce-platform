@@ -1,0 +1,55 @@
+# ==============================================================================
+# .NET Core / ASP.NET Core
+# ==============================================================================
+bin/
+obj/
+TestResults/
+*.user
+*.userosscache
+*.sln.docstates
+
+# ==============================================================================
+# IDEs & Editors
+# ==============================================================================
+# Visual Studio
+.vs/
+*.suo
+*.userprefs
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Rider / IntelliJ
+.idea/
+*.sln.iml
+
+# ==============================================================================
+# OS Generated Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==============================================================================
+# Application Specific
+# ==============================================================================
+# Logs
+logs/
+*.log
+
+# Environments (Do not commit real secrets!)
+.env
+.env.*
+*.env
+
+# AI / Agents
+.agents/scratch/
+.gemini/

@@ -1,0 +1,38 @@
+# ==============================================================================
+# Docker Ignore - Prevent copying unnecessary files into the Docker Image
+# ==============================================================================
+
+# Git
+.git/
+.gitignore
+
+# Compiled outputs
+bin/
+obj/
+TestResults/
+
+# IDEs
+.vscode/
+.idea/
+.vs/
+
+# Environments / Docker config
+docker/
+.env*
+docker-compose*.yml
+
+# Logs
+logs/
+*.log
+
+# Markdown & Docs
+*.md
+README.md
+.agents/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Misc scripts
+setup-solution.sh

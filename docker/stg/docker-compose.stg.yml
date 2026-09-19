@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  mysql-stg:
+    image: mysql:8.0
+    container_name: mooncake-mysql-stg
+    env_file:
+      - .env.stg
+    environment:
+      TZ: Etc/UTC
+    volumes:
+      - mooncake_mysql_stg_data:/var/lib/mysql
+      - ../mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-time-zone=+00:00
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  mooncake_mysql_stg_data:

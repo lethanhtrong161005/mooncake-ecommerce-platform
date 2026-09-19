@@ -1,0 +1,6 @@
+@Mooncake.EcommercePlatform.WebApi_HostAddress = http://localhost:5043
+
+GET {{Mooncake.EcommercePlatform.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

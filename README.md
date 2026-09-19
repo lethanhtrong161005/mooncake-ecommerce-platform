@@ -9,7 +9,7 @@ A **Clean Architecture** (Onion/Hexagonal) ASP.NET Core 8 backend starter templa
 ```text
 mooncake-ecommerce-platform/
 ├── .agents/
-│   └── .md               # Coding guidelines & conventions
+│   └── AGENTS.md               # Coding guidelines & conventions
 ├── .vscode/
 │   ├── launch.json                   # VS Code debugger settings
 │   └── tasks.json                    # VS Code build tasks

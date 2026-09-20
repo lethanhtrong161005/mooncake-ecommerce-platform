@@ -2,7 +2,7 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
 using Mooncake.EcommercePlatform.Domain.Entities;
-using Mooncake.EcommercePlatform.Domain.Repositories;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation of <see cref="IUserRepository"/>.</summary>

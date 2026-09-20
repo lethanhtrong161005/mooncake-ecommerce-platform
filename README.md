@@ -26,8 +26,7 @@ mooncake-ecommerce-platform/
 │   ├── Mooncake.EcommercePlatform.Domain/
 │   │   ├── Common/BaseEntity.cs
 │   │   ├── Entities/User.cs
-│   │   ├── Enums/UserRole.cs
-│   │   └── Repositories/IUserRepository.cs
+│   │   └── Enums/UserRole.cs
 │   ├── Mooncake.EcommercePlatform.Application/
 │   │   ├── Common/DTOs/ApiResponse.cs
 │   │   ├── Common/Exceptions/HttpException.cs
@@ -35,6 +34,7 @@ mooncake-ecommerce-platform/
 │   │   ├── Common/Helpers/UserHelper.cs
 │   │   ├── Common/Interfaces/IDateTimeProvider.cs
 │   │   ├── Common/Interfaces/ITraceContext.cs
+│   │   ├── Common/Interfaces/IUserRepository.cs  ← Repository contract lives here
 │   │   ├── Common/Utils/ResponseHelper.cs
 │   │   ├── DTOs/Users/Requests/
 │   │   ├── DTOs/Users/Responses/
@@ -68,14 +68,39 @@ mooncake-ecommerce-platform/
 ## 🏗️ Architecture
 
 ```
-Domain  (no dependencies)
-    ↑
-Application  →  Domain
-    ↑
-Infrastructure  →  Application, Domain
-    ↑
-WebApi  →  Infrastructure, Application
+Domain  ←  Application  ←  Infrastructure  ←  WebApi
+(arrow = "knows about / depends on")
 ```
+
+### Dependency Flow Rules
+
+Each layer may only reference the layer(s) to its **left**. Violations break the architecture.
+
+| Layer | Depends On | Implemented By |
+|---|---|---|
+| **Domain** | *(nothing)* — zero external dependencies | Entities, Enums, `BaseEntity` |
+| **Application** | Domain only | Service interfaces (`IUserService`), repository & provider contracts (`IUserRepository`, `IDateTimeProvider`, `ITraceContext`), business logic (`UserService`), DTOs, Helpers |
+| **Infrastructure** | Application + Domain | EF Core `DbContext`, `UserRepository`, `DateTimeProvider`, `TraceContext`, Migrations |
+| **WebApi** | Application + Infrastructure | Controllers, Middleware, `Program.cs`, Serilog setup |
+
+### Data Flow per Request
+
+```
+HTTP Request
+    → WebApi (Controller receives request, validates DTO)
+        → Application (Service executes business logic via interfaces)
+            → Infrastructure (Repository/Provider fulfils the contract against DB/HTTP)
+                → Domain (Entities are created / mutated)
+            ← Infrastructure (Returns Domain Entity)
+        ← Application (Maps Entity → Response DTO)
+    ← WebApi (Wraps result in ApiResponse<T> and returns HTTP response)
+```
+
+### Key Invariants
+- **Domain has zero project references** — it must compile standalone.
+- **Application never references Infrastructure** — it only depends on interfaces.
+- **Infrastructure never contains business logic** — it only fulfils contracts.
+- **WebApi never calls repositories directly** — it always goes through a Service.
 
 ---
 

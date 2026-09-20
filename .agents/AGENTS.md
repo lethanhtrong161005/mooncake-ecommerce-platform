@@ -214,3 +214,46 @@ protected IActionResult Success(string message) =>
 ## 10. Configurations & Environment
 
 - **Do Not Touch Configs**: Do not modify existing configuration files (`.env`, `appsettings.json`, `appsettings.Development.json`, `launch.json`, or DI configuration) unless explicitly requested by the user.
+
+---
+
+## 11. Clean Architecture — Mandatory Dependency & Data Flow
+
+### Dependency Direction (MUST be strictly enforced)
+
+```
+Domain  ←  Application  ←  Infrastructure  ←  WebApi
+(arrow = "knows about / depends on")
+```
+
+Each layer may only reference the layer(s) to its **left**. Any violation is a hard rule break.
+
+| Layer | Allowed Dependencies | Contains |
+|---|---|---|
+| **Domain** | *(none)* — zero project references | Entities, Enums, `BaseEntity` |
+| **Application** | Domain only | `IUserRepository`, `IUserService`, `IDateTimeProvider`, `ITraceContext`, `UserService`, DTOs, Helpers, Utils, Exceptions |
+| **Infrastructure** | Application + Domain | `UserRepository`, `DateTimeProvider`, `TraceContext`, EF Core `DbContext`, Configurations, Migrations |
+| **WebApi** | Application + Infrastructure | Controllers, Middleware, Serilog setup, `Program.cs` |
+
+### Data Flow per HTTP Request (READ THIS before writing new code)
+
+```
+HTTP Request
+    → WebApi (Controller receives request, validates DTO)
+        → Application (Service executes business logic via interfaces)
+            → Infrastructure (Repository/Provider fulfils the contract against DB/HTTP)
+                → Domain (Entities are created / mutated)
+            ← Infrastructure (Returns Domain Entity)
+        ← Application (Maps Entity → Response DTO via IUserHelper)
+    ← WebApi (Wraps result in ApiResponse<T> and returns HTTP response)
+```
+
+### Key Invariants (MANDATORY — never violate)
+
+- **Domain has zero project references** — it must compile completely standalone.
+- **Application NEVER references Infrastructure** — it only depends on abstractions (interfaces).
+- **Infrastructure NEVER contains business logic** — it only fulfils contracts defined in Application.
+- **WebApi NEVER calls repositories directly** — all data access must go through a Service in Application.
+- **Repository interfaces** (e.g., `IUserRepository`) MUST reside in `Application/Common/Interfaces/`, NOT in `Domain/`.
+
+

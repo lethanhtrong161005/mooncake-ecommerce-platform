@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
-using Mooncake.EcommercePlatform.Domain.Repositories;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 using Mooncake.EcommercePlatform.Infrastructure.Repositories;
 using Mooncake.EcommercePlatform.Infrastructure.Services;

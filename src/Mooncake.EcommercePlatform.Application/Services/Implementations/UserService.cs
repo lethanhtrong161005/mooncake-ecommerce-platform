@@ -6,7 +6,7 @@ using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
-using Mooncake.EcommercePlatform.Domain.Repositories;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
 /// <summary>
 /// Implements user management business logic.

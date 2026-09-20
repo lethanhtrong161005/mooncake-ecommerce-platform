@@ -1,4 +1,4 @@
-namespace Mooncake.EcommercePlatform.Domain.Repositories;
+namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
 using Mooncake.EcommercePlatform.Domain.Entities;
 

@@ -13,17 +13,17 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var dbHost = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
-        var dbPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
-        var dbName = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? throw new InvalidOperationException("MYSQL_DATABASE env var is missing.");
-        var dbUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? throw new InvalidOperationException("MYSQL_USER env var is missing.");
-        var dbPass = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? throw new InvalidOperationException("MYSQL_PASSWORD env var is missing.");
+        var dbHost = Environment.GetEnvironmentVariable("POSTGRES_HOST") ?? "localhost";
+        var dbPort = Environment.GetEnvironmentVariable("POSTGRES_PORT") ?? "5432";
+        var dbName = Environment.GetEnvironmentVariable("POSTGRES_DB") ?? throw new InvalidOperationException("POSTGRES_DB env var is missing.");
+        var dbUser = Environment.GetEnvironmentVariable("POSTGRES_USER") ?? throw new InvalidOperationException("POSTGRES_USER env var is missing.");
+        var dbPass = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD") ?? throw new InvalidOperationException("POSTGRES_PASSWORD env var is missing.");
 
-        var connectionString = $"Server={dbHost};Port={dbPort};Database={dbName};User={dbUser};Password={dbPass};CharSet=utf8mb4;";
+        var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass};";
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+            options.UseNpgsql(connectionString);
 
             // Print SQL parameters and detailed errors when debugging/development
             if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")

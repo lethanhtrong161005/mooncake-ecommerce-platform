@@ -1,8 +1,9 @@
 namespace Mooncake.EcommercePlatform.Domain.Enums;
 
-/// <summary>Roles available to platform users.</summary>
+/// <summary>Platform-level roles for the users table.</summary>
 public enum UserRole
 {
-    ADMIN,
-    USER
+    Customer,
+    Supplier,
+    Admin
 }

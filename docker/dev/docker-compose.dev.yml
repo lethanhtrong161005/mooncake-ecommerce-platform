@@ -1,40 +1,38 @@
 version: "3.9"
 
 services:
-  mysql-dev:
-    image: mysql:8.0
-    container_name: mooncake-mysql-dev
+  postgres-dev:
+    image: postgres:16-alpine
+    container_name: mooncake-postgres-dev
     env_file:
       - .env.dev
     environment:
       TZ: Etc/UTC
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mooncake_mysql_dev_data:/var/lib/mysql
-      - ../mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: >
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --default-time-zone=+00:00
+      - mooncake_pg_dev_data:/var/lib/postgresql/data
+      - ../postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  adminer:
-    image: adminer:latest
-    container_name: mooncake-adminer-dev
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: mooncake-pgadmin-dev
     ports:
-      - "8080:8080"
+      - "8080:80"
     environment:
+      PGADMIN_DEFAULT_EMAIL: admin@mooncake.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
       TZ: Etc/UTC
     depends_on:
-      mysql-dev:
+      postgres-dev:
         condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  mooncake_mysql_dev_data:
+  mooncake_pg_dev_data:

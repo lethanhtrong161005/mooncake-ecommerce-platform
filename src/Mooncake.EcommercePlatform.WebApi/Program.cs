@@ -1,3 +1,6 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using Mooncake.EcommercePlatform.Application;
 using Mooncake.EcommercePlatform.Infrastructure;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
@@ -10,8 +13,6 @@ TimeZoneInfo.ClearCachedData();
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Environment Variables (Enterprise Standard) ───────────────────────────────
-// On Cloud/Production (AWS, Azure, GCP, K8s), environment variables are injected directly by the orchestrator.
-// We only load .env files manually during local development.
 if (builder.Environment.IsDevelopment())
 {
     var localEnvPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "docker", "dev", ".env.dev");
@@ -21,8 +22,6 @@ if (builder.Environment.IsDevelopment())
     }
 }
 
-// Cloud providers (Heroku, GCP Cloud Run) often inject the 'PORT' environment variable.
-// Fallback to our custom 'BACKEND_PORT', and default to 8089.
 var port = Environment.GetEnvironmentVariable("PORT") 
         ?? Environment.GetEnvironmentVariable("BACKEND_PORT") 
         ?? "8089";
@@ -39,6 +38,32 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "Mooncake E-Commerce Platform API", Version = "v1" });
+});
+
+// ── JWT Authentication ────────────────────────────────────────────────────────
+var jwtSecret = builder.Configuration["Jwt:SecretKey"] 
+             ?? Environment.GetEnvironmentVariable("JWT_SECRET") 
+             ?? "MooncakeEcommercePlatformSuperSecretSecurityKey2026!";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "MooncakePlatform";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MooncakePlatformAudience";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+    };
 });
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -66,7 +91,11 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Serve uploaded static files under /uploads
+app.UseStaticFiles();
+
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

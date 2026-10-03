@@ -18,10 +18,10 @@ public class UsersController(IUserService userService) : BaseApiController
     }
 
     /// <summary>Returns a single user by ID.</summary>
-    [HttpGet("{id:guid}")]
+    [HttpGet("{id:long}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetByIdAsync(long id, CancellationToken cancellationToken)
     {
         var user = await userService.GetUserByIdAsync(id, cancellationToken);
         return Success(user, "User retrieved successfully.");
@@ -39,20 +39,20 @@ public class UsersController(IUserService userService) : BaseApiController
     }
 
     /// <summary>Updates an existing user's profile.</summary>
-    [HttpPut("{id:guid}")]
+    [HttpPut("{id:long}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateAsync(long id, [FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
     {
         var user = await userService.UpdateUserAsync(id, request, cancellationToken);
         return Success(user, "User updated successfully.");
     }
 
     /// <summary>Deletes a user by ID.</summary>
-    [HttpDelete("{id:guid}")]
+    [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteAsync(long id, CancellationToken cancellationToken)
     {
         await userService.DeleteUserAsync(id, cancellationToken);
         return Success("User deleted successfully.");

@@ -20,7 +20,7 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
         return users.Select(u => userHelper.ToResponse(u));
     }
 
-    public async Task<UserResponse> GetUserByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<UserResponse> GetUserByIdAsync(long id, CancellationToken cancellationToken = default)
     {
         var user = await userRepository.GetByIdAsync(id, cancellationToken)
                    ?? throw new HttpException(404, $"User with id '{id}' was not found.");
@@ -35,9 +35,9 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
 
         var user = new User
         {
-            Username = request.Username,
             Email = request.Email,
             FullName = request.FullName,
+            Phone = request.Phone,
             // NOTE: Replace with a proper hashing library (e.g. BCrypt.Net) in production.
             PasswordHash = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(request.Password))
         };
@@ -46,20 +46,21 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
         return userHelper.ToResponse(created);
     }
 
-    public async Task<UserResponse> UpdateUserAsync(Guid id, UpdateUserRequest request, CancellationToken cancellationToken = default)
+    public async Task<UserResponse> UpdateUserAsync(long id, UpdateUserRequest request, CancellationToken cancellationToken = default)
     {
         var user = await userRepository.GetByIdAsync(id, cancellationToken)
                    ?? throw new HttpException(404, $"User with id '{id}' was not found.");
 
         user.FullName = request.FullName;
         user.Email = request.Email;
+        user.Phone = request.Phone;
         user.UpdatedAtUtc = DateTime.UtcNow;
 
         var updated = await userRepository.UpdateAsync(user, cancellationToken);
         return userHelper.ToResponse(updated);
     }
 
-    public async Task DeleteUserAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteUserAsync(long id, CancellationToken cancellationToken = default)
     {
         var user = await userRepository.GetByIdAsync(id, cancellationToken)
                    ?? throw new HttpException(404, $"User with id '{id}' was not found.");

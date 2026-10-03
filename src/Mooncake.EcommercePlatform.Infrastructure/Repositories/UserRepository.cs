@@ -11,7 +11,7 @@ public class UserRepository(ApplicationDbContext context) : IUserRepository
     public async Task<IEnumerable<User>> GetAllAsync(CancellationToken cancellationToken = default) =>
         await context.Users.AsNoTracking().ToListAsync(cancellationToken);
 
-    public async Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+    public async Task<User?> GetByIdAsync(long id, CancellationToken cancellationToken = default) =>
         await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
 
     public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
@@ -31,7 +31,7 @@ public class UserRepository(ApplicationDbContext context) : IUserRepository
         return user;
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
         var user = await context.Users.FindAsync([id], cancellationToken);
         if (user is not null)

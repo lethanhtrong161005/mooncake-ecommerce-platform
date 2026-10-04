@@ -5,75 +5,53 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 
-/// <summary>Fluent API configuration for the User entity.</summary>
+/// <summary>EF Core configuration for <see cref="User"/>.</summary>
 public class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> builder)
     {
-        builder.ToTable("users");
+            builder.HasKey(e => e.Id).HasName("users_pkey");
 
-        // ── Primary Key ───────────────────────────────────────────────────────
-        builder.HasKey(u => u.Id);
+            builder.ToTable("users");
 
-        builder.Property(u => u.Id)
-               .HasColumnName("user_id")
-               .HasColumnType("char(36)")   // UUID stored as CHAR(36)
-               .ValueGeneratedNever();
+            builder.HasIndex(e => e.Email, "idx_users_email").HasFilter("(is_deleted = false)");
 
-        // ── User fields ───────────────────────────────────────────────────────
-        builder.Property(u => u.Username)
-               .HasColumnName("username")
-               .HasMaxLength(50)
-               .IsRequired();
+            builder.HasIndex(e => e.IsActive, "idx_users_is_active").HasFilter("(is_deleted = false)");
 
-        builder.HasIndex(u => u.Username).IsUnique();
+            builder.HasIndex(e => e.Email, "users_email_key").IsUnique();
 
-        builder.Property(u => u.Email)
-               .HasColumnName("email")
-               .HasMaxLength(255)
-               .IsRequired();
-
-        builder.HasIndex(u => u.Email).IsUnique();
-
-        builder.Property(u => u.FullName)
-               .HasColumnName("full_name")
-               .HasMaxLength(100)
-               .IsRequired();
-
-        builder.Property(u => u.PasswordHash)
-               .HasColumnName("password_hash")
-               .HasMaxLength(512)
-               .IsRequired();
-
-        // ── Role stored as string enum ────────────────────────────────────────
-        builder.Property(u => u.Role)
-               .HasColumnName("role")
-               .HasConversion<string>()
-               .HasMaxLength(20)
-               .HasDefaultValue(UserRole.USER)
-               .IsRequired();
-
-        // ── Audit fields ──────────────────────────────────────────────────────
-        builder.Property(u => u.CreatedAtUtc)
-               .HasColumnName("created_at")
-               .IsRequired();
-
-        builder.Property(u => u.UpdatedAtUtc)
-               .HasColumnName("updated_at")
-               .IsRequired();
-
-        builder.Property(u => u.CreatedBy)
-               .HasColumnName("created_by")
-               .HasMaxLength(100);
-
-        builder.Property(u => u.UpdatedBy)
-               .HasColumnName("updated_by")
-               .HasMaxLength(100);
-
-        // ── Soft delete ───────────────────────────────────────────────────────
-        builder.Property(u => u.IsDeleted)
-               .HasColumnName("is_deleted")
-               .HasDefaultValue(false)
-               .IsRequired();
+            builder.Property(e => e.Id)
+                .HasDefaultValueSql("uuid_generate_v4()")
+                .HasColumnName("id");
+            builder.Property(e => e.AvatarUrl).HasColumnName("avatar_url");
+            builder.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            builder.Property(e => e.CreatedBy).HasColumnName("created_by");
+            builder.Property(e => e.Email)
+                .HasMaxLength(255)
+                .HasColumnName("email");
+            builder.Property(e => e.EmailVerifiedAt).HasColumnName("email_verified_at");
+            builder.Property(e => e.FullName)
+                .HasMaxLength(255)
+                .HasColumnName("full_name");
+            builder.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            builder.Property(e => e.IsDeleted)
+                .HasDefaultValue(false)
+                .HasColumnName("is_deleted");
+            builder.Property(e => e.PasswordHash)
+                .HasMaxLength(255)
+                .HasColumnName("password_hash");
+            builder.Property(e => e.Phone)
+                .HasMaxLength(20)
+                .HasColumnName("phone");
+            builder.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("updated_at");
+            builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+        builder.Property(e => e.Role).HasColumnName("role");
+        builder.HasIndex(e => e.Role, "idx_users_role");
     }
 }

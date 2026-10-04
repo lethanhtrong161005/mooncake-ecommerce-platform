@@ -8,5 +8,5 @@ public class UserHelper : IUserHelper
 {
     /// <summary>Maps a User entity to a UserResponse DTO.</summary>
     public UserResponse ToResponse(User user) =>
-        new(user.Id, user.Username, user.Email, user.FullName, user.Role, user.CreatedAtUtc, user.UpdatedAtUtc);
+        new(user.Id, user.Email, user.FullName, user.Phone, user.AvatarUrl, user.Role, user.CreatedAtUtc, user.UpdatedAtUtc);
 }

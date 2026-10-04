@@ -2,9 +2,11 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Pgvector;
 
 #nullable disable
 
@@ -18,78 +20,3000 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "8.0.11")
-                .HasAnnotation("Relational:MaxIdentifierLength", 64);
+                .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_conversation_type", "ai_conversation_type", new[] { "product_info", "mooncake_history", "sales_analytics", "general" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_message_role", "ai_message_role", new[] { "user", "assistant", "system" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_report_status", "ai_report_status", new[] { "pending", "processing", "completed", "failed" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_report_type", "ai_report_type", new[] { "sales_trend", "supplier_performance", "demand_forecast", "product_analysis", "revenue_summary" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "bid_status", "bid_status", new[] { "submitted", "accepted", "cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "contract_status", "contract_status", new[] { "draft", "pending_signature", "signed", "pending_deposit", "active", "completed_on_time", "completed_late", "breached", "disputed", "cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "custom_packaging_status", "custom_packaging_status", new[] { "pending", "design_review", "approved", "in_production", "rejected" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "delivery_status", "delivery_status", new[] { "pending", "confirmed", "picked_up", "in_transit", "delivered", "failed", "returned" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "delivery_type", "delivery_type", new[] { "platform_managed", "self_arranged" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "discount_type", "discount_type", new[] { "percentage", "fixed_amount", "fixed_price" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "milestone_status", "milestone_status", new[] { "pending", "awaiting_payment", "paid", "completed_on_time", "completed_late", "overdue", "failed" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "order_status", "order_status", new[] { "pending", "confirmed", "processing", "shipped", "delivered", "cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "payment_method", "payment_method", new[] { "bank_transfer", "momo", "vnpay", "zalopay", "cash" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "payment_status", "payment_status", new[] { "pending", "processing", "completed", "failed", "refunded" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "product_status", "product_status", new[] { "active", "inactive", "out_of_stock" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "proof_type", "proof_type", new[] { "pickup", "in_transit", "delivery", "failed_attempt" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "reputation_event", "reputation_event", new[] { "completed_on_time", "completed_late", "breached", "positive_review", "negative_review", "admin_penalty", "admin_bonus" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_invitation_status", "rfq_invitation_status", new[] { "invited", "viewed", "bid_submitted", "declined" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_status", "rfq_status", new[] { "draft", "open", "in_negotiation", "awarded", "closed", "cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "shop_status", "shop_status", new[] { "active", "inactive", "suspended" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "user_role", "user_role", new[] { "customer", "supplier", "admin" });
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "extensions", "pgcrypto");
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "extensions", "uuid-ossp");
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
+            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.AiAnalyticsReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Parameters")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parameters");
+
+                    b.Property<AiReportType>("ReportType")
+                        .HasColumnType("ai_report_type")
+                        .HasColumnName("report_type");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("ResultData")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_data");
+
+                    b.Property<AiReportStatus>("Status")
+                        .HasColumnType("ai_report_status")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("ai_analytics_reports_pkey");
+
+                    b.HasIndex(new[] { "ReportType" }, "idx_aar_report_type");
+
+                    b.HasIndex(new[] { "RequestedBy" }, "idx_aar_requested_by")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_aar_status");
+
+                    b.ToTable("ai_analytics_reports", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.AiConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<AiConversationType>("ConversationType")
+                        .HasColumnType("ai_conversation_type")
+                        .HasColumnName("conversation_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("SessionToken")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("session_token");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("ai_conversations_pkey");
+
+                    b.HasIndex(new[] { "SessionToken" }, "ai_conversations_session_token_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "ConversationType" }, "idx_aic_type");
+
+                    b.HasIndex(new[] { "UserId" }, "idx_aic_user_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("ai_conversations", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.AiMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(1536)")
+                        .HasColumnName("embedding");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("ModelUsed")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("model_used");
+
+                    b.Property<AiMessageRole>("Role")
+                        .HasColumnType("ai_message_role")
+                        .HasColumnName("role");
+
+                    b.Property<int?>("TokensUsed")
+                        .HasColumnType("integer")
+                        .HasColumnName("tokens_used");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("ai_messages_pkey");
+
+                    b.HasIndex(new[] { "ConversationId", "CreatedAt" }, "idx_aim_conversation_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("ai_messages", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Bid", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("BidNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("bid_number");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<int?>("EstimatedDeliveryDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("estimated_delivery_days");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("RfqId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_id");
+
+                    b.Property<BidStatus>("Status")
+                        .HasColumnType("bid_status")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<decimal?>("TotalPrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("total_price");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("ValidityDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30)
+                        .HasColumnName("validity_days");
+
+                    b.HasKey("Id")
+                        .HasName("bids_pkey");
+
+                    b.HasIndex(new[] { "BidNumber" }, "bids_bid_number_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "RfqId" }, "idx_bids_rfq_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_bids_status");
+
+                    b.HasIndex(new[] { "SupplierId" }, "idx_bids_supplier_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "TotalPrice" }, "idx_bids_total_price");
+
+                    b.ToTable("bids", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.BidItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<Guid>("BidId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bid_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("RfqItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_item_id");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("subtotal");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("bid_items_pkey");
+
+                    b.HasIndex(new[] { "BidId" }, "idx_bi_bid_id");
+
+                    b.HasIndex(new[] { "RfqItemId" }, "idx_bi_rfq_item_id");
+
+                    b.ToTable("bid_items", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Category", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<string>("IconUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("icon_url");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_id");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("categories_pkey");
+
+                    b.HasIndex(new[] { "ParentId" }, "idx_categories_parent_id")
+                        .HasFilter("(parent_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "SortOrder" }, "idx_categories_sort_order");
+
+                    b.ToTable("categories", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Contract", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<Guid?>("BidId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bid_id");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("ContractNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("contract_number");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<DateOnly?>("DeliveryDeadline")
+                        .HasColumnType("date")
+                        .HasColumnName("delivery_deadline");
+
+                    b.Property<decimal?>("DepositAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("deposit_amount");
+
+                    b.Property<DateTime?>("DepositPaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deposit_paid_at");
+
+                    b.Property<Guid?>("DepositRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deposit_rule_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("PenaltyTerms")
+                        .HasColumnType("text")
+                        .HasColumnName("penalty_terms");
+
+                    b.Property<Guid?>("RfqId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_id");
+
+                    b.Property<DateTime?>("SignedByCustomerAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("signed_by_customer_at");
+
+                    b.Property<DateTime?>("SignedBySupplierAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("signed_by_supplier_at");
+
+                    b.Property<ContractStatus>("Status")
+                        .HasColumnType("contract_status")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<string>("TermsAndConditions")
+                        .HasColumnType("text")
+                        .HasColumnName("terms_and_conditions");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<decimal?>("TotalValue")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("total_value");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("contracts_pkey");
+
+                    b.HasIndex(new[] { "ContractNumber" }, "contracts_contract_number_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "BidId" }, "idx_contracts_bid_id")
+                        .HasFilter("(bid_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "CustomerId" }, "idx_contracts_customer_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "DepositRuleId" }, "idx_contracts_deposit_rule_id")
+                        .HasFilter("(deposit_rule_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "OrderId" }, "idx_contracts_order_id")
+                        .HasFilter("(order_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_contracts_pending_deposit");
+
+                    b.HasIndex(new[] { "RfqId" }, "idx_contracts_rfq_id")
+                        .HasFilter("(rfq_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_contracts_status");
+
+                    b.HasIndex(new[] { "SupplierId" }, "idx_contracts_supplier_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("contracts", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ContractDepositRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<bool>("AppliesToAll")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("applies_to_all");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("DepositPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("deposit_percentage");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsMandatory")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_mandatory");
+
+                    b.Property<decimal?>("MinContractValue")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("min_contract_value");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("PaymentDeadlineHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(48)
+                        .HasColumnName("payment_deadline_hours");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("contract_deposit_rules_pkey");
+
+                    b.HasIndex(new[] { "IsMandatory" }, "idx_cdr_is_mandatory")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("contract_deposit_rules", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ContractMilestone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<decimal?>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateOnly?>("CompletionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("completion_date");
+
+                    b.Property<Guid>("ContractId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contract_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsDeposit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deposit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal?>("Percentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("percentage");
+
+                    b.Property<int>("SequenceNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("sequence_number");
+
+                    b.Property<MilestoneStatus>("Status")
+                        .HasColumnType("milestone_status")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("contract_milestones_pkey");
+
+                    b.HasIndex(new[] { "ContractId" }, "idx_cm_contract_id");
+
+                    b.HasIndex(new[] { "DueDate" }, "idx_cm_due_date")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "ContractId", "IsDeposit" }, "idx_cm_is_deposit");
+
+                    b.HasIndex(new[] { "Status" }, "idx_cm_status");
+
+                    b.ToTable("contract_milestones", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.CustomPackaging", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("BoxDesignUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("box_design_url");
+
+                    b.Property<string>("ColorScheme")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("color_scheme");
+
+                    b.Property<string>("CompanyLogoUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("company_logo_url");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("company_name");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("PackagingType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("packaging_type");
+
+                    b.Property<string>("SpecialMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("special_message");
+
+                    b.Property<CustomPackagingStatus>("Status")
+                        .HasColumnType("custom_packaging_status")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("custom_packagings_pkey");
+
+                    b.HasIndex(new[] { "OrderId" }, "idx_cpkg_order_id");
+
+                    b.HasIndex(new[] { "Status" }, "idx_cpkg_status");
+
+                    b.ToTable("custom_packagings", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.CustomerProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("BillingAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("billing_address");
+
+                    b.Property<string>("CompanyLogoUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("company_logo_url");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("company_name");
+
+                    b.Property<string>("ContactPerson")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("contact_person");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("TaxCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tax_code");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("customer_profiles_pkey");
+
+                    b.HasIndex(new[] { "UserId" }, "idx_cp_user_id");
+
+                    b.ToTable("customer_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Delivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateOnly?>("ActualDeliveryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("actual_delivery_date");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contract_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DeliveryNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("delivery_number");
+
+                    b.Property<DeliveryType>("DeliveryType")
+                        .HasColumnType("delivery_type")
+                        .HasColumnName("delivery_type");
+
+                    b.Property<string>("FromAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("from_address");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("RecipientName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("recipient_name");
+
+                    b.Property<string>("RecipientPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("recipient_phone");
+
+                    b.Property<DateOnly?>("ScheduledDate")
+                        .HasColumnType("date")
+                        .HasColumnName("scheduled_date");
+
+                    b.Property<DeliveryStatus>("Status")
+                        .HasColumnType("delivery_status")
+                        .HasColumnName("status");
+
+                    b.Property<string>("ToAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("to_address");
+
+                    b.Property<string>("TrackingCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("tracking_code");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("deliveries_pkey");
+
+                    b.HasIndex(new[] { "DeliveryNumber" }, "deliveries_delivery_number_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "ContractId" }, "idx_del_contract_id")
+                        .HasFilter("(contract_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "OrderId" }, "idx_del_order_id")
+                        .HasFilter("(order_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_del_status");
+
+                    b.HasIndex(new[] { "TrackingCode" }, "idx_del_tracking_code")
+                        .HasFilter("(tracking_code IS NOT NULL)");
+
+                    b.ToTable("deliveries", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.DeliveryProof", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("DeliveryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("delivery_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<decimal?>("LocationLat")
+                        .HasPrecision(10, 8)
+                        .HasColumnType("numeric(10,8)")
+                        .HasColumnName("location_lat");
+
+                    b.Property<decimal?>("LocationLng")
+                        .HasPrecision(11, 8)
+                        .HasColumnType("numeric(11,8)")
+                        .HasColumnName("location_lng");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("PhotoUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("photo_url");
+
+                    b.Property<ProofType>("ProofType")
+                        .HasColumnType("proof_type")
+                        .HasColumnName("proof_type");
+
+                    b.Property<string>("SignatureUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("signature_url");
+
+                    b.Property<DateTime?>("TakenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("taken_at");
+
+                    b.Property<string>("TakenBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("taken_by");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("delivery_proofs_pkey");
+
+                    b.HasIndex(new[] { "DeliveryId" }, "idx_dp_delivery_id");
+
+                    b.HasIndex(new[] { "ProofType" }, "idx_dp_proof_type");
+
+                    b.ToTable("delivery_proofs", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_read");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reference_id");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("reference_type");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Type")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("notifications_pkey");
+
+                    b.HasIndex(new[] { "Type" }, "idx_notif_type")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "UserId", "IsRead" }, "idx_notif_unread")
+                        .HasFilter("((is_deleted = false) AND (is_read = false))");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "idx_notif_user_id")
+                        .IsDescending(false, true)
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("notifications", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Order", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("DeliveryAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("delivery_address");
+
+                    b.Property<DateOnly?>("DeliveryDateExpected")
+                        .HasColumnType("date")
+                        .HasColumnName("delivery_date_expected");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("discount_amount");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("order_number");
+
+                    b.Property<decimal>("ShippingFee")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("shipping_fee");
+
+                    b.Property<Guid>("ShopId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shop_id");
+
+                    b.Property<OrderStatus>("Status")
+                        .HasColumnType("order_status")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("subtotal");
+
+                    b.Property<decimal>("TaxAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("tax_amount");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("total_amount");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("orders_pkey");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "idx_orders_created_at")
+                        .IsDescending();
+
+                    b.HasIndex(new[] { "CustomerId" }, "idx_orders_customer_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "ShopId" }, "idx_orders_shop_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_orders_status");
+
+                    b.HasIndex(new[] { "OrderNumber" }, "orders_order_number_key")
+                        .IsUnique();
+
+                    b.ToTable("orders", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.OrderItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("discount_amount");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid?>("PromotionRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("promotion_rule_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("subtotal");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("variant_id");
+
+                    b.HasKey("Id")
+                        .HasName("order_items_pkey");
+
+                    b.HasIndex(new[] { "OrderId" }, "idx_oi_order_id");
+
+                    b.HasIndex(new[] { "ProductId" }, "idx_oi_product_id");
+
+                    b.HasIndex(new[] { "PromotionRuleId" }, "idx_oi_promotion_rule_id")
+                        .HasFilter("(promotion_rule_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "VariantId" }, "idx_oi_variant_id");
+
+                    b.ToTable("order_items", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Payment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contract_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<PaymentMethod>("Method")
+                        .HasColumnType("payment_method")
+                        .HasColumnName("method");
+
+                    b.Property<Guid?>("MilestoneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("milestone_id");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paid_at");
+
+                    b.Property<string>("PaymentNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("payment_number");
+
+                    b.Property<PaymentStatus>("Status")
+                        .HasColumnType("payment_status")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TransactionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("transaction_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("payments_pkey");
+
+                    b.HasIndex(new[] { "ContractId" }, "idx_pay_contract_id")
+                        .HasFilter("(contract_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "CustomerId" }, "idx_pay_customer_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "MilestoneId" }, "idx_pay_milestone_id")
+                        .HasFilter("(milestone_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "OrderId" }, "idx_pay_order_id")
+                        .HasFilter("(order_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "PaidAt" }, "idx_pay_paid_at")
+                        .IsDescending()
+                        .HasFilter("(paid_at IS NOT NULL)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_pay_status");
+
+                    b.HasIndex(new[] { "PaymentNumber" }, "payments_payment_number_key")
+                        .IsUnique();
+
+                    b.ToTable("payments", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Product", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<decimal>("BasePrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("base_price");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(1536)")
+                        .HasColumnName("embedding");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int?>("MaxOrderQty")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_order_qty");
+
+                    b.Property<int>("MinOrderQty")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("min_order_qty");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("ShopId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shop_id");
+
+                    b.Property<ProductStatus>("Status")
+                        .HasColumnType("product_status")
+                        .HasColumnName("status");
+
+                    b.Property<bool>("SupportsCustomPackaging")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("supports_custom_packaging");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("products_pkey");
+
+                    b.HasIndex(new[] { "BasePrice" }, "idx_products_base_price");
+
+                    b.HasIndex(new[] { "CategoryId" }, "idx_products_category_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "Name" }, "idx_products_name_trgm");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex(new[] { "Name" }, "idx_products_name_trgm"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex(new[] { "Name" }, "idx_products_name_trgm"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex(new[] { "ShopId" }, "idx_products_shop_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_products_status");
+
+                    b.ToTable("products", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ProductImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("ImageUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("image_url");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsPrimary")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_primary");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("product_images_pkey");
+
+                    b.HasIndex(new[] { "ProductId", "IsPrimary" }, "idx_pi_is_primary");
+
+                    b.HasIndex(new[] { "ProductId" }, "idx_pi_product_id");
+
+                    b.ToTable("product_images", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ProductReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsHiddenByAdmin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_hidden_by_admin");
+
+                    b.Property<bool>("IsPublic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_public");
+
+                    b.Property<bool>("IsVerifiedPurchase")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_verified_purchase");
+
+                    b.Property<int>("LikeCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("like_count");
+
+                    b.Property<string>("MediaUrls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("media_urls");
+
+                    b.Property<Guid>("OrderItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_item_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid?>("ProductVariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_variant_id");
+
+                    b.Property<short?>("Rating")
+                        .HasColumnType("smallint")
+                        .HasColumnName("rating");
+
+                    b.Property<DateTime?>("SupplierRepliedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("supplier_replied_at");
+
+                    b.Property<string>("SupplierReply")
+                        .HasColumnType("text")
+                        .HasColumnName("supplier_reply");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("product_reviews_pkey");
+
+                    b.HasIndex(new[] { "IsHiddenByAdmin" }, "idx_prev_admin_hidden")
+                        .HasFilter("(is_hidden_by_admin = true)");
+
+                    b.HasIndex(new[] { "CustomerId" }, "idx_prev_customer_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "ProductId", "LikeCount" }, "idx_prev_like_count")
+                        .IsDescending(false, true)
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "ProductId", "CreatedAt" }, "idx_prev_product_feed")
+                        .IsDescending(false, true)
+                        .HasFilter("((is_deleted = false) AND (is_hidden_by_admin = false))");
+
+                    b.HasIndex(new[] { "ProductId", "Rating" }, "idx_prev_rating")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "ProductVariantId" }, "idx_prev_variant_id")
+                        .HasFilter("((product_variant_id IS NOT NULL) AND (is_deleted = false))");
+
+                    b.HasIndex(new[] { "CustomerId", "OrderItemId" }, "product_reviews_customer_id_order_item_id_key")
+                        .IsUnique();
+
+                    b.ToTable("product_reviews", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ProductVariant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Filling")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("filling");
+
+                    b.Property<string>("Flavor")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("flavor");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("image_url");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PriceAdjustment")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("price_adjustment");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("SizeLabel")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("size_label");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("sku");
+
+                    b.Property<int>("StockQty")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("stock_qty");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int?>("WeightGram")
+                        .HasColumnType("integer")
+                        .HasColumnName("weight_gram");
+
+                    b.HasKey("Id")
+                        .HasName("product_variants_pkey");
+
+                    b.HasIndex(new[] { "ProductId" }, "idx_pv_product_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "StockQty" }, "idx_pv_stock_qty")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "Sku" }, "product_variants_sku_key")
+                        .IsUnique();
+
+                    b.ToTable("product_variants", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.PromotionRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DiscountType>("DiscountType")
+                        .HasColumnType("discount_type")
+                        .HasColumnName("discount_type");
+
+                    b.Property<decimal>("DiscountValue")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("discount_value");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("end_date");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int?>("MaxQty")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_qty");
+
+                    b.Property<int?>("MinQty")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_qty");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid>("ShopId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shop_id");
+
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("start_date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("promotion_rules_pkey");
+
+                    b.HasIndex(new[] { "IsActive", "StartDate", "EndDate" }, "idx_pr_active")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "ProductId" }, "idx_pr_product_id")
+                        .HasFilter("((product_id IS NOT NULL) AND (is_deleted = false))");
+
+                    b.HasIndex(new[] { "ShopId" }, "idx_pr_shop_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("promotion_rules", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ReputationLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<ReputationEvent>("EventType")
+                        .HasColumnType("reputation_event")
+                        .HasColumnName("event_type");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reference_id");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("reference_type");
+
+                    b.Property<decimal>("ScoreDelta")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("score_delta");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("reputation_logs_pkey");
+
+                    b.HasIndex(new[] { "EventType" }, "idx_rl_event_type");
+
+                    b.HasIndex(new[] { "ReferenceId", "ReferenceType" }, "idx_rl_reference")
+                        .HasFilter("(reference_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "SupplierId", "CreatedAt" }, "idx_rl_supplier_id")
+                        .IsDescending(false, true);
+
+                    b.ToTable("reputation_logs", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.RequestForQuotation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime?>("BidDeadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bid_deadline");
+
+                    b.Property<decimal?>("BudgetRangeMax")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("budget_range_max");
+
+                    b.Property<decimal?>("BudgetRangeMin")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("budget_range_min");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("DeliveryAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("delivery_address");
+
+                    b.Property<DateOnly?>("DeliveryDateRequired")
+                        .HasColumnType("date")
+                        .HasColumnName("delivery_date_required");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("RfqNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("rfq_number");
+
+                    b.Property<RfqStatus>("Status")
+                        .HasColumnType("rfq_status")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("request_for_quotations_pkey");
+
+                    b.HasIndex(new[] { "BidDeadline" }, "idx_rfq_bid_deadline")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "CustomerId" }, "idx_rfq_customer_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "Status" }, "idx_rfq_status");
+
+                    b.HasIndex(new[] { "RfqNumber" }, "request_for_quotations_rfq_number_key")
+                        .IsUnique();
+
+                    b.ToTable("request_for_quotations", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Review", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text")
+                        .HasColumnName("comment");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contract_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<short?>("DeliveryRating")
+                        .HasColumnType("smallint")
+                        .HasColumnName("delivery_rating");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsPublic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_public");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<short?>("OverallRating")
+                        .HasColumnType("smallint")
+                        .HasColumnName("overall_rating");
+
+                    b.Property<short?>("QualityRating")
+                        .HasColumnType("smallint")
+                        .HasColumnName("quality_rating");
+
+                    b.Property<short?>("ServiceRating")
+                        .HasColumnType("smallint")
+                        .HasColumnName("service_rating");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("reviews_pkey");
+
+                    b.HasIndex(new[] { "ContractId" }, "idx_rev_contract_id")
+                        .HasFilter("(contract_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "CustomerId" }, "idx_rev_customer_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "OrderId" }, "idx_rev_order_id")
+                        .HasFilter("(order_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "SupplierId", "OverallRating" }, "idx_rev_overall_rating")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "SupplierId" }, "idx_rev_supplier_id")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("reviews", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.RfqInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("InvitedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invited_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("responded_at");
+
+                    b.Property<Guid>("RfqId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_id");
+
+                    b.Property<RfqInvitationStatus>("Status")
+                        .HasColumnType("rfq_invitation_status")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("rfq_invitations_pkey");
+
+                    b.HasIndex(new[] { "RfqId" }, "idx_rfqinv_rfq_id");
+
+                    b.HasIndex(new[] { "Status" }, "idx_rfqinv_status");
+
+                    b.HasIndex(new[] { "SupplierId" }, "idx_rfqinv_supplier_id");
+
+                    b.HasIndex(new[] { "RfqId", "SupplierId" }, "rfq_invitations_rfq_id_supplier_id_key")
+                        .IsUnique();
+
+                    b.ToTable("rfq_invitations", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.RfqItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("NeedsCustomPackaging")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("needs_custom_packaging");
+
+                    b.Property<string>("PackagingRequirements")
+                        .HasColumnType("text")
+                        .HasColumnName("packaging_requirements");
+
+                    b.Property<string>("ProductName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("product_name");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("RfqId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_id");
+
+                    b.Property<string>("Specifications")
+                        .HasColumnType("text")
+                        .HasColumnName("specifications");
+
+                    b.Property<decimal?>("TargetPrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("target_price");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("rfq_items_pkey");
+
+                    b.HasIndex(new[] { "RfqId" }, "idx_rfqi_rfq_id");
+
+                    b.ToTable("rfq_items", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Shop", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("BannerUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("banner_url");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CustomColors")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("custom_colors");
+
+                    b.Property<string>("CustomCss")
+                        .HasColumnType("text")
+                        .HasColumnName("custom_css");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("LogoUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("logo_url");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("slug");
+
+                    b.Property<ShopStatus>("Status")
+                        .HasColumnType("shop_status")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("shops_pkey");
+
+                    b.HasIndex(new[] { "Slug" }, "idx_shops_slug");
+
+                    b.HasIndex(new[] { "Status" }, "idx_shops_status");
+
+                    b.HasIndex(new[] { "SupplierId" }, "idx_shops_supplier_id");
+
+                    b.HasIndex(new[] { "TemplateId" }, "idx_shops_template_id");
+
+                    b.HasIndex(new[] { "Slug" }, "shops_slug_key")
+                        .IsUnique();
+
+                    b.ToTable("shops", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ShopTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CssVariables")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("css_variables");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("LayoutConfig")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("layout_config");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PreviewImageUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("preview_image_url");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("shop_templates_pkey");
+
+                    b.ToTable("shop_templates", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.SupplierProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text")
+                        .HasColumnName("address");
+
+                    b.Property<decimal?>("AvgRating")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)")
+                        .HasColumnName("avg_rating");
+
+                    b.Property<string>("CompanyLogoUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("company_logo_url");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("company_name");
+
+                    b.Property<int>("ContractsBreached")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("contracts_breached");
+
+                    b.Property<int>("ContractsLate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("contracts_late");
+
+                    b.Property<int>("ContractsOnTime")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("contracts_on_time");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<decimal>("ReputationScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("reputation_score");
+
+                    b.Property<string>("TaxCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tax_code");
+
+                    b.Property<int>("TotalContracts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("total_contracts");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<bool>("Verified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("verified");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at");
+
+                    b.HasKey("Id")
+                        .HasName("supplier_profiles_pkey");
+
+                    b.HasIndex(new[] { "ReputationScore" }, "idx_sp_reputation_score")
+                        .IsDescending()
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "UserId" }, "idx_sp_user_id");
+
+                    b.HasIndex(new[] { "Verified" }, "idx_sp_verified")
+                        .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "TaxCode" }, "supplier_profiles_tax_code_key")
+                        .IsUnique();
+
+                    b.ToTable("supplier_profiles", (string)null);
+                });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("char(36)")
-                        .HasColumnName("user_id");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("avatar_url");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)")
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("email");
 
+                    b.Property<DateTime?>("EmailVerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("email_verified_at");
+
                     b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("full_name");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
+                        .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("varchar(512)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("password_hash");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
+                    b.Property<string>("Phone")
                         .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("USER")
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone");
+
+                    b.Property<UserRole>("Role")
+                        .HasColumnType("user_role")
                         .HasColumnName("role");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
 
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)")
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("username");
+                    b.HasKey("Id")
+                        .HasName("users_pkey");
 
-                    b.HasKey("Id");
+                    b.HasIndex(new[] { "Email" }, "idx_users_email")
+                        .HasFilter("(is_deleted = false)");
 
-                    b.HasIndex("Email")
-                        .IsUnique();
+                    b.HasIndex(new[] { "IsActive" }, "idx_users_is_active")
+                        .HasFilter("(is_deleted = false)");
 
-                    b.HasIndex("Username")
+                    b.HasIndex(new[] { "Role" }, "idx_users_role");
+
+                    b.HasIndex(new[] { "Email" }, "users_email_key")
                         .IsUnique();
 
                     b.ToTable("users", (string)null);

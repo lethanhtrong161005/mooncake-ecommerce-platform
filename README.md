@@ -24,9 +24,9 @@ mooncake-ecommerce-platform/
 │       └── init.sql                  # UTF-8 & UTC initialization
 ├── src/
 │   ├── Mooncake.EcommercePlatform.Domain/
-│   │   ├── Common/BaseEntity.cs
-│   │   ├── Entities/User.cs
-│   │   └── Enums/UserRole.cs
+│   │   ├── Common/BaseEntity.cs      # Core audit fields (Id, CreatedAt, UpdatedAt, etc.)
+│   │   ├── Entities/                 # 31 Domain entities (User, Product, Order, Shop, etc.)
+│   │   └── Enums/                    # 21 Domain enums (UserRole, OrderStatus, etc.)
 │   ├── Mooncake.EcommercePlatform.Application/
 │   │   ├── Common/DTOs/ApiResponse.cs
 │   │   ├── Common/Exceptions/HttpException.cs
@@ -34,7 +34,7 @@ mooncake-ecommerce-platform/
 │   │   ├── Common/Helpers/UserHelper.cs
 │   │   ├── Common/Interfaces/IDateTimeProvider.cs
 │   │   ├── Common/Interfaces/ITraceContext.cs
-│   │   ├── Common/Interfaces/IUserRepository.cs  ← Repository contract lives here
+│   │   ├── Common/Interfaces/IUserRepository.cs  ← Repository contracts live here
 │   │   ├── Common/Utils/ResponseHelper.cs
 │   │   ├── DTOs/Users/Requests/
 │   │   ├── DTOs/Users/Responses/
@@ -42,13 +42,13 @@ mooncake-ecommerce-platform/
 │   │   ├── Services/Implementations/UserService.cs
 │   │   └── DependencyInjection.cs
 │   ├── Mooncake.EcommercePlatform.Infrastructure/
-│   │   ├── Migrations/
+│   │   ├── Migrations/               # PostgreSQL EF Core migrations
 │   │   ├── Persistence/ApplicationDbContext.cs
-│   │   ├── Persistence/Configurations/UserConfiguration.cs
+│   │   ├── Persistence/Configurations/ # 31 EF Core Fluent API configurations
 │   │   ├── Repositories/UserRepository.cs
 │   │   ├── Services/DateTimeProvider.cs
 │   │   ├── Services/TraceContext.cs
-│   │   └── DependencyInjection.cs
+│   │   └── DependencyInjection.cs    # Npgsql DataSource with Enum & Vector mappings
 │   └── Mooncake.EcommercePlatform.WebApi/
 │       ├── Configurations/SerilogSetup.cs
 │       ├── Controllers/BaseApiController.cs
@@ -113,8 +113,11 @@ HTTP Request
 
 ---
 
-### Step 1 — Start the Development Database
+### Step 1 — Database & Supporting Services
 
+The database is hosted on **Supabase (PostgreSQL)**. Credentials and connection strings are configured in `docker/dev/.env.dev`.
+
+To start local supporting services (Adminer web database management):
 ```bash
 cd docker/dev
 docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
@@ -122,15 +125,8 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
 
 | Service | URL |
 |---|---|
-| MySQL 8.0 | `localhost:3306` |
+| PostgreSQL (Supabase) | Cloud Pooler (`aws-0-ap-southeast-1.pooler.supabase.com:5432`) |
 | Adminer UI | http://localhost:8080 |
-
-**Adminer login:**
-*(Refer to `.env.dev` for latest credentials)*
-- Server: `mysql-dev`
-- Username: `mooncake_user`
-- Password: `mooncake_dev_password`
-- Database: `mooncake_db`
 
 ---
 
@@ -311,9 +307,9 @@ SQL queries are explicitly mapped to the `Debug` level to ensure granular tracki
 |---|---|
 | Framework | ASP.NET Core 8.0 |
 | Language | C# 12 |
-| ORM | Entity Framework Core + Pomelo.MySql |
-| Database | MySQL 8.0 |
+| ORM | Entity Framework Core + Npgsql + Pgvector |
+| Database | PostgreSQL 15+ (Supabase) |
 | Logging | Serilog (Async File Appenders) |
 | Configuration | DotNetEnv (12-Factor App) |
 | API Docs | Swagger / OpenAPI (Swashbuckle) |
-| Containerization | Docker Compose |
+| Containerization | Docker Compose (Adminer) |

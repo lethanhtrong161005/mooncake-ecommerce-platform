@@ -35,9 +35,10 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
 
         var user = new User
         {
-            Username = request.Username,
             Email = request.Email,
             FullName = request.FullName,
+            Phone = request.Phone,
+            Role = request.Role,
             // NOTE: Replace with a proper hashing library (e.g. BCrypt.Net) in production.
             PasswordHash = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(request.Password))
         };
@@ -53,6 +54,8 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
 
         user.FullName = request.FullName;
         user.Email = request.Email;
+        user.Phone = request.Phone;
+        user.AvatarUrl = request.AvatarUrl;
         user.UpdatedAtUtc = DateTime.UtcNow;
 
         var updated = await userRepository.UpdateAsync(user, cancellationToken);

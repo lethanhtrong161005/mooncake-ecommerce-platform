@@ -5,9 +5,10 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 /// <summary>Projection of a User returned to the caller.</summary>
 public record UserResponse(
     Guid Id,
-    string Username,
     string Email,
-    string FullName,
+    string? FullName,
+    string? Phone,
+    string? AvatarUrl,
     UserRole Role,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc

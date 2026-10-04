@@ -18,6 +18,7 @@ if (builder.Environment.IsDevelopment())
     if (File.Exists(localEnvPath))
     {
         DotNetEnv.Env.Load(localEnvPath);
+        builder.Configuration.AddEnvironmentVariables();
     }
 }
 
@@ -34,7 +35,11 @@ builder.WebHost.UseUrls($"http://{host}:{port}");
 Mooncake.EcommercePlatform.WebApi.Configurations.SerilogSetup.ConfigureSerilog(builder);
 
 // ── Services ──────────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

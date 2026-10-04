@@ -1,9 +1,22 @@
 {
     "version": "0.2.0",
     "configurations": [
-        
         {
-            "name": "C#: Mooncake WebApi",
+            "name": "Run: Mooncake WebApi (Watch / Hot Reload)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "dotnet watch run --project src/Mooncake.EcommercePlatform.WebApi/Mooncake.EcommercePlatform.WebApi.csproj",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Run: Mooncake WebApi (dotnet run)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "dotnet run --project src/Mooncake.EcommercePlatform.WebApi/Mooncake.EcommercePlatform.WebApi.csproj",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "C#: Mooncake WebApi (Official VS Code Debugger)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",

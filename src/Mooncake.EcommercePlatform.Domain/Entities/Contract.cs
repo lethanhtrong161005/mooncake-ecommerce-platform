@@ -30,6 +30,10 @@ public class Contract : BaseEntity
 
     public string? PenaltyTerms { get; set; }
 
+    public string? SignedDocumentUrl { get; set; }
+
+    public string? SignedDocumentSha256 { get; set; }
+
     public decimal? DepositAmount { get; set; }
 
     public DateTime? DepositPaidAt { get; set; }

@@ -1,11 +1,13 @@
 namespace Mooncake.EcommercePlatform.WebApi.Controllers;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 
 /// <summary>REST endpoints for user management.</summary>
 [Route("api/v1/users")]
+[Authorize(Roles = "Admin")]
 public class UsersController(IUserService userService) : BaseApiController
 {
     /// <summary>Returns all registered users.</summary>

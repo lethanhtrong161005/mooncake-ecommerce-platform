@@ -9,13 +9,13 @@ using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 public class UserRepository(ApplicationDbContext context) : IUserRepository
 {
     public async Task<IEnumerable<User>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        await context.Users.AsNoTracking().ToListAsync(cancellationToken);
+        await context.Users.AsNoTracking().Where(u => !u.IsDeleted).ToListAsync(cancellationToken);
 
     public async Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted, cancellationToken);
 
     public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
-        await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+        await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower() && !u.IsDeleted, cancellationToken);
 
     public async Task<User> CreateAsync(User user, CancellationToken cancellationToken = default)
     {
@@ -34,9 +34,11 @@ public class UserRepository(ApplicationDbContext context) : IUserRepository
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var user = await context.Users.FindAsync([id], cancellationToken);
-        if (user is not null)
+        if (user is not null && !user.IsDeleted)
         {
-            context.Users.Remove(user);
+            user.IsDeleted = true;
+            user.IsActive = false;
+            user.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync(cancellationToken);
         }
     }

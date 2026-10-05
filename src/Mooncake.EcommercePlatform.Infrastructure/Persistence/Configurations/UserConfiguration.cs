@@ -32,6 +32,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
                 .HasMaxLength(255)
                 .HasColumnName("email");
             builder.Property(e => e.EmailVerifiedAt).HasColumnName("email_verified_at");
+            builder.Property(e => e.FailedLoginAttempts).HasDefaultValue(0).HasColumnName("failed_login_attempts");
             builder.Property(e => e.FullName)
                 .HasMaxLength(255)
                 .HasColumnName("full_name");
@@ -41,6 +42,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             builder.Property(e => e.IsDeleted)
                 .HasDefaultValue(false)
                 .HasColumnName("is_deleted");
+            builder.Property(e => e.LockoutUntil).HasColumnName("lockout_until");
             builder.Property(e => e.PasswordHash)
                 .HasMaxLength(255)
                 .HasColumnName("password_hash");

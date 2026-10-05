@@ -18,6 +18,12 @@ public class Payment : BaseEntity
 
     public decimal Amount { get; set; }
 
+    public string Currency { get; set; } = "VND";
+
+    public string? Provider { get; set; }
+
+    public string? IdempotencyKey { get; set; }
+
     public string? TransactionId { get; set; }
 
     public DateTime? PaidAt { get; set; }

@@ -313,3 +313,25 @@ SQL queries are explicitly mapped to the `Debug` level to ensure granular tracki
 | Configuration | DotNetEnv (12-Factor App) |
 | API Docs | Swagger / OpenAPI (Swashbuckle) |
 | Containerization | Docker Compose (Adminer) |
+
+---
+
+## MVP Marketplace API
+
+The first marketplace slice is organized by the existing Clean Architecture layers. Controllers are in `WebApi/Controllers`, use cases and request/response records are in `Application`, and EF Core persistence is in `Infrastructure/Repositories`.
+
+| Area | Main routes |
+|---|---|
+| Accounts | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` |
+| Supplier verification | `POST /api/v1/suppliers/me/apply`, `GET /api/v1/suppliers/me`; admin review at `GET /api/v1/suppliers/pending` and `POST /api/v1/suppliers/{profileId}/review` |
+| Catalog | `GET /api/v1/catalog/categories`, `GET /api/v1/catalog/products`, `GET /api/v1/catalog/products/{id}`, `GET /api/v1/shops/{slug}` |
+| Admin catalog | `POST/PUT/DELETE /api/v1/admin/catalog/categories`, `POST/PUT/DELETE /api/v1/admin/catalog/shop-templates` |
+| Supplier catalog | `PUT /api/v1/shops/me`, `POST /api/v1/supplier/products`, `PUT /api/v1/supplier/products/{id}`, `DELETE /api/v1/supplier/products/{id}` |
+| Supplier promotions | `GET/POST /api/v1/supplier/promotions`, `PUT /api/v1/supplier/promotions/{id}`, `DELETE /api/v1/supplier/promotions/{id}` |
+| Bulk orders | `POST /api/v1/orders` (requires an `Idempotency-Key` header), `GET /api/v1/orders/mine`, `POST /api/v1/orders/{id}/cancel`; supplier routes are `GET /api/v1/orders/supplier` and `POST /api/v1/orders/{id}/confirm` |
+
+Set `JWT_SECRET_KEY` to a random secret containing at least 32 bytes before starting the API. `JWT_ISSUER` and `JWT_AUDIENCE` are optional and default to `Mooncake.EcommercePlatform` and `Mooncake.Client`. Public registration always creates a customer account.
+
+For a new environment, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` (at least 12 characters), then run `dotnet run --project src/Mooncake.EcommercePlatform.WebApi -- --bootstrap-platform` from the BE project directory. This explicit command applies pending EF migrations and creates the first admin, starter mooncake categories, and a `Classic` shop template. It stops if an active admin already exists. Normal API startup does not apply migrations. Keep the bootstrap credentials out of source control and remove them from the environment after initialization.
+
+Supplier shops require a verified supplier profile and an active template. Promotions support percentage, per-unit fixed-amount, or product-specific fixed-price discounts. Reusing an `Idempotency-Key` with the same authenticated customer and same request returns the original order; using that key for a different request returns `409 Conflict`. Order placement reserves variant stock while the order is pending; cancelling a pending order restores the stock. Taxes, shipping, and gateway payments remain unset until their business rules and provider are selected.

@@ -13,6 +13,12 @@ public class OrderItem : BaseEntity
 
     public Guid? PromotionRuleId { get; set; }
 
+    public string ProductNameSnapshot { get; set; } = string.Empty;
+
+    public string VariantNameSnapshot { get; set; } = string.Empty;
+
+    public string VariantSkuSnapshot { get; set; } = string.Empty;
+
     public int Quantity { get; set; }
 
     public decimal UnitPrice { get; set; }
@@ -20,4 +26,6 @@ public class OrderItem : BaseEntity
     public decimal DiscountAmount { get; set; }
 
     public decimal Subtotal { get; set; }
+
+    public decimal PackagingFee { get; set; }
 }

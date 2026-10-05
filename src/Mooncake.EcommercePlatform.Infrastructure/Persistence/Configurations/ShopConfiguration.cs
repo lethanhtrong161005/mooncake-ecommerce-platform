@@ -16,7 +16,7 @@ public class ShopConfiguration : IEntityTypeConfiguration<Shop>
 
             builder.HasIndex(e => e.Slug, "idx_shops_slug");
 
-            builder.HasIndex(e => e.SupplierId, "idx_shops_supplier_id");
+            builder.HasIndex(e => e.SupplierId, "shops_supplier_id_key").IsUnique();
 
             builder.HasIndex(e => e.TemplateId, "idx_shops_template_id");
 

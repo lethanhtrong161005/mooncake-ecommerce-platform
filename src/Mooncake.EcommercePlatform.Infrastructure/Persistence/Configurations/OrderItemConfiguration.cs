@@ -36,11 +36,15 @@ public class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
                 .HasColumnName("is_deleted");
             builder.Property(e => e.OrderId).HasColumnName("order_id");
             builder.Property(e => e.ProductId).HasColumnName("product_id");
+            builder.Property(e => e.ProductNameSnapshot).HasMaxLength(255).HasDefaultValue("").HasColumnName("product_name_snapshot");
+            builder.Property(e => e.VariantNameSnapshot).HasMaxLength(255).HasDefaultValue("").HasColumnName("variant_name_snapshot");
+            builder.Property(e => e.VariantSkuSnapshot).HasMaxLength(100).HasDefaultValue("").HasColumnName("variant_sku_snapshot");
             builder.Property(e => e.PromotionRuleId).HasColumnName("promotion_rule_id");
             builder.Property(e => e.Quantity).HasColumnName("quantity");
             builder.Property(e => e.Subtotal)
                 .HasPrecision(12, 2)
                 .HasColumnName("subtotal");
+            builder.Property(e => e.PackagingFee).HasPrecision(12, 2).HasDefaultValue(0).HasColumnName("packaging_fee");
             builder.Property(e => e.UnitPrice)
                 .HasPrecision(12, 2)
                 .HasColumnName("unit_price");

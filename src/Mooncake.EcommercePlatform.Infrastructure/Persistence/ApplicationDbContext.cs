@@ -11,6 +11,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AiAnalyticsReport> AiAnalyticsReports => Set<AiAnalyticsReport>();
     public DbSet<AiConversation> AiConversations => Set<AiConversation>();
     public DbSet<AiMessage> AiMessages => Set<AiMessage>();
+    public DbSet<CustomPackagingRevision> CustomPackagingRevisions => Set<CustomPackagingRevision>();
     public DbSet<Bid> Bids => Set<Bid>();
     public DbSet<BidItem> BidItems => Set<BidItem>();
     public DbSet<Category> Categories => Set<Category>();
@@ -28,9 +29,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
     public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
+    public DbSet<ProductReviewLike> ProductReviewLikes => Set<ProductReviewLike>();
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<ReputationLog> ReputationLogs => Set<ReputationLog>();
+    public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<RequestForQuotation> RequestForQuotations => Set<RequestForQuotation>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<RfqInvitation> RfqInvitations => Set<RfqInvitation>();
@@ -38,7 +41,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Shop> Shops => Set<Shop>();
     public DbSet<ShopTemplate> ShopTemplates => Set<ShopTemplate>();
     public DbSet<SupplierProfile> SupplierProfiles => Set<SupplierProfile>();
+    public DbSet<SupplierVerificationDocument> SupplierVerificationDocuments => Set<SupplierVerificationDocument>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<WorkflowEvent> WorkflowEvents => Set<WorkflowEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

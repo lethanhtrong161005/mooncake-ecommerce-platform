@@ -52,6 +52,8 @@ public class ContractConfiguration : IEntityTypeConfiguration<Contract>
                 .HasColumnName("is_deleted");
             builder.Property(e => e.OrderId).HasColumnName("order_id");
             builder.Property(e => e.PenaltyTerms).HasColumnName("penalty_terms");
+            builder.Property(e => e.SignedDocumentUrl).HasColumnName("signed_document_url");
+            builder.Property(e => e.SignedDocumentSha256).HasMaxLength(64).HasColumnName("signed_document_sha256");
             builder.Property(e => e.RfqId).HasColumnName("rfq_id");
             builder.Property(e => e.SignedByCustomerAt).HasColumnName("signed_by_customer_at");
             builder.Property(e => e.SignedBySupplierAt).HasColumnName("signed_by_supplier_at");

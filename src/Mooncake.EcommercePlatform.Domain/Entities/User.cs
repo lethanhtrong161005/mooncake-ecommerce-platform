@@ -18,6 +18,10 @@ public class User : BaseEntity
 
     public bool IsActive { get; set; }
 
+    public int FailedLoginAttempts { get; set; }
+
+    public DateTime? LockoutUntil { get; set; }
+
     public DateTime? EmailVerifiedAt { get; set; }
 
     public UserRole Role { get; set; } = UserRole.Customer;

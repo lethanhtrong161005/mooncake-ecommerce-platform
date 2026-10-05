@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.Domain.Entities;
 
 using Mooncake.EcommercePlatform.Domain.Common;
+using Mooncake.EcommercePlatform.Domain.Enums;
 
 /// <summary>Represents the SupplierProfile domain entity.</summary>
 public class SupplierProfile : BaseEntity
@@ -29,7 +30,13 @@ public class SupplierProfile : BaseEntity
 
     public decimal? AvgRating { get; set; }
 
-    public bool Verified { get; set; }
+    public SupplierVerificationStatus VerificationStatus { get; set; } = SupplierVerificationStatus.Pending;
 
     public DateTime? VerifiedAt { get; set; }
+
+    public Guid? ReviewedByUserId { get; set; }
+
+    public DateTime? ReviewedAt { get; set; }
+
+    public string? RejectionReason { get; set; }
 }

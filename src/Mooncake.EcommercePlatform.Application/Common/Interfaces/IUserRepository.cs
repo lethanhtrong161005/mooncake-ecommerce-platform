@@ -11,4 +11,9 @@ public interface IUserRepository
     Task<User> CreateAsync(User user, CancellationToken cancellationToken = default);
     Task<User> UpdateAsync(User user, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    Task CreateRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken = default);
+    Task<RefreshSession?> GetRefreshSessionByHashAsync(string tokenHash, CancellationToken cancellationToken = default);
+    Task RotateRefreshSessionAsync(RefreshSession current, RefreshSession replacement, CancellationToken cancellationToken = default);
+    Task RevokeRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken = default);
+    Task RevokeAllRefreshSessionsAsync(Guid userId, DateTime revokedAt, CancellationToken cancellationToken = default);
 }

@@ -9,6 +9,7 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
     public DbSet<AiAnalyticsReport> AiAnalyticsReports => Set<AiAnalyticsReport>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AiConversation> AiConversations => Set<AiConversation>();
     public DbSet<AiMessage> AiMessages => Set<AiMessage>();
     public DbSet<CustomPackagingRevision> CustomPackagingRevisions => Set<CustomPackagingRevision>();
@@ -43,6 +44,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SupplierProfile> SupplierProfiles => Set<SupplierProfile>();
     public DbSet<SupplierVerificationDocument> SupplierVerificationDocuments => Set<SupplierVerificationDocument>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<WorkflowEvent> WorkflowEvents => Set<WorkflowEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

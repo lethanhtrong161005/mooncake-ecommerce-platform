@@ -19,6 +19,8 @@ public sealed class SupplierService(ISupplierRepository repository, IDateTimePro
                    ?? throw new HttpException(404, "User account was not found.");
         if (!user.IsActive || user.IsDeleted)
             throw new HttpException(403, "The account is inactive.");
+        if (user.RequestedRole != UserRole.Supplier && user.Role != UserRole.Supplier)
+            throw new HttpException(403, "This account was not registered for supplier onboarding.");
 
         var profile = await repository.GetProfileByUserIdAsync(userId, cancellationToken);
         if (profile?.VerificationStatus == SupplierVerificationStatus.Verified)
@@ -34,7 +36,6 @@ public sealed class SupplierService(ISupplierRepository repository, IDateTimePro
         profile.ReviewedAt = null;
         profile.ReviewedByUserId = null;
         profile.RejectionReason = null;
-        user.Role = UserRole.Supplier;
 
         var documents = request.Documents.Select(document => new SupplierVerificationDocument
         {
@@ -85,6 +86,10 @@ public sealed class SupplierService(ISupplierRepository repository, IDateTimePro
         profile.ReviewedByUserId = adminUserId;
         profile.RejectionReason = request.Approve ? null : request.RejectionReason!.Trim();
 
+        var user = await repository.GetUserAsync(profile.UserId, cancellationToken)
+                   ?? throw new HttpException(404, "Supplier account was not found.");
+        user.Role = request.Approve ? UserRole.Supplier : UserRole.Customer;
+
         var documents = await repository.GetDocumentsAsync(profile.Id, cancellationToken);
         foreach (var document in documents)
         {
@@ -104,7 +109,7 @@ public sealed class SupplierService(ISupplierRepository repository, IDateTimePro
             ActorUserId = adminUserId,
             Reason = profile.RejectionReason
         };
-        await repository.ReviewAsync(profile, documents, workflowEvent, cancellationToken);
+        await repository.ReviewAsync(user, profile, documents, workflowEvent, cancellationToken);
         return await GetProfileAsync(profile, cancellationToken);
     }
 

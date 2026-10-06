@@ -132,13 +132,13 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
         return results;
     }
 
-    public async Task<OrderResponse> GetAsync(Guid userId, bool supplier, Guid orderId, CancellationToken cancellationToken = default)
+    public async Task<OrderResponse> GetAsync(Guid userId, bool supplier, Guid orderId, bool admin = false, CancellationToken cancellationToken = default)
     {
         var order = await repository.GetOrderAsync(orderId, cancellationToken)
                     ?? throw new HttpException(404, "Order was not found.");
-        var authorized = supplier
+        var authorized = admin || (supplier
             ? await repository.IsShopOwnedByUserAsync(order.ShopId, userId, cancellationToken)
-            : order.CustomerId == userId;
+            : order.CustomerId == userId);
         if (!authorized)
             throw new HttpException(404, "Order was not found.");
         return await ToResponseAsync(order, cancellationToken);

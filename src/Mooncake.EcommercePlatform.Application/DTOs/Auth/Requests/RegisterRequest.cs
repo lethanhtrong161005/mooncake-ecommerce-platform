@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.DTOs.Auth.Requests;
 
 using System.ComponentModel.DataAnnotations;
+using Mooncake.EcommercePlatform.Domain.Enums;
 
 /// <summary>Payload used to register a customer account.</summary>
 public sealed record RegisterRequest
@@ -16,4 +17,8 @@ public sealed record RegisterRequest
 
     [Phone, MaxLength(20)]
     public string? Phone { get; init; }
+
+    [Required]
+    [RegularExpression("^(Customer|Supplier)$", ErrorMessage = "Role must be Customer or Supplier.")]
+    public string Role { get; init; } = nameof(UserRole.Customer);
 }

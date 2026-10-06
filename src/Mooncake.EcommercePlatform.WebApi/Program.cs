@@ -2,10 +2,12 @@ using Mooncake.EcommercePlatform.Application;
 using Mooncake.EcommercePlatform.Infrastructure;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
+using Mooncake.EcommercePlatform.WebApi.Background;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Serilog;
+using System.Threading.RateLimiting;
 
 const string BootstrapCompleteMessage = "Platform bootstrap completed successfully.";
 
@@ -79,6 +81,20 @@ builder.Services
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth-otp", context =>
+        RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+});
+builder.Services.AddSingleton<Mooncake.EcommercePlatform.Application.Common.Interfaces.IRecurringJob, AuthMaintenanceJob>();
+builder.Services.AddHostedService<RecurringJobRunner>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -122,6 +138,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
+app.UseMiddleware<AdminAuditMiddleware>();
 app.MapControllers();
 
 app.Run();

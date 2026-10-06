@@ -54,6 +54,13 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
                 .HasColumnName("updated_at");
             builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
         builder.Property(e => e.Role).HasColumnName("role");
+        builder.Property(e => e.RequestedRole).HasColumnName("requested_role").HasDefaultValue(UserRole.Customer);
+        builder.Property(e => e.EmailVerificationCodeHash).HasMaxLength(64).HasColumnName("email_verification_code_hash");
+        builder.Property(e => e.EmailVerificationCodeExpiresAt).HasColumnName("email_verification_code_expires_at");
+        builder.Property(e => e.EmailVerificationCodeAttempts).HasDefaultValue(0).HasColumnName("email_verification_code_attempts");
+        builder.Property(e => e.PasswordResetCodeHash).HasMaxLength(64).HasColumnName("password_reset_code_hash");
+        builder.Property(e => e.PasswordResetCodeExpiresAt).HasColumnName("password_reset_code_expires_at");
+        builder.Property(e => e.PasswordResetCodeAttempts).HasDefaultValue(0).HasColumnName("password_reset_code_attempts");
         builder.HasIndex(e => e.Role, "idx_users_role");
     }
 }

@@ -11,5 +11,5 @@ public interface ISupplierRepository
     Task<IReadOnlyList<SupplierProfile>> GetPendingProfilesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SupplierVerificationDocument>> GetDocumentsAsync(Guid profileId, CancellationToken cancellationToken = default);
     Task SaveApplicationAsync(User user, SupplierProfile profile, IReadOnlyList<SupplierVerificationDocument> documents, CancellationToken cancellationToken = default);
-    Task ReviewAsync(SupplierProfile profile, IReadOnlyList<SupplierVerificationDocument> documents, WorkflowEvent workflowEvent, CancellationToken cancellationToken = default);
+    Task ReviewAsync(User user, SupplierProfile profile, IReadOnlyList<SupplierVerificationDocument> documents, WorkflowEvent workflowEvent, CancellationToken cancellationToken = default);
 }

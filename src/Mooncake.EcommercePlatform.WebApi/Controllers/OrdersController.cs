@@ -32,10 +32,11 @@ public sealed class OrdersController(IOrderService orderService) : BaseApiContro
         Success(await orderService.GetMyOrdersAsync(GetCurrentUserId(), true, cancellationToken), "Supplier orders retrieved successfully.");
 
     /// <summary>Returns an order visible to the authenticated customer or supplier.</summary>
-    [Authorize(Roles = "Customer,Supplier")]
+    [Authorize(Roles = "Customer,Supplier,Admin")]
     [HttpGet("{orderId:guid}")]
     public async Task<IActionResult> GetAsync(Guid orderId, CancellationToken cancellationToken) =>
-        Success(await orderService.GetAsync(GetCurrentUserId(), User.IsInRole("Supplier"), orderId, cancellationToken), "Order retrieved successfully.");
+        Success(await orderService.GetAsync(GetCurrentUserId(), User.IsInRole("Supplier"), orderId,
+            User.IsInRole("Admin"), cancellationToken), "Order retrieved successfully.");
 
     /// <summary>Cancels a pending customer order and releases its inventory reservation.</summary>
     [Authorize(Roles = "Customer")]

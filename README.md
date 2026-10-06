@@ -332,6 +332,14 @@ The first marketplace slice is organized by the existing Clean Architecture laye
 
 Set `JWT_SECRET_KEY` to a random secret containing at least 32 bytes before starting the API. `JWT_ISSUER` and `JWT_AUDIENCE` are optional and default to `Mooncake.EcommercePlatform` and `Mooncake.Client`. Public registration always creates a customer account.
 
+### Authentication and Admin APIs
+
+Registration accepts `role: "Customer"` or `role: "Supplier"`. New accounts must verify their email before sign-in. Configure `SMTP_HOST` and `SMTP_FROM_EMAIL`; optionally set `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_USE_SSL` (default `true`). OTP codes are six digits, expire after ten minutes, and are stored only as an HMAC hash. Existing accounts are marked verified by the `AddEmailOtpChallenges` migration to preserve access.
+
+Authentication routes include `POST /api/v1/auth/verify-email`, `POST /api/v1/auth/resend-verification`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/revoke`, and authenticated `POST /api/v1/auth/revoke-all`. Refresh tokens are hashed at rest and rotated on use.
+
+Admin-only routes include `GET /api/v1/admin/dashboard`, `GET/PUT /api/v1/admin/system-config`, `GET /api/v1/admin/audit-logs`, `PATCH /api/v1/admin/users/{id}`, `GET /api/v1/admin/shops`, and `PATCH /api/v1/admin/shops/{id}/status`. The background authentication maintenance job runs hourly to clear expired OTPs and revoke expired refresh sessions.
+
 For a new environment, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` (at least 12 characters), then run `dotnet run --project src/Mooncake.EcommercePlatform.WebApi -- --bootstrap-platform` from the BE project directory. This explicit command applies pending EF migrations and creates the first admin, starter mooncake categories, and a `Classic` shop template. It stops if an active admin already exists. Normal API startup does not apply migrations. Keep the bootstrap credentials out of source control and remove them from the environment after initialization.
 
 Supplier shops require a verified supplier profile and an active template. Promotions support percentage, per-unit fixed-amount, or product-specific fixed-price discounts. Reusing an `Idempotency-Key` with the same authenticated customer and same request returns the original order; using that key for a different request returns `409 Conflict`. Order placement reserves variant stock while the order is pending; cancelling a pending order restores the stock. Taxes, shipping, and gateway payments remain unset until their business rules and provider are selected.

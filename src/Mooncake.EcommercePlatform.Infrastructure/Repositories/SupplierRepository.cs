@@ -52,9 +52,10 @@ public sealed class SupplierRepository(ApplicationDbContext context) : ISupplier
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task ReviewAsync(SupplierProfile profile, IReadOnlyList<SupplierVerificationDocument> documents, WorkflowEvent workflowEvent, CancellationToken cancellationToken = default)
+    public async Task ReviewAsync(User user, SupplierProfile profile, IReadOnlyList<SupplierVerificationDocument> documents, WorkflowEvent workflowEvent, CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        context.Users.Update(user);
         context.SupplierProfiles.Update(profile);
         context.SupplierVerificationDocuments.UpdateRange(documents);
         context.WorkflowEvents.Add(workflowEvent);

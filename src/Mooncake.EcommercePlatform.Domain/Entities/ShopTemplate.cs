@@ -17,5 +17,7 @@ public class ShopTemplate : BaseEntity
 
     public bool IsActive { get; set; }
 
+    public bool IsPremium { get; set; }
+
     public int SortOrder { get; set; }
 }

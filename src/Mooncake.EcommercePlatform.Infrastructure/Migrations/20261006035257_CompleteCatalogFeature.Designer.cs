@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
@@ -13,36 +14,38 @@ using Pgvector;
 namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006035257_CompleteCatalogFeature")]
+    partial class CompleteCatalogFeature
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "8.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_conversation_type", "ai_conversation_type", new[] { "product_info", "mooncake_history", "sales_analytics", "general" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_message_role", "ai_message_role", new[] { "user", "assistant", "system" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_report_status", "ai_report_status", new[] { "pending", "processing", "completed", "failed" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_report_type", "ai_report_type", new[] { "sales_trend", "supplier_performance", "demand_forecast", "product_analysis", "revenue_summary" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "bid_status", "bid_status", new[] { "submitted", "accepted", "cancelled" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "contract_status", "contract_status", new[] { "draft", "pending_signature", "signed", "pending_deposit", "active", "completed_on_time", "completed_late", "breached", "disputed", "cancelled" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "custom_packaging_status", "custom_packaging_status", new[] { "pending", "design_review", "approved", "in_production", "rejected" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "delivery_status", "delivery_status", new[] { "pending", "confirmed", "picked_up", "in_transit", "delivered", "failed", "returned" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "delivery_type", "delivery_type", new[] { "platform_managed", "self_arranged" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "discount_type", "discount_type", new[] { "percentage", "fixed_amount", "fixed_price" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "milestone_status", "milestone_status", new[] { "pending", "awaiting_payment", "paid", "completed_on_time", "completed_late", "overdue", "failed" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "order_status", "order_status", new[] { "pending", "confirmed", "processing", "shipped", "delivered", "cancelled" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "payment_method", "payment_method", new[] { "bank_transfer", "momo", "vnpay", "zalopay", "cash" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "payment_status", "payment_status", new[] { "pending", "processing", "completed", "failed", "refunded" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "product_status", "product_status", new[] { "active", "inactive", "out_of_stock" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "proof_type", "proof_type", new[] { "pickup", "in_transit", "delivery", "failed_attempt" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "reputation_event", "reputation_event", new[] { "completed_on_time", "completed_late", "breached", "positive_review", "negative_review", "admin_penalty", "admin_bonus" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_invitation_status", "rfq_invitation_status", new[] { "invited", "viewed", "bid_submitted", "declined" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_status", "rfq_status", new[] { "draft", "open", "in_negotiation", "awarded", "closed", "cancelled" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "shop_status", "shop_status", new[] { "active", "inactive", "suspended" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "user_role", "user_role", new[] { "customer", "supplier", "admin" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_conversation_type", "AiConversationType", new[] { "ProductInfo", "MooncakeHistory", "SalesAnalytics", "General" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_message_role", "AiMessageRole", new[] { "User", "Assistant", "System" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_report_status", "AiReportStatus", new[] { "Pending", "Processing", "Completed", "Failed" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "ai_report_type", "AiReportType", new[] { "SalesTrend", "SupplierPerformance", "DemandForecast", "ProductAnalysis", "RevenueSummary" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "bid_status", "BidStatus", new[] { "Submitted", "Accepted", "Cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "contract_status", "ContractStatus", new[] { "Draft", "PendingSignature", "Signed", "PendingDeposit", "Active", "CompletedOnTime", "CompletedLate", "Breached", "Disputed", "Cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "custom_packaging_status", "CustomPackagingStatus", new[] { "Pending", "DesignReview", "Approved", "InProduction", "Rejected" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "delivery_status", "DeliveryStatus", new[] { "Pending", "Confirmed", "PickedUp", "InTransit", "Delivered", "Failed", "Returned" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "delivery_type", "DeliveryType", new[] { "PlatformManaged", "SelfArranged" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "discount_type", "DiscountType", new[] { "Percentage", "FixedAmount", "FixedPrice" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "milestone_status", "MilestoneStatus", new[] { "Pending", "AwaitingPayment", "Paid", "CompletedOnTime", "CompletedLate", "Overdue", "Failed" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "order_status", "OrderStatus", new[] { "Pending", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "payment_method", "PaymentMethod", new[] { "BankTransfer", "Momo", "VNPay", "ZaloPay", "Cash" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "payment_status", "PaymentStatus", new[] { "Pending", "Processing", "Completed", "Failed", "Refunded" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "product_status", "ProductStatus", new[] { "Active", "Inactive", "OutOfStock" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "proof_type", "ProofType", new[] { "Pickup", "InTransit", "Delivery", "FailedAttempt" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "reputation_event", "ReputationEvent", new[] { "CompletedOnTime", "CompletedLate", "Breached", "PositiveReview", "NegativeReview", "AdminPenalty", "AdminBonus" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_invitation_status", "RfqInvitationStatus", new[] { "Invited", "Viewed", "BidSubmitted", "Declined" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_status", "RfqStatus", new[] { "Draft", "Open", "InNegotiation", "Awarded", "Closed", "Cancelled" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "shop_status", "ShopStatus", new[] { "Active", "Inactive", "Suspended" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "user_role", "UserRole", new[] { "Customer", "Supplier", "Admin" });
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "extensions", "pgcrypto");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "extensions", "uuid-ossp");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
@@ -65,9 +68,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -105,9 +105,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -143,9 +140,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -171,9 +165,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -220,9 +211,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -256,9 +244,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -270,6 +255,67 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasFilter("(is_deleted = false)");
 
                     b.ToTable("ai_messages", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("audit_logs", (string)null);
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Bid", b =>
@@ -291,9 +337,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -342,9 +385,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -392,9 +432,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -433,9 +470,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -463,9 +497,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -506,9 +537,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -552,9 +580,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -607,6 +632,15 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("signed_by_supplier_at");
 
+                    b.Property<string>("SignedDocumentSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("signed_document_sha256");
+
+                    b.Property<string>("SignedDocumentUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("signed_document_url");
+
                     b.Property<ContractStatus>("Status")
                         .HasColumnType("contract_status")
                         .HasColumnName("status");
@@ -634,9 +668,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -693,9 +724,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -744,9 +772,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -786,9 +811,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -841,9 +863,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -894,9 +913,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -934,9 +950,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -944,11 +957,87 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("custom_packagings_pkey");
 
+                    b.HasIndex(new[] { "OrderId" }, "custom_packagings_order_id_key")
+                        .IsUnique();
+
                     b.HasIndex(new[] { "OrderId" }, "idx_cpkg_order_id");
 
                     b.HasIndex(new[] { "Status" }, "idx_cpkg_status");
 
                     b.ToTable("custom_packagings", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.CustomPackagingRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CustomPackagingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomerNotes")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("DesignFee")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("MockupUrl")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SubmittedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SupplierNotes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubmittedByUserId");
+
+                    b.HasIndex("CustomPackagingId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("custom_packaging_revisions", (string)null);
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.CustomerProfile", b =>
@@ -983,9 +1072,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -1006,9 +1092,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -1047,9 +1130,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -1116,9 +1196,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1140,7 +1217,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.HasIndex(new[] { "TrackingCode" }, "idx_del_tracking_code")
                         .HasFilter("(tracking_code IS NOT NULL)");
 
-                    b.ToTable("deliveries", (string)null);
+                    b.ToTable("deliveries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_deliveries_single_parent", "(contract_id IS NOT NULL) <> (order_id IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.DeliveryProof", b =>
@@ -1156,9 +1236,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -1215,9 +1292,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1249,9 +1323,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -1294,9 +1365,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1329,14 +1397,23 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuid_generate_v4()");
 
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("text")
+                        .HasColumnName("cancellation_reason");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<Guid?>("CancelledByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancelled_by_user_id");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -1359,6 +1436,16 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("discount_amount");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("IdempotencyRequestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("idempotency_request_hash");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1374,6 +1461,16 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("order_number");
+
+                    b.Property<string>("RecipientName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("recipient_name");
+
+                    b.Property<string>("RecipientPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("recipient_phone");
 
                     b.Property<decimal>("ShippingFee")
                         .HasPrecision(12, 2)
@@ -1409,9 +1506,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1429,6 +1523,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasFilter("(is_deleted = false)");
 
                     b.HasIndex(new[] { "Status" }, "idx_orders_status");
+
+                    b.HasIndex(new[] { "CustomerId", "IdempotencyKey" }, "orders_customer_idempotency_key_key")
+                        .IsUnique()
+                        .HasFilter("(idempotency_key IS NOT NULL AND is_deleted = false)");
 
                     b.HasIndex(new[] { "OrderNumber" }, "orders_order_number_key")
                         .IsUnique();
@@ -1450,9 +1548,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -1472,9 +1567,24 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
+                    b.Property<decimal>("PackagingFee")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("packaging_fee");
+
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
+
+                    b.Property<string>("ProductNameSnapshot")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasDefaultValue("")
+                        .HasColumnName("product_name_snapshot");
 
                     b.Property<Guid?>("PromotionRuleId")
                         .HasColumnType("uuid")
@@ -1500,9 +1610,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1510,6 +1617,22 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.Property<Guid>("VariantId")
                         .HasColumnType("uuid")
                         .HasColumnName("variant_id");
+
+                    b.Property<string>("VariantNameSnapshot")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasDefaultValue("")
+                        .HasColumnName("variant_name_snapshot");
+
+                    b.Property<string>("VariantSkuSnapshot")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("")
+                        .HasColumnName("variant_sku_snapshot");
 
                     b.HasKey("Id")
                         .HasName("order_items_pkey");
@@ -1549,16 +1672,26 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("VND")
+                        .HasColumnName("currency");
+
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotency_key");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
@@ -1588,6 +1721,11 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("payment_number");
 
+                    b.Property<string>("Provider")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider");
+
                     b.Property<PaymentStatus>("Status")
                         .HasColumnType("payment_status")
                         .HasColumnName("status");
@@ -1602,9 +1740,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -1631,10 +1766,17 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "Status" }, "idx_pay_status");
 
+                    b.HasIndex(new[] { "IdempotencyKey" }, "payments_idempotency_key_key")
+                        .IsUnique()
+                        .HasFilter("(idempotency_key IS NOT NULL)");
+
                     b.HasIndex(new[] { "PaymentNumber" }, "payments_payment_number_key")
                         .IsUnique();
 
-                    b.ToTable("payments", (string)null);
+                    b.ToTable("payments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_payments_single_payment_target", "((order_id IS NOT NULL) <> (contract_id IS NOT NULL)) AND (order_id IS NULL OR milestone_id IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.Product", b =>
@@ -1659,9 +1801,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -1722,9 +1861,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1764,9 +1900,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -1804,9 +1937,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1838,9 +1968,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -1919,9 +2046,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -1955,6 +2079,51 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.ToTable("product_reviews", (string)null);
                 });
 
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ProductReviewLike", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("ProductReviewId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("ProductReviewId", "CustomerId")
+                        .IsUnique()
+                        .HasFilter("(is_deleted = false)");
+
+                    b.ToTable("product_review_likes", (string)null);
+                });
+
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ProductVariant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1968,9 +2137,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2034,9 +2200,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2074,9 +2237,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2143,9 +2303,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2165,6 +2322,71 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.ToTable("promotion_rules", (string)null);
                 });
 
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.RefreshSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedFromIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid?>("ReplacedBySessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReplacedBySessionId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "ExpiresAt");
+
+                    b.ToTable("refresh_sessions", (string)null);
+                });
+
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ReputationLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2178,9 +2400,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2223,9 +2442,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -2272,9 +2488,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2323,9 +2536,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2368,9 +2578,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2422,9 +2629,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2464,9 +2668,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -2505,9 +2706,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2540,9 +2738,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2601,9 +2796,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2633,9 +2825,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2692,9 +2881,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2706,11 +2892,12 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "Status" }, "idx_shops_status");
 
-                    b.HasIndex(new[] { "SupplierId" }, "idx_shops_supplier_id");
-
                     b.HasIndex(new[] { "TemplateId" }, "idx_shops_template_id");
 
                     b.HasIndex(new[] { "Slug" }, "shops_slug_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "SupplierId" }, "shops_supplier_id_key")
                         .IsUnique();
 
                     b.ToTable("shops", (string)null);
@@ -2729,9 +2916,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
@@ -2787,9 +2971,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -2851,9 +3032,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -2868,10 +3046,22 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason");
+
                     b.Property<decimal>("ReputationScore")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("reputation_score");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
 
                     b.Property<string>("TaxCode")
                         .HasMaxLength(50)
@@ -2890,9 +3080,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
@@ -2901,11 +3088,13 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.Property<bool>("Verified")
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("verified");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pending")
+                        .HasColumnName("verification_status");
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2914,19 +3103,153 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("supplier_profiles_pkey");
 
+                    b.HasIndex("ReviewedByUserId");
+
                     b.HasIndex(new[] { "ReputationScore" }, "idx_sp_reputation_score")
                         .IsDescending()
                         .HasFilter("(is_deleted = false)");
 
-                    b.HasIndex(new[] { "UserId" }, "idx_sp_user_id");
-
-                    b.HasIndex(new[] { "Verified" }, "idx_sp_verified")
+                    b.HasIndex(new[] { "VerificationStatus" }, "idx_sp_verification_status")
                         .HasFilter("(is_deleted = false)");
 
                     b.HasIndex(new[] { "TaxCode" }, "supplier_profiles_tax_code_key")
                         .IsUnique();
 
+                    b.HasIndex(new[] { "UserId" }, "supplier_profiles_user_id_key")
+                        .IsUnique();
+
                     b.ToTable("supplier_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.SupplierVerificationDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly?>("ExpiresOn")
+                        .HasColumnType("date");
+
+                    b.Property<long?>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("OriginalFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SupplierProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("SupplierProfileId", "ReviewStatus");
+
+                    b.ToTable("supplier_verification_documents", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.SystemConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ValueJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("system_configs", (string)null);
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.User", b =>
@@ -2947,9 +3270,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
@@ -2960,9 +3280,30 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("email");
 
+                    b.Property<int>("EmailVerificationCodeAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("email_verification_code_attempts");
+
+                    b.Property<DateTime?>("EmailVerificationCodeExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("email_verification_code_expires_at");
+
+                    b.Property<string>("EmailVerificationCodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("email_verification_code_hash");
+
                     b.Property<DateTime?>("EmailVerifiedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("email_verified_at");
+
+                    b.Property<int>("FailedLoginAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("failed_login_attempts");
 
                     b.Property<string>("FullName")
                         .HasMaxLength(255)
@@ -2981,16 +3322,41 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<DateTime?>("LockoutUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lockout_until");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("password_hash");
 
+                    b.Property<int>("PasswordResetCodeAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("password_reset_code_attempts");
+
+                    b.Property<DateTime?>("PasswordResetCodeExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("password_reset_code_expires_at");
+
+                    b.Property<string>("PasswordResetCodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("password_reset_code_hash");
+
                     b.Property<string>("Phone")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone");
+
+                    b.Property<UserRole>("RequestedRole")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("user_role")
+                        .HasDefaultValue(UserRole.Customer)
+                        .HasColumnName("requested_role");
 
                     b.Property<UserRole>("Role")
                         .HasColumnType("user_role")
@@ -3001,9 +3367,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
@@ -3024,6 +3387,160 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.WorkflowEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AggregateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AggregateType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AggregateType", "AggregateId", "CreatedAt");
+
+                    b.ToTable("workflow_events", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.AuditLog", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.CustomPackagingRevision", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.CustomPackaging", null)
+                        .WithMany()
+                        .HasForeignKey("CustomPackagingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("SubmittedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.ProductReviewLike", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.CustomerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.ProductReview", null)
+                        .WithMany()
+                        .HasForeignKey("ProductReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.RefreshSession", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.RefreshSession", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacedBySessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.SupplierProfile", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithOne()
+                        .HasForeignKey("Mooncake.EcommercePlatform.Domain.Entities.SupplierProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.SupplierVerificationDocument", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.SupplierProfile", null)
+                        .WithMany()
+                        .HasForeignKey("SupplierProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.WorkflowEvent", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 #pragma warning restore 612, 618
         }

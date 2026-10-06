@@ -17,7 +17,7 @@ public class ProductVariantConfiguration : IEntityTypeConfiguration<ProductVaria
 
             builder.HasIndex(e => e.StockQty, "idx_pv_stock_qty").HasFilter("(is_deleted = false)");
 
-            builder.HasIndex(e => e.Sku, "product_variants_sku_key").IsUnique();
+            builder.HasIndex(e => e.Sku, "product_variants_sku_key").IsUnique().HasFilter("(is_deleted = false)");
 
             builder.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")

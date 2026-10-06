@@ -313,3 +313,42 @@ SQL queries are explicitly mapped to the `Debug` level to ensure granular tracki
 | Configuration | DotNetEnv (12-Factor App) |
 | API Docs | Swagger / OpenAPI (Swashbuckle) |
 | Containerization | Docker Compose (Adminer) |
+<<<<<<< Updated upstream
+=======
+
+---
+
+## MVP Marketplace API
+
+The first marketplace slice is organized by the existing Clean Architecture layers. Controllers are in `WebApi/Controllers`, use cases and request/response records are in `Application`, and EF Core persistence is in `Infrastructure/Repositories`.
+
+| Area | Main routes |
+|---|---|
+| Accounts | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` |
+| Supplier verification | `POST /api/v1/suppliers/me/apply`, `GET /api/v1/suppliers/me`; admin review at `GET /api/v1/suppliers/pending` and `POST /api/v1/suppliers/{profileId}/review` |
+| Catalog | `GET /api/v1/catalog/categories`, `GET /api/v1/catalog/products`, `GET /api/v1/catalog/products/{id}`, `GET /api/v1/shops/{slug}` |
+| Admin catalog | `POST/PUT/DELETE /api/v1/admin/catalog/categories`, `POST/PUT/DELETE /api/v1/admin/catalog/shop-templates` |
+| Supplier catalog | `PUT /api/v1/shops/me`, `GET/POST /api/v1/supplier/products`, `PUT /api/v1/supplier/products/{id}`, `DELETE /api/v1/supplier/products/{id}`, `POST /api/v1/supplier/products/{id}/variants/{variantId}/stock-adjustments` |
+| Supplier promotions | `GET/POST /api/v1/supplier/promotions`, `PUT /api/v1/supplier/promotions/{id}`, `DELETE /api/v1/supplier/promotions/{id}` |
+| File storage | `POST /api/v1/files/presigned-upload`, `POST /api/v1/files/presigned-download` |
+| Catalog admin | `GET /api/v1/admin/catalog/categories`, `GET /api/v1/admin/catalog/shop-templates`; shop state via `PATCH /api/v1/admin/shops/{id}/status` |
+| Bulk orders | `POST /api/v1/orders` (requires an `Idempotency-Key` header), `GET /api/v1/orders/mine`, `POST /api/v1/orders/{id}/cancel`; supplier routes are `GET /api/v1/orders/supplier` and `POST /api/v1/orders/{id}/confirm` |
+
+Set `JWT_SECRET_KEY` to a random secret containing at least 32 bytes before starting the API. `JWT_ISSUER` and `JWT_AUDIENCE` are optional and default to `Mooncake.EcommercePlatform` and `Mooncake.Client`. Public registration always creates a customer account.
+
+### Authentication and Admin APIs
+
+Registration accepts `role: "Customer"` or `role: "Supplier"`. New accounts must verify their email before sign-in. Configure `SMTP_HOST` and `SMTP_FROM_EMAIL`; optionally set `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_USE_SSL` (default `true`). OTP codes are six digits, expire after ten minutes, and are stored only as an HMAC hash. Existing accounts are marked verified by the `AddEmailOtpChallenges` migration to preserve access.
+
+Authentication routes include `POST /api/v1/auth/verify-email`, `POST /api/v1/auth/resend-verification`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/revoke`, and authenticated `POST /api/v1/auth/revoke-all`. Refresh tokens are hashed at rest and rotated on use.
+
+Admin-only routes include `GET /api/v1/admin/dashboard`, `GET/PUT /api/v1/admin/system-config`, `GET /api/v1/admin/audit-logs`, `PATCH /api/v1/admin/users/{id}`, `GET /api/v1/admin/shops`, and `PATCH /api/v1/admin/shops/{id}/status`. The background authentication maintenance job runs hourly to clear expired OTPs and revoke expired refresh sessions.
+
+For a new environment, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` (at least 12 characters), then run `dotnet run --project src/Mooncake.EcommercePlatform.WebApi -- --bootstrap-platform` from the BE project directory. This explicit command applies pending EF migrations and creates the first admin, starter mooncake categories, and a `Classic` shop template. It stops if an active admin already exists. Normal API startup does not apply migrations. Keep the bootstrap credentials out of source control and remove them from the environment after initialization.
+
+Supplier shops require a verified supplier profile and an active template. Promotions support percentage, per-unit fixed-amount, or product-specific fixed-price discounts. Reusing an `Idempotency-Key` with the same authenticated customer and same request returns the original order; using that key for a different request returns `409 Conflict`. Order placement reserves variant stock while the order is pending; cancelling a pending order restores the stock. Taxes, shipping, and gateway payments remain unset until their business rules and provider are selected.
+
+Catalog search supports `search`, `categoryId`, `shopId`, `minPrice`, `maxPrice`, `sortBy` (`newest`, `oldest`, `price_asc`, `price_desc`, `name`), `page`, and `pageSize`, and product suggestions are available at `GET /api/v1/catalog/products/suggestions?query=...`. Suppliers adjust stock with `POST /api/v1/supplier/products/{productId}/variants/{variantId}/stock-adjustments`; the signed `quantityDelta` update is atomic and cannot reduce stock below zero. Existing variant IDs are preserved when product details are edited, while removals are rejected if pending orders still reference the variant.
+
+File storage uses S3-compatible presigned URLs. Configure `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY`; optionally configure `S3_ENDPOINT` for an S3-compatible provider, `S3_SESSION_TOKEN` for temporary credentials, and `S3_PUBLIC_BASE_URL` for stable publicly accessible catalog asset URLs. Upload URLs require the returned HTTP method, content type, and content length, expire after ten minutes, and accept JPEG, PNG, WebP, or PDF files up to 25 MB. Download URLs expire after five minutes and are restricted to the owner's object key (admins may download any key). If `S3_PUBLIC_BASE_URL` is not configured, the upload response contains the object key and signed URL but no stable public asset URL.
+>>>>>>> Stashed changes

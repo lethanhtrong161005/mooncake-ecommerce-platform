@@ -27,6 +27,9 @@ public class ShopTemplateConfiguration : IEntityTypeConfiguration<ShopTemplate>
             builder.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
+            builder.Property(e => e.IsPremium)
+                .HasDefaultValue(false)
+                .HasColumnName("is_premium");
             builder.Property(e => e.IsDeleted)
                 .HasDefaultValue(false)
                 .HasColumnName("is_deleted");

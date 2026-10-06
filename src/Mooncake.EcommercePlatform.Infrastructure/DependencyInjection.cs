@@ -78,6 +78,19 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<IUserRepository, UserRepository>();
+<<<<<<< Updated upstream
+=======
+        services.AddScoped<IAdminPlatformRepository, AdminPlatformRepository>();
+        services.AddScoped<ISupplierRepository, SupplierRepository>();
+        services.AddScoped<ICatalogRepository, CatalogRepository>();
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
+        services.AddScoped<IPromotionRepository, PromotionRepository>();
+        services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddScoped<IFileStorageService, S3PresignedFileStorageService>();
+        services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
+>>>>>>> Stashed changes
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<ITraceContext, TraceContext>();
 

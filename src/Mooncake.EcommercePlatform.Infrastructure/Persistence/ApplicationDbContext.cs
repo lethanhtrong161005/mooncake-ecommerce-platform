@@ -33,6 +33,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ReputationLog> ReputationLogs => Set<ReputationLog>();
     public DbSet<RequestForQuotation> RequestForQuotations => Set<RequestForQuotation>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<GoogleLoginAttempt> GoogleLoginAttempts => Set<GoogleLoginAttempt>();
+    public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
     public DbSet<RfqInvitation> RfqInvitations => Set<RfqInvitation>();
     public DbSet<RfqItem> RfqItems => Set<RfqItem>();
     public DbSet<Shop> Shops => Set<Shop>();
@@ -52,27 +55,27 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // Enums (with NpgsqlNullNameTranslator for exact PascalCase matching)
         var translator = new NpgsqlNullNameTranslator();
 
-        modelBuilder.HasPostgresEnum<UserRole>("user_role", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<ShopStatus>("shop_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<ProductStatus>("product_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<OrderStatus>("order_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<PaymentMethod>("payment_method", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<PaymentStatus>("payment_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<DeliveryType>("delivery_type", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<DeliveryStatus>("delivery_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<ProofType>("proof_type", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<CustomPackagingStatus>("custom_packaging_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<RfqStatus>("rfq_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<RfqInvitationStatus>("rfq_invitation_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<BidStatus>("bid_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<ContractStatus>("contract_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<MilestoneStatus>("milestone_status", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<ReputationEvent>("reputation_event", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<DiscountType>("discount_type", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<AiConversationType>("ai_conversation_type", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<AiMessageRole>("ai_message_role", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<AiReportType>("ai_report_type", nameTranslator: translator);
-        modelBuilder.HasPostgresEnum<AiReportStatus>("ai_report_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<UserRole>(schema: null, name: "user_role", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<ShopStatus>(schema: null, name: "shop_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<ProductStatus>(schema: null, name: "product_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<OrderStatus>(schema: null, name: "order_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<PaymentMethod>(schema: null, name: "payment_method", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<PaymentStatus>(schema: null, name: "payment_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<DeliveryType>(schema: null, name: "delivery_type", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<DeliveryStatus>(schema: null, name: "delivery_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<ProofType>(schema: null, name: "proof_type", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<CustomPackagingStatus>(schema: null, name: "custom_packaging_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<RfqStatus>(schema: null, name: "rfq_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<RfqInvitationStatus>(schema: null, name: "rfq_invitation_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<BidStatus>(schema: null, name: "bid_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<ContractStatus>(schema: null, name: "contract_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<MilestoneStatus>(schema: null, name: "milestone_status", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<ReputationEvent>(schema: null, name: "reputation_event", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<DiscountType>(schema: null, name: "discount_type", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<AiConversationType>(schema: null, name: "ai_conversation_type", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<AiMessageRole>(schema: null, name: "ai_message_role", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<AiReportType>(schema: null, name: "ai_report_type", nameTranslator: translator);
+        modelBuilder.HasPostgresEnum<AiReportStatus>(schema: null, name: "ai_report_status", nameTranslator: translator);
 
         // Apply all entity configurations in this assembly
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);

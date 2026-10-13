@@ -15,8 +15,7 @@ mooncake-ecommerce-platform/
 │   └── tasks.json                    # VS Code build tasks
 ├── docker/
 │   ├── dev/
-│   │   ├── docker-compose.dev.yml    # MySQL 8.0 + Adminer (dev)
-│   │   └── .env.dev                  # Dev environment variables (BACKEND_PORT, DB config)
+│   │   └── docker-compose.dev.yml    # Adminer (dev)
 │   ├── stg/
 │   │   ├── docker-compose.stg.yml    # MySQL 8.0 (staging, with healthcheck)
 │   │   └── .env.stg                  # Staging environment variables
@@ -56,7 +55,8 @@ mooncake-ecommerce-platform/
 │       ├── Middleware/GlobalExceptionHandler.cs
 │       ├── Middleware/TraceIdMiddleware.cs
 │       ├── logs/                         # Generated Serilog files (debug, info, warn, error)
-│       ├── appsettings.json
+│       ├── appsettings.sample.json
+│       ├── appsettings.json             # Local configuration; ignored by Git
 │       ├── appsettings.Development.json
 │       └── Program.cs
 ├── Mooncake.EcommercePlatform.sln
@@ -115,12 +115,19 @@ HTTP Request
 
 ### Step 1 — Database & Supporting Services
 
-The database is hosted on **Supabase (PostgreSQL)**. Credentials and connection strings are configured in `docker/dev/.env.dev`.
+The database is hosted on **Supabase (PostgreSQL)**. Copy the sample configuration and set your local connection string under `ConnectionStrings:DefaultConnection`:
+
+```bash
+cp src/Mooncake.EcommercePlatform.WebApi/appsettings.sample.json \
+  src/Mooncake.EcommercePlatform.WebApi/appsettings.json
+```
+
+`appsettings.json` is ignored by Git. Keep real database credentials and JWT keys out of commits.
 
 To start local supporting services (Adminer web database management):
 ```bash
 cd docker/dev
-docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
+docker compose -f docker-compose.dev.yml up -d
 ```
 
 | Service | URL |
@@ -143,7 +150,7 @@ dotnet ef database update \
 
 ### Step 3 — Launch the Application
 
-The application reads port and database connections dynamically from `.env.dev` using **DotNetEnv**, following 12-Factor App principles.
+The application reads the port, time zone, database connection, and JWT key from `src/Mooncake.EcommercePlatform.WebApi/appsettings.json`. ASP.NET Core environment variables can override these settings using names such as `ConnectionStrings__DefaultConnection` and `Jwt__Key`.
 
 **Option A — VS Code (F5):**  
 Open the project in VS Code. Press **F5** to start with the `.vscode/launch.json` debugger attached.
@@ -155,7 +162,47 @@ dotnet run
 ```
 
 **Swagger UI:** http://localhost:8089/swagger
-*(Port dynamically assigned by `BACKEND_PORT` in `.env.dev`)*
+*(Port configured by `Server:Port` in `appsettings.json`.)*
+
+---
+
+## Phone login
+
+Apply the `AddAuthenLogin` migration before using the authentication endpoints. From the
+repository root, run the command below. The EF design-time factory reads
+`ConnectionStrings:DefaultConnection` from the WebApi `appsettings.json`. The same
+`ConnectionStrings__DefaultConnection` environment override is available to the API and EF.
+
+For a database that already has all tables from `InitialSupabaseSchema` but an empty
+`__EFMigrationsHistory`, review and run `.agents/feature/authen/BASELINE_EXISTING_SUPABASE.sql`
+once before `database update`. The script checks for the existing 31 tables and 109 indexes.
+Do not use this baseline script for a new or partially created database.
+
+```bash
+dotnet ef database update --project src/Mooncake.EcommercePlatform.Infrastructure \
+  --startup-project src/Mooncake.EcommercePlatform.Infrastructure
+```
+
+The migration normalizes existing phone numbers, creates a unique index for non-deleted users,
+and adds the `refresh_tokens` table. If non-deleted users share a phone number, resolve those
+records before applying it. Existing Base64 passwords are upgraded to PBKDF2 after a
+successful login. Existing bcrypt hashes (`$2a$`, `$2b$`, `$2y$`) are also accepted and
+remain unchanged after login.
+
+JWT settings are in `src/Mooncake.EcommercePlatform.WebApi/appsettings.json`. Replace the
+sample key with a private key of at least 32 bytes; production startup rejects the sample
+key. The API defaults to port `8089`, and local CORS allows the Vite
+frontend at `http://localhost:5173`.
+
+| Endpoint | Body | Result |
+| --- | --- | --- |
+| `POST /api/v1/auth/login` | `phoneNumber`, `password` | Access token, refresh token, user. |
+| `POST /api/v1/auth/refresh-token` | `refreshToken` | Rotated access and refresh tokens. |
+| `POST /api/v1/auth/logout` | `refreshToken` | Revokes the current refresh token. |
+| `GET /api/v1/auth/me` | Bearer access token | Current user profile. |
+
+Authentication error messages are in Vietnamese. The full contract and error table are
+in `.agents/feature/authen/LOGIN_PLAN.md`.
 
 ---
 
@@ -310,6 +357,6 @@ SQL queries are explicitly mapped to the `Debug` level to ensure granular tracki
 | ORM | Entity Framework Core + Npgsql + Pgvector |
 | Database | PostgreSQL 15+ (Supabase) |
 | Logging | Serilog (Async File Appenders) |
-| Configuration | DotNetEnv (12-Factor App) |
+| Configuration | ASP.NET Core appsettings.json |
 | API Docs | Swagger / OpenAPI (Swashbuckle) |
 | Containerization | Docker Compose (Adminer) |

@@ -17,6 +17,10 @@ public class UserRepository(ApplicationDbContext context) : IUserRepository
     public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
         await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
+    public async Task<User?> GetByPhoneAsync(string phone, CancellationToken cancellationToken = default) =>
+        await context.Users.AsNoTracking().FirstOrDefaultAsync(
+            u => u.Phone == phone && !u.IsDeleted, cancellationToken);
+
     public async Task<User> CreateAsync(User user, CancellationToken cancellationToken = default)
     {
         context.Users.Add(user);

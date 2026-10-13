@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Pgvector;
@@ -14,27 +14,27 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AlterDatabase()
-                .Annotation("Npgsql:Enum:ai_conversation_type.ai_conversation_type", "product_info,mooncake_history,sales_analytics,general")
-                .Annotation("Npgsql:Enum:ai_message_role.ai_message_role", "user,assistant,system")
-                .Annotation("Npgsql:Enum:ai_report_status.ai_report_status", "pending,processing,completed,failed")
-                .Annotation("Npgsql:Enum:ai_report_type.ai_report_type", "sales_trend,supplier_performance,demand_forecast,product_analysis,revenue_summary")
-                .Annotation("Npgsql:Enum:bid_status.bid_status", "submitted,accepted,cancelled")
-                .Annotation("Npgsql:Enum:contract_status.contract_status", "draft,pending_signature,signed,pending_deposit,active,completed_on_time,completed_late,breached,disputed,cancelled")
-                .Annotation("Npgsql:Enum:custom_packaging_status.custom_packaging_status", "pending,design_review,approved,in_production,rejected")
-                .Annotation("Npgsql:Enum:delivery_status.delivery_status", "pending,confirmed,picked_up,in_transit,delivered,failed,returned")
-                .Annotation("Npgsql:Enum:delivery_type.delivery_type", "platform_managed,self_arranged")
-                .Annotation("Npgsql:Enum:discount_type.discount_type", "percentage,fixed_amount,fixed_price")
-                .Annotation("Npgsql:Enum:milestone_status.milestone_status", "pending,awaiting_payment,paid,completed_on_time,completed_late,overdue,failed")
-                .Annotation("Npgsql:Enum:order_status.order_status", "pending,confirmed,processing,shipped,delivered,cancelled")
-                .Annotation("Npgsql:Enum:payment_method.payment_method", "bank_transfer,momo,vnpay,zalopay,cash")
-                .Annotation("Npgsql:Enum:payment_status.payment_status", "pending,processing,completed,failed,refunded")
-                .Annotation("Npgsql:Enum:product_status.product_status", "active,inactive,out_of_stock")
-                .Annotation("Npgsql:Enum:proof_type.proof_type", "pickup,in_transit,delivery,failed_attempt")
-                .Annotation("Npgsql:Enum:reputation_event.reputation_event", "completed_on_time,completed_late,breached,positive_review,negative_review,admin_penalty,admin_bonus")
-                .Annotation("Npgsql:Enum:rfq_invitation_status.rfq_invitation_status", "invited,viewed,bid_submitted,declined")
-                .Annotation("Npgsql:Enum:rfq_status.rfq_status", "draft,open,in_negotiation,awarded,closed,cancelled")
-                .Annotation("Npgsql:Enum:shop_status.shop_status", "active,inactive,suspended")
-                .Annotation("Npgsql:Enum:user_role.user_role", "customer,supplier,admin")
+                .Annotation("Npgsql:Enum:ai_conversation_type", "ProductInfo,MooncakeHistory,SalesAnalytics,General")
+                .Annotation("Npgsql:Enum:ai_message_role", "User,Assistant,System")
+                .Annotation("Npgsql:Enum:ai_report_status", "Pending,Processing,Completed,Failed")
+                .Annotation("Npgsql:Enum:ai_report_type", "SalesTrend,SupplierPerformance,DemandForecast,ProductAnalysis,RevenueSummary")
+                .Annotation("Npgsql:Enum:bid_status", "Submitted,Accepted,Cancelled")
+                .Annotation("Npgsql:Enum:contract_status", "Draft,PendingSignature,Signed,PendingDeposit,Active,CompletedOnTime,CompletedLate,Breached,Disputed,Cancelled")
+                .Annotation("Npgsql:Enum:custom_packaging_status", "Pending,DesignReview,Approved,InProduction,Rejected")
+                .Annotation("Npgsql:Enum:delivery_status", "Pending,Confirmed,PickedUp,InTransit,Delivered,Failed,Returned")
+                .Annotation("Npgsql:Enum:delivery_type", "PlatformManaged,SelfArranged")
+                .Annotation("Npgsql:Enum:discount_type", "Percentage,FixedAmount,FixedPrice")
+                .Annotation("Npgsql:Enum:milestone_status", "Pending,AwaitingPayment,Paid,CompletedOnTime,CompletedLate,Overdue,Failed")
+                .Annotation("Npgsql:Enum:order_status", "Pending,Confirmed,Processing,Shipped,Delivered,Cancelled")
+                .Annotation("Npgsql:Enum:payment_method", "BankTransfer,Momo,VNPay,ZaloPay,Cash")
+                .Annotation("Npgsql:Enum:payment_status", "Pending,Processing,Completed,Failed,Refunded")
+                .Annotation("Npgsql:Enum:product_status", "Active,Inactive,OutOfStock")
+                .Annotation("Npgsql:Enum:proof_type", "Pickup,InTransit,Delivery,FailedAttempt")
+                .Annotation("Npgsql:Enum:reputation_event", "CompletedOnTime,CompletedLate,Breached,PositiveReview,NegativeReview,AdminPenalty,AdminBonus")
+                .Annotation("Npgsql:Enum:rfq_invitation_status", "Invited,Viewed,BidSubmitted,Declined")
+                .Annotation("Npgsql:Enum:rfq_status", "Draft,Open,InNegotiation,Awarded,Closed,Cancelled")
+                .Annotation("Npgsql:Enum:shop_status", "Active,Inactive,Suspended")
+                .Annotation("Npgsql:Enum:user_role", "Customer,Supplier,Admin")
                 .Annotation("Npgsql:PostgresExtension:extensions.pgcrypto", ",,")
                 .Annotation("Npgsql:PostgresExtension:extensions.uuid-ossp", ",,")
                 .Annotation("Npgsql:PostgresExtension:vector", ",,");
@@ -53,8 +53,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -75,8 +73,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -99,8 +95,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -123,8 +117,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -150,8 +142,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -173,8 +163,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -198,8 +186,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -226,8 +212,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -262,8 +246,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -289,8 +271,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -313,8 +293,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -344,8 +322,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -371,8 +347,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -396,8 +370,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -422,8 +394,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -452,8 +422,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -480,8 +448,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -502,8 +468,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -534,8 +498,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -562,8 +524,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -591,8 +551,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -620,8 +578,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -644,8 +600,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -672,8 +626,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -700,8 +652,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -723,8 +673,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -750,8 +698,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -775,8 +721,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -803,8 +747,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -835,8 +777,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -861,8 +801,6 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true)
                 },

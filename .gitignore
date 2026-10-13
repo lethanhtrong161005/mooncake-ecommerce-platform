@@ -49,6 +49,7 @@ logs/
 .env
 .env.*
 *.env
+src/Mooncake.EcommercePlatform.WebApi/appsettings.json
 
 # AI / Agents
 .agents/scratch/

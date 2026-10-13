@@ -8,7 +8,7 @@ public class User : BaseEntity
 {
     public string Email { get; set; } = string.Empty;
 
-    public string PasswordHash { get; set; } = string.Empty;
+    public string? PasswordHash { get; set; }
 
     public string? FullName { get; set; }
 
@@ -21,4 +21,8 @@ public class User : BaseEntity
     public DateTime? EmailVerifiedAt { get; set; }
 
     public UserRole Role { get; set; } = UserRole.Customer;
+
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
+
+    public ICollection<UserExternalLogin> ExternalLogins { get; set; } = [];
 }

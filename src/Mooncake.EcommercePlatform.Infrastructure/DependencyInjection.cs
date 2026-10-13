@@ -16,16 +16,11 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var envConn = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
-        var configConn = configuration.GetConnectionString("DefaultConnection");
-
-        var connectionString = !string.IsNullOrWhiteSpace(envConn) && !envConn.Contains("[YOUR-PASSWORD]")
-            ? envConn
-            : (!string.IsNullOrWhiteSpace(configConn) ? configConn : envConn);
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
 
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            throw new InvalidOperationException("Database connection string is missing. Please configure DB_CONNECTION_STRING environment variable or ConnectionStrings:DefaultConnection.");
+            throw new InvalidOperationException("Database connection string is missing. Configure ConnectionStrings:DefaultConnection in appsettings.json.");
         }
 
         // Build NpgsqlDataSource with Enum & Vector mappings (using NpgsqlNullNameTranslator for PascalCase enum matching)
@@ -62,10 +57,9 @@ public static class DependencyInjection
         {
             options.UseNpgsql(dataSource, o => o.UseVector());
 
-            // Print SQL parameters and detailed errors when debugging/development
+            // Detailed errors are useful in development; parameter values can contain OAuth secrets.
             if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
             {
-                options.EnableSensitiveDataLogging();
                 options.EnableDetailedErrors();
 
                 options.ConfigureWarnings(warnings =>
@@ -78,6 +72,12 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IGoogleAuthRepository, GoogleAuthRepository>();
+        services.AddMemoryCache();
+        services.AddHttpClient<IGoogleIdentityClient, GoogleIdentityClient>(client =>
+            client.Timeout = TimeSpan.FromSeconds(10));
+        services.AddHostedService<GoogleLoginAttemptCleanupService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<ITraceContext, TraceContext>();
 

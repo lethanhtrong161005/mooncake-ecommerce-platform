@@ -1,7 +1,9 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
+using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
+using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
@@ -14,6 +16,8 @@ using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 /// </summary>
 public class UserService(IUserRepository userRepository, IUserHelper userHelper) : IUserService
 {
+    private const string PhoneConflictMessage = "Phone number is already in use.";
+
     public async Task<IEnumerable<UserResponse>> GetAllUsersAsync(CancellationToken cancellationToken = default)
     {
         var users = await userRepository.GetAllAsync(cancellationToken);
@@ -33,14 +37,21 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
         if (existing is not null)
             throw new HttpException(409, $"A user with email '{request.Email}' already exists.");
 
+        var phone = string.IsNullOrWhiteSpace(request.Phone)
+            ? null : PhoneNumberUtils.Normalize(request.Phone);
+        if (phone is not null && !PhoneNumberUtils.IsValid(phone))
+            throw new HttpException(400, MessageConstant.PhoneInvalid);
+        if (phone is not null && await userRepository.GetByPhoneAsync(phone, cancellationToken) is not null)
+            throw new HttpException(409, PhoneConflictMessage);
+
         var user = new User
         {
             Email = request.Email,
             FullName = request.FullName,
-            Phone = request.Phone,
+            Phone = phone,
             Role = request.Role,
-            // NOTE: Replace with a proper hashing library (e.g. BCrypt.Net) in production.
-            PasswordHash = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(request.Password))
+            IsActive = true,
+            PasswordHash = PasswordHashUtils.Hash(request.Password)
         };
 
         var created = await userRepository.CreateAsync(user, cancellationToken);
@@ -54,7 +65,14 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
 
         user.FullName = request.FullName;
         user.Email = request.Email;
-        user.Phone = request.Phone;
+        var phone = string.IsNullOrWhiteSpace(request.Phone)
+            ? null : PhoneNumberUtils.Normalize(request.Phone);
+        if (phone is not null && !PhoneNumberUtils.IsValid(phone))
+            throw new HttpException(400, MessageConstant.PhoneInvalid);
+        var phoneOwner = phone is null ? null : await userRepository.GetByPhoneAsync(phone, cancellationToken);
+        if (phoneOwner is not null && phoneOwner.Id != id)
+            throw new HttpException(409, PhoneConflictMessage);
+        user.Phone = phone;
         user.AvatarUrl = request.AvatarUrl;
         user.UpdatedAtUtc = DateTime.UtcNow;
 

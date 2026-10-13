@@ -43,10 +43,14 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
                 .HasColumnName("is_deleted");
             builder.Property(e => e.PasswordHash)
                 .HasMaxLength(255)
-                .HasColumnName("password_hash");
+                .HasColumnName("password_hash")
+                .IsRequired(false);
             builder.Property(e => e.Phone)
                 .HasMaxLength(20)
                 .HasColumnName("phone");
+            builder.HasIndex(e => e.Phone, "users_phone_active_key")
+                .IsUnique()
+                .HasFilter("phone IS NOT NULL AND is_deleted = false");
             builder.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");

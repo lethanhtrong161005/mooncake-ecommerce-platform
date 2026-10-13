@@ -1,5 +1,6 @@
 namespace Mooncake.EcommercePlatform.WebApi.Middleware;
 
+using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Microsoft.AspNetCore.Diagnostics;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
@@ -17,6 +18,8 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
     {
         var traceId = httpContext.Items["TraceId"]?.ToString() ?? httpContext.TraceIdentifier;
         var path = httpContext.Request.Path.Value ?? string.Empty;
+        var isAuthRequest = httpContext.Request.Path.StartsWithSegments("/api/v1/auth");
+        var isGoogleAuthRequest = httpContext.Request.Path.StartsWithSegments("/api/v1/auth/google");
 
         switch (exception)
         {
@@ -35,10 +38,13 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
                 logger.LogWarning(badRequest,
                     "Bad request on {Path} [TraceId={TraceId}]", path, traceId);
 
-                var errors = new List<string> { badRequest.Message };
                 httpContext.Response.StatusCode = 400;
                 await httpContext.Response.WriteAsJsonAsync(
-                    ResponseHelper.Error<object>(400, errors, path, traceId),
+                    isAuthRequest
+                        ? ResponseHelper.Error<object>(400,
+                            isGoogleAuthRequest ? MessageConstant.GoogleInvalidRequest
+                                : MessageConstant.InvalidRequest, path, traceId)
+                        : ResponseHelper.Error<object>(400, new List<string> { badRequest.Message }, path, traceId),
                     cancellationToken);
                 break;
 
@@ -48,7 +54,9 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
 
                 httpContext.Response.StatusCode = 500;
                 await httpContext.Response.WriteAsJsonAsync(
-                    ResponseHelper.Error<object>(500, "Internal server error", path, traceId),
+                    ResponseHelper.Error<object>(500,
+                        isAuthRequest ? MessageConstant.ServerError : "Internal server error",
+                        path, traceId),
                     cancellationToken);
                 break;
         }

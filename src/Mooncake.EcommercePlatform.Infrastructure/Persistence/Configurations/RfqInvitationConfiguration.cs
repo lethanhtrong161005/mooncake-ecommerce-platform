@@ -27,6 +27,7 @@ public class RfqInvitationConfiguration : IEntityTypeConfiguration<RfqInvitation
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
             builder.Property(e => e.CreatedBy).HasColumnName("created_by");
+            builder.Property(e => e.DeclineReason).HasMaxLength(1000).HasColumnName("decline_reason");
             builder.Property(e => e.InvitedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("invited_at");

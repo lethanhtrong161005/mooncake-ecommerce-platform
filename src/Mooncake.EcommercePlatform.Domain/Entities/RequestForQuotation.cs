@@ -24,5 +24,13 @@ public class RequestForQuotation : BaseEntity
 
     public DateTime? BidDeadline { get; set; }
 
+    public Guid? AwardedBidId { get; set; }
+
+    public DateTime? AwardedAt { get; set; }
+
+    public string? SelectionNote { get; set; }
+
+    public string? CancelReason { get; set; }
+
     public RfqStatus Status { get; set; } = RfqStatus.Draft;
 }

@@ -22,6 +22,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
 
             builder.HasIndex(e => e.OrderNumber, "orders_order_number_key").IsUnique();
 
+            builder.HasIndex(e => new { e.CustomerId, e.IdempotencyKey }, "orders_customer_idempotency_key_key")
+                .IsUnique()
+                .HasFilter("(idempotency_key IS NOT NULL AND is_deleted = false)");
+
             builder.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")
                 .HasColumnName("id");
@@ -31,6 +35,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             builder.Property(e => e.CreatedBy).HasColumnName("created_by");
             builder.Property(e => e.CustomerId).HasColumnName("customer_id");
             builder.Property(e => e.DeliveryAddress).HasColumnName("delivery_address");
+            builder.Property(e => e.RecipientName).HasMaxLength(255).HasColumnName("recipient_name");
+            builder.Property(e => e.RecipientPhone).HasMaxLength(20).HasColumnName("recipient_phone");
+            builder.Property(e => e.CancelledAt).HasColumnName("cancelled_at");
+            builder.Property(e => e.CancelledByUserId).HasColumnName("cancelled_by_user_id");
+            builder.Property(e => e.CancellationReason).HasColumnName("cancellation_reason");
             builder.Property(e => e.DeliveryDateExpected).HasColumnName("delivery_date_expected");
             builder.Property(e => e.DiscountAmount)
                 .HasPrecision(12, 2)
@@ -42,6 +51,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             builder.Property(e => e.OrderNumber)
                 .HasMaxLength(50)
                 .HasColumnName("order_number");
+            builder.Property(e => e.IdempotencyKey).HasMaxLength(128).HasColumnName("idempotency_key");
+            builder.Property(e => e.IdempotencyRequestHash).HasMaxLength(64).HasColumnName("idempotency_request_hash");
             builder.Property(e => e.ShippingFee)
                 .HasPrecision(12, 2)
                 .HasColumnName("shipping_fee");

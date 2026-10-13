@@ -12,7 +12,9 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
     {
             builder.HasKey(e => e.Id).HasName("deliveries_pkey");
 
-            builder.ToTable("deliveries");
+            builder.ToTable("deliveries", table => table.HasCheckConstraint(
+                "ck_deliveries_single_parent",
+                "(contract_id IS NOT NULL) <> (order_id IS NOT NULL)"));
 
             builder.HasIndex(e => e.DeliveryNumber, "deliveries_delivery_number_key").IsUnique();
 

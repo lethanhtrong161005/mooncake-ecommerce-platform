@@ -18,7 +18,31 @@ public class User : BaseEntity
 
     public bool IsActive { get; set; }
 
+    public int FailedLoginAttempts { get; set; }
+
+    public DateTime? LockoutUntil { get; set; }
+
     public DateTime? EmailVerifiedAt { get; set; }
 
     public UserRole Role { get; set; } = UserRole.Customer;
+
+    public UserRole RequestedRole { get; set; } = UserRole.Customer;
+
+    public string? EmailVerificationCodeHash { get; set; }
+
+    public DateTime? EmailVerificationCodeExpiresAt { get; set; }
+
+    public int EmailVerificationCodeAttempts { get; set; }
+
+    public string? PasswordResetCodeHash { get; set; }
+
+    public DateTime? PasswordResetCodeExpiresAt { get; set; }
+
+    public int PasswordResetCodeAttempts { get; set; }
+
+    public string? ContractSigningCodeHash { get; set; }
+
+    public DateTime? ContractSigningCodeExpiresAt { get; set; }
+
+    public int ContractSigningCodeAttempts { get; set; }
 }

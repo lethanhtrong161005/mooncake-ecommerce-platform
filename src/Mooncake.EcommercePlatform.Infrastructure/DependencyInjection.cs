@@ -1,4 +1,5 @@
 using Npgsql.NameTranslation;
+using Pgvector.EntityFrameworkCore;
 namespace Mooncake.EcommercePlatform.Infrastructure;
 
 using Microsoft.EntityFrameworkCore;
@@ -60,7 +61,7 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
-            options.UseNpgsql(dataSource, o => o.UseVector());
+            options.UseNpgsql(dataSource, providerOptions => providerOptions.UseVector());
 
             // Print SQL parameters and detailed errors when debugging/development
             if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
@@ -78,6 +79,23 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<IUserRepository, UserRepository>();
+<<<<<<< Updated upstream
+=======
+        services.AddScoped<IAdminPlatformRepository, AdminPlatformRepository>();
+        services.AddScoped<ISupplierRepository, SupplierRepository>();
+        services.AddScoped<ICatalogRepository, CatalogRepository>();
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
+        services.AddScoped<IPromotionRepository, PromotionRepository>();
+        services.AddScoped<IRfqRepository, RfqRepository>();
+        services.AddScoped<IContractRepository, ContractRepository>();
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddScoped<IFileStorageService, S3PresignedFileStorageService>();
+        services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
+>>>>>>> Stashed changes
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<ITraceContext, TraceContext>();
 

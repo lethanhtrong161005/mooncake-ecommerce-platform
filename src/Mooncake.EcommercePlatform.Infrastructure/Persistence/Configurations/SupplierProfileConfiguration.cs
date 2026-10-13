@@ -17,9 +17,9 @@ public class SupplierProfileConfiguration : IEntityTypeConfiguration<SupplierPro
                 .IsDescending()
                 .HasFilter("(is_deleted = false)");
 
-            builder.HasIndex(e => e.UserId, "idx_sp_user_id");
+            builder.HasIndex(e => e.UserId, "supplier_profiles_user_id_key").IsUnique();
 
-            builder.HasIndex(e => e.Verified, "idx_sp_verified").HasFilter("(is_deleted = false)");
+            builder.HasIndex(e => e.VerificationStatus, "idx_sp_verification_status").HasFilter("(is_deleted = false)");
 
             builder.HasIndex(e => e.TaxCode, "supplier_profiles_tax_code_key").IsUnique();
 
@@ -65,9 +65,16 @@ public class SupplierProfileConfiguration : IEntityTypeConfiguration<SupplierPro
                 .HasColumnName("updated_at");
             builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
             builder.Property(e => e.UserId).HasColumnName("user_id");
-            builder.Property(e => e.Verified)
-                .HasDefaultValue(false)
-                .HasColumnName("verified");
+            builder.Property(e => e.VerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .HasDefaultValue(Mooncake.EcommercePlatform.Domain.Enums.SupplierVerificationStatus.Pending)
+                .HasColumnName("verification_status");
             builder.Property(e => e.VerifiedAt).HasColumnName("verified_at");
+            builder.Property(e => e.ReviewedByUserId).HasColumnName("reviewed_by_user_id");
+            builder.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+            builder.Property(e => e.RejectionReason).HasColumnName("rejection_reason");
+            builder.HasOne<User>().WithOne().HasForeignKey<SupplierProfile>(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<User>().WithMany().HasForeignKey(e => e.ReviewedByUserId).OnDelete(DeleteBehavior.SetNull);
     }
 }

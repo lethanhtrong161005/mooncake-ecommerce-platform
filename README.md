@@ -313,3 +313,42 @@ SQL queries are explicitly mapped to the `Debug` level to ensure granular tracki
 | Configuration | DotNetEnv (12-Factor App) |
 | API Docs | Swagger / OpenAPI (Swashbuckle) |
 | Containerization | Docker Compose (Adminer) |
+<<<<<<< Updated upstream
+=======
+
+---
+
+## MVP Marketplace API
+
+The first marketplace slice is organized by the existing Clean Architecture layers. Controllers are in `WebApi/Controllers`, use cases and request/response records are in `Application`, and EF Core persistence is in `Infrastructure/Repositories`.
+
+| Area | Main routes |
+|---|---|
+| Accounts | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` |
+| Supplier verification | `POST /api/v1/suppliers/me/apply`, `GET /api/v1/suppliers/me`; admin review at `GET /api/v1/suppliers/pending` and `POST /api/v1/suppliers/{profileId}/review` |
+| Catalog | `GET /api/v1/catalog/categories`, `GET /api/v1/catalog/products`, `GET /api/v1/catalog/products/{id}`, `GET /api/v1/shops/{slug}` |
+| Admin catalog | `POST/PUT/DELETE /api/v1/admin/catalog/categories`, `POST/PUT/DELETE /api/v1/admin/catalog/shop-templates` |
+| Supplier catalog | `PUT /api/v1/shops/me`, `POST /api/v1/supplier/products`, `PUT /api/v1/supplier/products/{id}`, `DELETE /api/v1/supplier/products/{id}` |
+| Supplier promotions | `GET/POST /api/v1/supplier/promotions`, `PUT /api/v1/supplier/promotions/{id}`, `DELETE /api/v1/supplier/promotions/{id}` |
+| Bulk orders | `POST /api/v1/orders` (requires an `Idempotency-Key` header), `GET /api/v1/orders/mine`, `POST /api/v1/orders/{id}/cancel`; suppliers confirm/reject, start processing, and ship; customers confirm delivery |
+| RFQ / bids | `POST /api/v1/rfqs`, publish/cancel/invite, supplier bid/decline, customer bid comparison/cancellation/acceptance; deadline job closes expired RFQs |
+| Contracts | `GET /api/v1/contracts/mine`, submit for signature, request one-time signature code at `/signature-otp`, then `POST /sign` for each party |
+| Payments | Customer creates an idempotent order or milestone bank-transfer/COD payment; Admin manually confirms or records a refund; expiry job expires overdue payments |
+| Deposit rules | Admin manages mandatory contract deposit percentage and payment deadline at `/api/v1/admin/contract-deposit-rules` |
+
+Set `JWT_SECRET_KEY` to a random secret containing at least 32 bytes before starting the API. `JWT_ISSUER` and `JWT_AUDIENCE` are optional and default to `Mooncake.EcommercePlatform` and `Mooncake.Client`. Public registration always creates a customer account.
+
+### Authentication and Admin APIs
+
+Registration accepts `role: "Customer"` or `role: "Supplier"`. New accounts must verify their email before sign-in. Configure `SMTP_HOST` and `SMTP_FROM_EMAIL`; optionally set `SMTP_PORT` (default `587`), `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_USE_SSL` (default `true`). OTP codes are six digits, expire after ten minutes, and are stored only as an HMAC hash. Existing accounts are marked verified by the `AddEmailOtpChallenges` migration to preserve access.
+
+Authentication routes include `POST /api/v1/auth/verify-email`, `POST /api/v1/auth/resend-verification`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/revoke`, and authenticated `POST /api/v1/auth/revoke-all`. Refresh tokens are hashed at rest and rotated on use.
+
+Admin-only routes include `GET /api/v1/admin/dashboard`, `GET/PUT /api/v1/admin/system-config`, `GET /api/v1/admin/audit-logs`, `PATCH /api/v1/admin/users/{id}`, `GET /api/v1/admin/shops`, and `PATCH /api/v1/admin/shops/{id}/status`. The background authentication maintenance job runs hourly to clear expired OTPs and revoke expired refresh sessions.
+
+For a new environment, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` (at least 12 characters), then run `dotnet run --project src/Mooncake.EcommercePlatform.WebApi -- --bootstrap-platform` from the BE project directory. This explicit command applies pending EF migrations and creates the first admin, starter mooncake categories, and a `Classic` shop template. It stops if an active admin already exists. Normal API startup does not apply migrations. Keep the bootstrap credentials out of source control and remove them from the environment after initialization.
+
+Supplier shops require a verified supplier profile and an active template. Promotions support percentage, per-unit fixed-amount, or product-specific fixed-price discounts. Reusing an `Idempotency-Key` with the same authenticated customer and same request returns the original order; using that key for a different request returns `409 Conflict`. Order placement reserves variant stock while the order is pending; cancelling a pending order restores the stock. Taxes, shipping, and gateway payments remain unset until their business rules and provider are selected.
+
+RFQs are private to their customer and invited suppliers. Suppliers see only their own invitation and submitted bid; customer comparison returns the full set of bids. Bid acceptance is serialized on the RFQ row, cancels other submitted bids, and creates one draft contract in the same database transaction. Both contract parties must request an email code and sign with that code. The contract then requires a deposit before activation: the default rule is 30% due within 48 hours, and Admin can configure applicable rules. Bank-transfer instructions are created in-app and Admin confirms receipt manually; COD is disabled unless an Admin sets its limit. A scheduled job expires unpaid instructions. The signature hash covers a canonical contract snapshot, but a signed PDF, later contract milestones, payment-provider webhooks, delivery/PoD, reviews, and dispute handling are not implemented yet.
+>>>>>>> Stashed changes

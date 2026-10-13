@@ -32,6 +32,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
                 .HasMaxLength(255)
                 .HasColumnName("email");
             builder.Property(e => e.EmailVerifiedAt).HasColumnName("email_verified_at");
+            builder.Property(e => e.FailedLoginAttempts).HasDefaultValue(0).HasColumnName("failed_login_attempts");
             builder.Property(e => e.FullName)
                 .HasMaxLength(255)
                 .HasColumnName("full_name");
@@ -41,6 +42,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             builder.Property(e => e.IsDeleted)
                 .HasDefaultValue(false)
                 .HasColumnName("is_deleted");
+            builder.Property(e => e.LockoutUntil).HasColumnName("lockout_until");
             builder.Property(e => e.PasswordHash)
                 .HasMaxLength(255)
                 .HasColumnName("password_hash");
@@ -52,6 +54,16 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
                 .HasColumnName("updated_at");
             builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
         builder.Property(e => e.Role).HasColumnName("role");
+        builder.Property(e => e.RequestedRole).HasColumnName("requested_role").HasDefaultValue(UserRole.Customer);
+        builder.Property(e => e.EmailVerificationCodeHash).HasMaxLength(64).HasColumnName("email_verification_code_hash");
+        builder.Property(e => e.EmailVerificationCodeExpiresAt).HasColumnName("email_verification_code_expires_at");
+        builder.Property(e => e.EmailVerificationCodeAttempts).HasDefaultValue(0).HasColumnName("email_verification_code_attempts");
+        builder.Property(e => e.PasswordResetCodeHash).HasMaxLength(64).HasColumnName("password_reset_code_hash");
+        builder.Property(e => e.PasswordResetCodeExpiresAt).HasColumnName("password_reset_code_expires_at");
+        builder.Property(e => e.PasswordResetCodeAttempts).HasDefaultValue(0).HasColumnName("password_reset_code_attempts");
+        builder.Property(e => e.ContractSigningCodeHash).HasMaxLength(64).HasColumnName("contract_signing_code_hash");
+        builder.Property(e => e.ContractSigningCodeExpiresAt).HasColumnName("contract_signing_code_expires_at");
+        builder.Property(e => e.ContractSigningCodeAttempts).HasDefaultValue(0).HasColumnName("contract_signing_code_attempts");
         builder.HasIndex(e => e.Role, "idx_users_role");
     }
 }

@@ -12,7 +12,9 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
     {
             builder.HasKey(e => e.Id).HasName("payments_pkey");
 
-            builder.ToTable("payments");
+            builder.ToTable("payments", table => table.HasCheckConstraint(
+                "ck_payments_single_payment_target",
+                "((order_id IS NOT NULL) <> (contract_id IS NOT NULL)) AND (order_id IS NULL OR milestone_id IS NULL)"));
 
             builder.HasIndex(e => e.ContractId, "idx_pay_contract_id").HasFilter("(contract_id IS NOT NULL)");
 
@@ -27,6 +29,11 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
                 .HasFilter("(paid_at IS NOT NULL)");
 
             builder.HasIndex(e => e.PaymentNumber, "payments_payment_number_key").IsUnique();
+            builder.HasIndex(e => e.IdempotencyKey, "payments_idempotency_key_key").IsUnique().HasFilter("(idempotency_key IS NOT NULL)");
+            builder.HasIndex(e => e.OrderId, "payments_one_open_payment_per_order_key").IsUnique()
+                .HasFilter("(order_id IS NOT NULL AND status IN ('Pending', 'Processing', 'Completed') AND is_deleted = false)");
+            builder.HasIndex(e => e.MilestoneId, "payments_one_open_payment_per_milestone_key").IsUnique()
+                .HasFilter("(milestone_id IS NOT NULL AND status IN ('Pending', 'Processing', 'Completed') AND is_deleted = false)");
 
             builder.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")
@@ -34,6 +41,9 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             builder.Property(e => e.Amount)
                 .HasPrecision(12, 2)
                 .HasColumnName("amount");
+            builder.Property(e => e.Currency).HasMaxLength(3).HasDefaultValue("VND").HasColumnName("currency");
+            builder.Property(e => e.Provider).HasMaxLength(50).HasColumnName("provider");
+            builder.Property(e => e.IdempotencyKey).HasMaxLength(128).HasColumnName("idempotency_key");
             builder.Property(e => e.ContractId).HasColumnName("contract_id");
             builder.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
@@ -46,6 +56,9 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             builder.Property(e => e.MilestoneId).HasColumnName("milestone_id");
             builder.Property(e => e.OrderId).HasColumnName("order_id");
             builder.Property(e => e.PaidAt).HasColumnName("paid_at");
+            builder.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            builder.Property(e => e.RefundedAmount).HasPrecision(12, 2).HasDefaultValue(0m).HasColumnName("refunded_amount");
+            builder.Property(e => e.RefundReason).HasMaxLength(1000).HasColumnName("refund_reason");
             builder.Property(e => e.PaymentNumber)
                 .HasMaxLength(50)
                 .HasColumnName("payment_number");

@@ -18,9 +18,21 @@ public class Payment : BaseEntity
 
     public decimal Amount { get; set; }
 
+    public string Currency { get; set; } = "VND";
+
+    public string? Provider { get; set; }
+
+    public string? IdempotencyKey { get; set; }
+
     public string? TransactionId { get; set; }
 
     public DateTime? PaidAt { get; set; }
+
+    public DateTime? ExpiresAt { get; set; }
+
+    public decimal RefundedAmount { get; set; }
+
+    public string? RefundReason { get; set; }
 
     public PaymentMethod Method { get; set; } = PaymentMethod.BankTransfer;
 

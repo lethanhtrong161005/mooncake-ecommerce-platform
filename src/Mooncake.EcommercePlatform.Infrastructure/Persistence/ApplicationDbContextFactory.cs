@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Npgsql;
 using Npgsql.NameTranslation;
+using Pgvector.EntityFrameworkCore;
 
 /// <summary>Creates the context for EF migrations without starting the Web API host.</summary>
 public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<ApplicationDbContext>
@@ -26,21 +27,17 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
             directory = directory.Parent;
         }
 
-        if (settingsPath is null)
-        {
-            throw new InvalidOperationException(
-                "Cannot find src/Mooncake.EcommercePlatform.WebApi/appsettings.json. Run dotnet ef from the repository directory.");
-        }
+        var configurationBuilder = new ConfigurationBuilder();
+        if (settingsPath is not null)
+            configurationBuilder.AddJsonFile(settingsPath);
 
-        var configuration = new ConfigurationBuilder()
-            .AddJsonFile(settingsPath)
-            .AddEnvironmentVariables()
-            .Build();
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        var configuration = configurationBuilder.AddEnvironmentVariables().Build();
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? configuration["DB_CONNECTION_STRING"];
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException(
-                "Database connection string is missing. Configure ConnectionStrings:DefaultConnection in appsettings.json.");
+                "Database connection string is missing. Configure ConnectionStrings:DefaultConnection in appsettings.json or the DB_CONNECTION_STRING environment variable.");
         }
 
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);

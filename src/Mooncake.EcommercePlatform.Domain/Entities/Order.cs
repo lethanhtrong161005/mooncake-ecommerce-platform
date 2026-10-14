@@ -12,6 +12,10 @@ public class Order : BaseEntity
 
     public string OrderNumber { get; set; } = string.Empty;
 
+    public string? IdempotencyKey { get; set; }
+
+    public string? IdempotencyRequestHash { get; set; }
+
     public decimal Subtotal { get; set; }
 
     public decimal DiscountAmount { get; set; }
@@ -26,7 +30,17 @@ public class Order : BaseEntity
 
     public string? DeliveryAddress { get; set; }
 
+    public string? RecipientName { get; set; }
+
+    public string? RecipientPhone { get; set; }
+
     public DateOnly? DeliveryDateExpected { get; set; }
+
+    public DateTime? CancelledAt { get; set; }
+
+    public Guid? CancelledByUserId { get; set; }
+
+    public string? CancellationReason { get; set; }
 
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
 }

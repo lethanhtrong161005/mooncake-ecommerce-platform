@@ -13,4 +13,5 @@ public interface IRefreshTokenRepository
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
     Task RevokeAsync(string tokenHash, DateTime nowUtc, CancellationToken cancellationToken = default);
+    Task RevokeAllForUserAsync(Guid userId, DateTime nowUtc, CancellationToken cancellationToken = default);
 }

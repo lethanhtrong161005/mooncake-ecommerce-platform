@@ -1,4 +1,3 @@
-using Npgsql.NameTranslation;
 namespace Mooncake.EcommercePlatform.Infrastructure;
 
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +9,7 @@ using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 using Mooncake.EcommercePlatform.Infrastructure.Repositories;
 using Mooncake.EcommercePlatform.Infrastructure.Services;
 using Npgsql;
+using Npgsql.NameTranslation;
 
 /// <summary>Registers all Infrastructure-layer services with the DI container.</summary>
 public static class DependencyInjection
@@ -55,7 +55,7 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
-            options.UseNpgsql(dataSource, o => o.UseVector());
+            options.UseNpgsql(dataSource, providerOptions => providerOptions.UseVector());
 
             // Detailed errors are useful in development; parameter values can contain OAuth secrets.
             if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
@@ -78,6 +78,17 @@ public static class DependencyInjection
         services.AddHttpClient<IGoogleIdentityClient, GoogleIdentityClient>(client =>
             client.Timeout = TimeSpan.FromSeconds(10));
         services.AddHostedService<GoogleLoginAttemptCleanupService>();
+        services.AddScoped<IAdminPlatformRepository, AdminPlatformRepository>();
+        services.AddScoped<ISupplierRepository, SupplierRepository>();
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
+        services.AddScoped<IPromotionRepository, PromotionRepository>();
+        services.AddScoped<IRfqRepository, RfqRepository>();
+        services.AddScoped<IContractRepository, ContractRepository>();
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<ITraceContext, TraceContext>();
 

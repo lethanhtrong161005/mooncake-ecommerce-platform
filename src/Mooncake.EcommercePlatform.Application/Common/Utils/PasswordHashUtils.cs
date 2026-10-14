@@ -36,7 +36,8 @@ public static class PasswordHashUtils
             }
         }
 
-        if (storedHash.StartsWith($"{Prefix}$", StringComparison.Ordinal))
+        if (storedHash.StartsWith($"{Prefix}$", StringComparison.Ordinal)
+            || storedHash.StartsWith("PBKDF2-SHA256$", StringComparison.Ordinal))
         {
             var parts = storedHash.Split('$');
             if (parts.Length != 4 || !int.TryParse(parts[1], out var iterations)
@@ -51,7 +52,7 @@ public static class PasswordHashUtils
                     return false;
                 var actual = Rfc2898DeriveBytes.Pbkdf2(
                     password, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
-                needsUpgrade = iterations < Iterations;
+                needsUpgrade = !storedHash.StartsWith($"{Prefix}${Iterations}$", StringComparison.Ordinal);
                 return CryptographicOperations.FixedTimeEquals(expected, actual);
             }
             catch (FormatException)

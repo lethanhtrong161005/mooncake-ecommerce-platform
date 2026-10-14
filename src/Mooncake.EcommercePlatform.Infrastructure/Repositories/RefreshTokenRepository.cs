@@ -51,4 +51,10 @@ public class RefreshTokenRepository(ApplicationDbContext context) : IRefreshToke
             .Where(token => token.TokenHash == tokenHash && token.RevokedAtUtc == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAtUtc, nowUtc),
                 cancellationToken);
+
+    public Task RevokeAllForUserAsync(Guid userId, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        context.RefreshTokens
+            .Where(token => token.UserId == userId && token.RevokedAtUtc == null && !token.IsDeleted)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAtUtc, nowUtc),
+                cancellationToken);
 }

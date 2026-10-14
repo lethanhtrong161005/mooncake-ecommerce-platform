@@ -1,6 +1,11 @@
 using Mooncake.EcommercePlatform.WebApi.Configurations;
+using Mooncake.EcommercePlatform.Application.Services.Interfaces;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
+using Mooncake.EcommercePlatform.WebApi.Background;
 using Serilog;
+
+const string BootstrapCompleteMessage = "Platform bootstrap completed successfully.";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +19,26 @@ builder.WebHost.UseUrls($"http://{host}:{port}");
 SerilogSetup.ConfigureSerilog(builder);
 builder.Services.AddWebApiServices(builder.Configuration, builder.Environment);
 
+builder.Services.AddSingleton<IRecurringJob, AuthMaintenanceJob>();
+builder.Services.AddSingleton<IRecurringJob, RfqDeadlineJob>();
+builder.Services.AddSingleton<IRecurringJob, PaymentExpiryJob>();
+builder.Services.AddHostedService<RecurringJobRunner>();
+
 var app = builder.Build();
+
+if (args.Contains("--bootstrap-platform", StringComparer.OrdinalIgnoreCase))
+{
+    var adminEmail = Environment.GetEnvironmentVariable("INITIAL_ADMIN_EMAIL");
+    var adminPassword = Environment.GetEnvironmentVariable("INITIAL_ADMIN_PASSWORD");
+    if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+        throw new InvalidOperationException("INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD are required for platform bootstrap.");
+
+    await using var bootstrapScope = app.Services.CreateAsyncScope();
+    var bootstrapService = bootstrapScope.ServiceProvider.GetRequiredService<IPlatformBootstrapService>();
+    await bootstrapService.InitializeAsync(adminEmail, adminPassword);
+    Console.WriteLine(BootstrapCompleteMessage);
+    return;
+}
 
 app.UseMiddleware<TraceIdMiddleware>();
 app.UseSerilogRequestLogging();
@@ -36,6 +60,7 @@ app.UseCors(CorsOptions.FrontendPolicyName);
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<AdminAuditMiddleware>();
 app.MapControllers();
 
 app.Run();

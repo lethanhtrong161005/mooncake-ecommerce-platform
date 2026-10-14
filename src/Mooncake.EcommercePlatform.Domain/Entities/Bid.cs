@@ -22,5 +22,9 @@ public class Bid : BaseEntity
 
     public DateTime SubmittedAt { get; set; }
 
+    public DateTime? AcceptedAt { get; set; }
+
+    public string? CancelReason { get; set; }
+
     public BidStatus Status { get; set; } = BidStatus.Submitted;
 }

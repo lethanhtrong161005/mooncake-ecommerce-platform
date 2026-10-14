@@ -13,6 +13,15 @@ public static class DependencyInjection
         services.AddSingleton<IUserHelper, UserHelper>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IAuthenService, AuthenService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAdminPlatformService, AdminPlatformService>();
+        services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IPlatformBootstrapService, PlatformBootstrapService>();
+        services.AddScoped<IPromotionService, PromotionService>();
+        services.AddScoped<IRfqService, RfqService>();
+        services.AddScoped<IContractService, ContractService>();
+        services.AddScoped<IPaymentService, PaymentService>();
         return services;
     }
 }

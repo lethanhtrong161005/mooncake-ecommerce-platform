@@ -147,6 +147,15 @@ public static class WebApiServiceCollectionExtensions
                     QueueLimit = 0,
                     AutoReplenishment = true
                 }));
+            options.AddPolicy("auth-otp", context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
             options.OnRejected = async (context, cancellationToken) =>
             {
                 var http = context.HttpContext;

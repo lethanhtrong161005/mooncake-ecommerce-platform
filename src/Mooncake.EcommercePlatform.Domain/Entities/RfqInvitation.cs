@@ -14,5 +14,7 @@ public class RfqInvitation : BaseEntity
 
     public DateTime? RespondedAt { get; set; }
 
+    public string? DeclineReason { get; set; }
+
     public RfqInvitationStatus Status { get; set; } = RfqInvitationStatus.Invited;
 }

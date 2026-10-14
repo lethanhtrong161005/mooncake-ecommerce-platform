@@ -17,6 +17,7 @@ public class ContractConfiguration : IEntityTypeConfiguration<Contract>
             builder.HasIndex(e => e.ContractNumber, "contracts_contract_number_key").IsUnique();
 
             builder.HasIndex(e => e.BidId, "idx_contracts_bid_id").HasFilter("(bid_id IS NOT NULL)");
+            builder.HasIndex(e => e.BidId, "contracts_bid_id_key").IsUnique().HasFilter("(bid_id IS NOT NULL AND is_deleted = false)");
 
             builder.HasIndex(e => e.CustomerId, "idx_contracts_customer_id").HasFilter("(is_deleted = false)");
 
@@ -52,6 +53,12 @@ public class ContractConfiguration : IEntityTypeConfiguration<Contract>
                 .HasColumnName("is_deleted");
             builder.Property(e => e.OrderId).HasColumnName("order_id");
             builder.Property(e => e.PenaltyTerms).HasColumnName("penalty_terms");
+            builder.Property(e => e.SignedDocumentUrl).HasColumnName("signed_document_url");
+            builder.Property(e => e.SignedDocumentSha256).HasMaxLength(64).HasColumnName("signed_document_sha256");
+            builder.Property(e => e.CustomerSignatureIp).HasMaxLength(45).HasColumnName("customer_signature_ip");
+            builder.Property(e => e.CustomerSignatureUserAgent).HasMaxLength(1000).HasColumnName("customer_signature_user_agent");
+            builder.Property(e => e.SupplierSignatureIp).HasMaxLength(45).HasColumnName("supplier_signature_ip");
+            builder.Property(e => e.SupplierSignatureUserAgent).HasMaxLength(1000).HasColumnName("supplier_signature_user_agent");
             builder.Property(e => e.RfqId).HasColumnName("rfq_id");
             builder.Property(e => e.SignedByCustomerAt).HasColumnName("signed_by_customer_at");
             builder.Property(e => e.SignedBySupplierAt).HasColumnName("signed_by_supplier_at");

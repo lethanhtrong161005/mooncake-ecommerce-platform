@@ -33,4 +33,9 @@ public abstract class BaseApiController : ControllerBase
             message,
             Request.Path.Value ?? string.Empty,
             HttpContext.Items["TraceId"]?.ToString() ?? string.Empty));
+
+    protected IActionResult AcceptedResponse(string message) =>
+        StatusCode(StatusCodes.Status202Accepted, ResponseHelper.Success(message,
+            Request.Path.Value ?? string.Empty,
+            HttpContext.Items["TraceId"]?.ToString() ?? string.Empty));
 }

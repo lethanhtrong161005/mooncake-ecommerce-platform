@@ -24,6 +24,10 @@ public class RequestForQuotationConfiguration : IEntityTypeConfiguration<Request
                 .HasDefaultValueSql("uuid_generate_v4()")
                 .HasColumnName("id");
             builder.Property(e => e.BidDeadline).HasColumnName("bid_deadline");
+            builder.Property(e => e.AwardedBidId).HasColumnName("awarded_bid_id");
+            builder.Property(e => e.AwardedAt).HasColumnName("awarded_at");
+            builder.Property(e => e.SelectionNote).HasMaxLength(2000).HasColumnName("selection_note");
+            builder.Property(e => e.CancelReason).HasMaxLength(1000).HasColumnName("cancel_reason");
             builder.Property(e => e.BudgetRangeMax)
                 .HasPrecision(12, 2)
                 .HasColumnName("budget_range_max");

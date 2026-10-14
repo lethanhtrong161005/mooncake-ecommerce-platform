@@ -15,6 +15,7 @@ public class CustomPackagingConfiguration : IEntityTypeConfiguration<CustomPacka
             builder.ToTable("custom_packagings");
 
             builder.HasIndex(e => e.OrderId, "idx_cpkg_order_id");
+            builder.HasIndex(e => e.OrderId, "custom_packagings_order_id_key").IsUnique();
 
             builder.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")

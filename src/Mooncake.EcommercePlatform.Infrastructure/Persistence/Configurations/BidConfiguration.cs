@@ -17,6 +17,14 @@ public class BidConfiguration : IEntityTypeConfiguration<Bid>
             builder.HasIndex(e => e.BidNumber, "bids_bid_number_key").IsUnique();
 
             builder.HasIndex(e => e.RfqId, "idx_bids_rfq_id").HasFilter("(is_deleted = false)");
+            builder.HasIndex(e => new { e.RfqId, e.SupplierId }, "bids_rfq_id_supplier_id_key")
+                .IsUnique().HasFilter("(is_deleted = false)");
+            builder.HasIndex(e => e.RfqId, "bids_one_accepted_per_rfq_key")
+                .IsUnique().HasFilter("(status = 'Accepted' AND is_deleted = false)");
+            builder.HasIndex(e => new { e.RfqId, e.SupplierId }, "bids_rfq_id_supplier_id_key")
+                .IsUnique().HasFilter("(is_deleted = false)");
+            builder.HasIndex(e => e.RfqId, "bids_one_accepted_per_rfq_key")
+                .IsUnique().HasFilter("(status = 'Accepted' AND is_deleted = false)");
 
             builder.HasIndex(e => e.SupplierId, "idx_bids_supplier_id").HasFilter("(is_deleted = false)");
 
@@ -28,6 +36,8 @@ public class BidConfiguration : IEntityTypeConfiguration<Bid>
             builder.Property(e => e.BidNumber)
                 .HasMaxLength(50)
                 .HasColumnName("bid_number");
+            builder.Property(e => e.AcceptedAt).HasColumnName("accepted_at");
+            builder.Property(e => e.CancelReason).HasMaxLength(1000).HasColumnName("cancel_reason");
             builder.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");

@@ -22,6 +22,10 @@ public static class DependencyInjection
         services.AddScoped<IRfqService, RfqService>();
         services.AddScoped<IContractService, ContractService>();
         services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IDeliveryService, DeliveryService>();
+        services.AddScoped<ICatalogService, CatalogService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IReviewService, ReviewService>();
         return services;
     }
 }

@@ -16,6 +16,35 @@ public sealed class PaymentsController(IPaymentService paymentService) : BaseApi
         [FromBody] CreatePaymentRequest request, CancellationToken cancellationToken) =>
         Created(await paymentService.CreateAsync(CurrentUserId, idempotencyKey, request, cancellationToken), "Payment created successfully.");
 
+    [Authorize(Roles = "Customer")]
+    [HttpPost("vnpay/checkout")]
+    public async Task<IActionResult> CreateVnPayCheckoutAsync([FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+        [FromBody] CreatePaymentRequest request, CancellationToken cancellationToken) =>
+        Created(await paymentService.CreateVnPayPaymentAsync(CurrentUserId, idempotencyKey, request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken), "VNPAY checkout created successfully.");
+
+    [AllowAnonymous]
+    [HttpGet("vnpay/ipn")]
+    public async Task<IActionResult> VnPayIpnAsync(CancellationToken cancellationToken)
+    {
+        var parameters = Request.Query.ToDictionary(pair => pair.Key, pair => pair.Value.ToString(), StringComparer.Ordinal);
+        var result = await paymentService.ProcessVnPayCallbackAsync(parameters, cancellationToken);
+        return Ok(result);
+    }
+
+    [AllowAnonymous]
+    [HttpGet("vnpay/return")]
+    public IActionResult VnPayReturn()
+    {
+        var parameters = Request.Query.ToDictionary(pair => pair.Key, pair => pair.Value.ToString(), StringComparer.Ordinal);
+        return Ok(new
+        {
+            valid = paymentService.ValidateVnPayReturn(parameters),
+            paymentNumber = parameters.GetValueOrDefault("vnp_TxnRef"),
+            responseCode = parameters.GetValueOrDefault("vnp_ResponseCode")
+        });
+    }
+
     [Authorize(Roles = "Customer,Supplier")]
     [HttpGet("mine")]
     public async Task<IActionResult> GetMineAsync(CancellationToken cancellationToken) =>

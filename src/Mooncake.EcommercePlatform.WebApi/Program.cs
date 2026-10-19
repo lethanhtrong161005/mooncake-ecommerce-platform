@@ -2,6 +2,7 @@ using Mooncake.EcommercePlatform.WebApi.Configurations;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
+using Mooncake.EcommercePlatform.WebApi.Hubs;
 using Mooncake.EcommercePlatform.WebApi.Background;
 using Serilog;
 
@@ -62,5 +63,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<AdminAuditMiddleware>();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();

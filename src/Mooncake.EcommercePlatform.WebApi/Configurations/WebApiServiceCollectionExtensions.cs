@@ -12,6 +12,8 @@ using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Options;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Infrastructure;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.WebApi.Hubs;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
 
 /// <summary>Registers HTTP, authentication, and application services for the Web API.</summary>
@@ -30,6 +32,8 @@ public static class WebApiServiceCollectionExtensions
         services.AddControllers().AddJsonOptions(options =>
             options.JsonSerializerOptions.Converters.Add(
                 new System.Text.Json.Serialization.JsonStringEnumConverter()));
+        services.AddSignalR();
+        services.AddScoped<IRealtimeNotificationSink, SignalRNotificationSink>();
         services.Configure<ApiBehaviorOptions>(ConfigureInvalidModelStateResponse);
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
@@ -91,6 +95,17 @@ public static class WebApiServiceCollectionExtensions
                 ClockSkew = TimeSpan.Zero,
                 NameClaimType = ClaimTypes.NameIdentifier,
                 RoleClaimType = ClaimTypes.Role
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    if (!string.IsNullOrEmpty(accessToken)
+                        && context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+                        context.Token = accessToken;
+                    return Task.CompletedTask;
+                }
             };
         });
     }

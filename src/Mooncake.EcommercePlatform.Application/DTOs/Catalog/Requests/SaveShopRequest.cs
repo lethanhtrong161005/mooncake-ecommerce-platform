@@ -22,4 +22,7 @@ public sealed record SaveShopRequest
 
     [Required]
     public Guid TemplateId { get; init; }
+
+    [MaxLength(4000)]
+    public string? CustomColors { get; init; }
 }

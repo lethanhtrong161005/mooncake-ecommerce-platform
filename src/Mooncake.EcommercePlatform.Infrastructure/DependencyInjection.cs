@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
+using Mooncake.EcommercePlatform.Infrastructure.Persistence.Notifications;
 using Mooncake.EcommercePlatform.Infrastructure.Repositories;
 using Mooncake.EcommercePlatform.Infrastructure.Services;
 using Npgsql;
@@ -53,9 +54,14 @@ public static class DependencyInjection
 
         var dataSource = dataSourceBuilder.Build();
 
-        services.AddDbContext<ApplicationDbContext>(options =>
+        services.AddScoped<NotificationDispatchQueue>();
+        services.AddScoped<NotificationSaveInterceptor>();
+        services.AddScoped<NotificationTransactionInterceptor>();
+        services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
         {
             options.UseNpgsql(dataSource, providerOptions => providerOptions.UseVector());
+            options.AddInterceptors(serviceProvider.GetRequiredService<NotificationSaveInterceptor>(),
+                serviceProvider.GetRequiredService<NotificationTransactionInterceptor>());
 
             // Detailed errors are useful in development; parameter values can contain OAuth secrets.
             if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
@@ -86,6 +92,11 @@ public static class DependencyInjection
         services.AddScoped<IRfqRepository, RfqRepository>();
         services.AddScoped<IContractRepository, ContractRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IDeliveryRepository, DeliveryRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<ICatalogRepository, CatalogRepository>();
+        services.AddScoped<IReviewRepository, ReviewRepository>();
+        services.AddScoped<IVnPayGateway, VnPayGateway>();
         services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
         services.AddScoped<IAccessTokenService, JwtAccessTokenService>();

@@ -10,7 +10,8 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 
-public sealed class PaymentService(IPaymentRepository repository, IAdminPlatformRepository adminRepository, IDateTimeProvider clock) : IPaymentService
+public sealed class PaymentService(IPaymentRepository repository, IAdminPlatformRepository adminRepository,
+    IDateTimeProvider clock, IVnPayGateway vnPayGateway) : IPaymentService
 {
     private const string CodLimitConfigKey = "payments.cod_limit_vnd";
     private const string PaymentDeadlineConfigKey = "payments.payment_deadline_hours";
@@ -78,6 +79,7 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
             Amount = amount,
             Currency = "VND",
             Method = request.Method,
+            Provider = request.Method == PaymentMethod.VNPay ? "VNPAY" : null,
             Status = PaymentStatus.Pending,
             ExpiresAt = now.AddHours(deadlineHours),
             CreatedBy = customerId
@@ -92,6 +94,39 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
         }
         return ToResponse(payment);
     }
+
+    public async Task<VnPayPaymentResponse> CreateVnPayPaymentAsync(Guid customerId, string? idempotencyKey,
+        CreatePaymentRequest request, string? clientIpAddress, CancellationToken cancellationToken = default)
+    {
+        var vnPayRequest = request with { Method = PaymentMethod.VNPay };
+        var payment = await CreateAsync(customerId, idempotencyKey, vnPayRequest, cancellationToken);
+        if (payment.Status is not (PaymentStatus.Pending or PaymentStatus.Processing))
+            throw new HttpException(409, "This payment is no longer available for checkout.");
+        var storedPayment = await repository.GetPaymentAsync(payment.Id, cancellationToken)
+                            ?? throw new HttpException(404, "Payment was not found.");
+        var paymentUrl = vnPayGateway.CreatePaymentUrl(new VnPayPaymentRequest(storedPayment.Id.ToString("N"),
+            storedPayment.Amount, $"Mooncake payment {storedPayment.PaymentNumber}", clientIpAddress ?? string.Empty,
+            storedPayment.ExpiresAt ?? clock.UtcNow.AddHours(1)));
+        return new VnPayPaymentResponse(storedPayment.Id, storedPayment.PaymentNumber, paymentUrl,
+            storedPayment.Amount, storedPayment.ExpiresAt ?? clock.UtcNow.AddHours(1));
+    }
+
+    public async Task<VnPayIpnResponse> ProcessVnPayCallbackAsync(IReadOnlyDictionary<string, string> parameters,
+        CancellationToken cancellationToken = default)
+    {
+        if (!vnPayGateway.TryValidateCallback(parameters, out var callback))
+            return new VnPayIpnResponse("97", "Invalid signature or callback parameters.");
+        var expectedPayment = await repository.GetPaymentByIdempotentReferenceAsync(callback.PaymentNumber, cancellationToken);
+        if (expectedPayment is null || expectedPayment.Provider != "VNPAY" || expectedPayment.Method != PaymentMethod.VNPay)
+            return new VnPayIpnResponse("01", "Payment was not found.");
+        if (decimal.ToInt64(expectedPayment.Amount * 100m) != callback.Amount)
+            return new VnPayIpnResponse("04", "Payment amount does not match.");
+        var result = await repository.ProcessVnPayResultAsync(callback, cancellationToken);
+        return new VnPayIpnResponse(result.RspCode, result.Message);
+    }
+
+    public bool ValidateVnPayReturn(IReadOnlyDictionary<string, string> parameters) =>
+        vnPayGateway.TryValidateCallback(parameters, out _);
 
     public async Task<IReadOnlyList<PaymentResponse>> GetMineAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default) =>
         (await repository.GetPaymentsAsync(userId, supplier, cancellationToken)).Select(ToResponse).ToArray();

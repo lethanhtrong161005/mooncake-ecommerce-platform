@@ -2793,17 +2793,33 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("delivery_rating");
 
+                    b.Property<bool>("IsAnonymous")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_anonymous");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsHiddenByAdmin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_hidden_by_admin");
+
                     b.Property<bool>("IsPublic")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_public");
+
+                    b.Property<string>("MediaUrls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("media_urls");
 
                     b.Property<Guid?>("OrderId")
                         .HasColumnType("uuid")
@@ -2824,6 +2840,14 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.Property<Guid>("SupplierId")
                         .HasColumnType("uuid")
                         .HasColumnName("supplier_id");
+
+                    b.Property<DateTime?>("SupplierRepliedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("supplier_replied_at");
+
+                    b.Property<string>("SupplierReply")
+                        .HasColumnType("text")
+                        .HasColumnName("supplier_reply");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -2852,6 +2876,14 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "SupplierId" }, "idx_rev_supplier_id")
                         .HasFilter("(is_deleted = false)");
+
+                    b.HasIndex(new[] { "ContractId" }, "reviews_contract_id_key")
+                        .IsUnique()
+                        .HasFilter("((contract_id IS NOT NULL) AND (is_deleted = false))");
+
+                    b.HasIndex(new[] { "OrderId" }, "reviews_order_id_key")
+                        .IsUnique()
+                        .HasFilter("((order_id IS NOT NULL) AND (is_deleted = false))");
 
                     b.ToTable("reviews", (string)null);
                 });

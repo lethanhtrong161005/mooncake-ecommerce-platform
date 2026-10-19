@@ -396,3 +396,22 @@ For a new environment, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` (a
 Supplier shops require a verified supplier profile and an active template. Promotions support percentage, per-unit fixed-amount, or product-specific fixed-price discounts. Reusing an `Idempotency-Key` with the same authenticated customer and same request returns the original order; using that key for a different request returns `409 Conflict`. Order placement reserves variant stock while the order is pending; cancelling a pending order restores the stock. Taxes, shipping, and gateway payments remain unset until their business rules and provider are selected.
 
 RFQs are private to their customer and invited suppliers. Suppliers see only their own invitation and submitted bid; customer comparison returns the full set of bids. Bid acceptance is serialized on the RFQ row, cancels other submitted bids, and creates one draft contract in the same database transaction. Both contract parties must request an email code and sign with that code. The contract then requires a deposit before activation: the default rule is 30% due within 48 hours, and Admin can configure applicable rules. Bank-transfer instructions are created in-app and Admin confirms receipt manually; COD is disabled unless an Admin sets its limit. A scheduled job expires unpaid instructions. The signature hash covers a canonical contract snapshot, but a signed PDF, later contract milestones, payment-provider webhooks, delivery/PoD, reviews, and dispute handling are not implemented yet.
+# VNPAY Sandbox
+
+The payment API supports VNPAY redirect checkout through `POST /api/v1/payments/vnpay/checkout`.
+Configure these environment variables on the WebApi process:
+
+- `VNPAY_TMN_CODE`: merchant Terminal ID supplied by VNPAY.
+- `VNPAY_HASH_SECRET`: merchant signing secret supplied by VNPAY. Keep it outside source control.
+- `VNPAY_RETURN_URL`: publicly reachable HTTPS URL for `/api/v1/payments/vnpay/return`.
+- `VNPAY_PAYMENT_URL`: optional override; defaults to the VNPAY Sandbox payment URL.
+
+Send the `Idempotency-Key` header and either `orderId`, or `contractId` plus `milestoneId`.
+The API responds with a `paymentUrl` for browser redirection. Configure VNPAY IPN to call
+`GET /api/v1/payments/vnpay/ipn` on a publicly reachable HTTPS backend. The IPN callback verifies
+the VNPAY HMAC signature, terminal ID, merchant payment reference, and amount before recording the
+payment. The browser return endpoint validates the signed response for display only; it does not
+change payment state. VNPAY payment status is finalized only by IPN.
+
+Use the Sandbox payment URL and test credentials from the VNPAY merchant portal while developing.
+Do not put the merchant hash secret in frontend settings.

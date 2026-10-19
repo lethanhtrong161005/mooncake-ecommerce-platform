@@ -9,7 +9,8 @@ using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 /// <summary>EF Core implementation of explicit marketplace bootstrap.</summary>
 public sealed class PlatformBootstrapRepository(ApplicationDbContext context) : IPlatformBootstrapRepository
 {
-    public async Task InitializeAsync(User initialAdmin, IReadOnlyList<Category> defaultCategories, ShopTemplate defaultTemplate, CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(User initialAdmin, IReadOnlyList<Category> defaultCategories,
+        IReadOnlyList<ShopTemplate> defaultTemplates, CancellationToken cancellationToken = default)
     {
         await context.Database.MigrateAsync(cancellationToken);
         await using var transaction = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
@@ -27,9 +28,11 @@ public sealed class PlatformBootstrapRepository(ApplicationDbContext context) : 
                 context.Categories.Add(category);
         }
 
-        var hasActiveTemplate = await context.ShopTemplates.AnyAsync(template => template.IsActive && !template.IsDeleted, cancellationToken);
-        if (!hasActiveTemplate)
-            context.ShopTemplates.Add(defaultTemplate);
+        var existingTemplateNames = await context.ShopTemplates.Where(template => !template.IsDeleted)
+            .Select(template => template.Name).ToListAsync(cancellationToken);
+        foreach (var template in defaultTemplates.Where(template => !existingTemplateNames.Contains(template.Name,
+                     StringComparer.OrdinalIgnoreCase)))
+            context.ShopTemplates.Add(template);
 
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

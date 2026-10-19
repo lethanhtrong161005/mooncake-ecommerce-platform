@@ -26,6 +26,11 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
     public Task<Payment?> GetPaymentAsync(Guid paymentId, CancellationToken cancellationToken = default) =>
         context.Payments.AsNoTracking().FirstOrDefaultAsync(payment => payment.Id == paymentId && !payment.IsDeleted, cancellationToken);
 
+    public Task<Payment?> GetPaymentByIdempotentReferenceAsync(string reference, CancellationToken cancellationToken = default) =>
+        Guid.TryParseExact(reference, "N", out var paymentId)
+            ? context.Payments.AsNoTracking().FirstOrDefaultAsync(payment => payment.Id == paymentId && !payment.IsDeleted, cancellationToken)
+            : Task.FromResult<Payment?>(null);
+
     public Task<Payment?> GetPaymentByIdempotencyKeyAsync(Guid customerId, string idempotencyKey, CancellationToken cancellationToken = default) =>
         context.Payments.AsNoTracking().FirstOrDefaultAsync(payment => payment.CustomerId == customerId
             && payment.IdempotencyKey == idempotencyKey && !payment.IsDeleted, cancellationToken);
@@ -202,6 +207,78 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return payment;
+    }
+
+    public async Task<VnPaySettlementResult> ProcessVnPayResultAsync(VnPayCallback callback,
+        CancellationToken cancellationToken = default)
+    {
+        const string AcknowledgedCode = "00";
+        const string AlreadyProcessedCode = "02";
+        const string InvalidAmountCode = "04";
+        const string UnknownPaymentCode = "01";
+        const string SuccessMessage = "Payment status updated successfully.";
+        const string AlreadyProcessedMessage = "Payment status was already recorded.";
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var payment = await context.Payments.FromSqlInterpolated(
+                $"SELECT * FROM payments WHERE id = {Guid.ParseExact(callback.PaymentNumber, "N")} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+        if (payment is null || payment.IsDeleted || payment.Provider != "VNPAY" || payment.Method != PaymentMethod.VNPay)
+            return new VnPaySettlementResult(UnknownPaymentCode, "Payment was not found.");
+        if (decimal.ToInt64(payment.Amount * 100m) != callback.Amount)
+            return new VnPaySettlementResult(InvalidAmountCode, "Payment amount does not match.");
+        if (payment.Status is not (PaymentStatus.Pending or PaymentStatus.Processing))
+        {
+            var response = payment.Status == PaymentStatus.Completed && payment.TransactionId == callback.TransactionId
+                ? new VnPaySettlementResult(AcknowledgedCode, AlreadyProcessedMessage)
+                : new VnPaySettlementResult(AlreadyProcessedCode, AlreadyProcessedMessage);
+            return response;
+        }
+
+        var now = clock.UtcNow;
+        var previousStatus = payment.Status;
+        var succeeded = callback.ResponseCode == "00" && callback.TransactionStatus == "00";
+        payment.Status = succeeded ? PaymentStatus.Completed : PaymentStatus.Failed;
+        payment.TransactionId = callback.TransactionId;
+        payment.PaidAt = succeeded ? now : null;
+        payment.UpdatedAt = now;
+        if (succeeded && payment.MilestoneId is Guid milestoneId && payment.ContractId is Guid contractId)
+        {
+            var milestone = await context.ContractMilestones.FirstOrDefaultAsync(item =>
+                item.Id == milestoneId && item.ContractId == contractId && !item.IsDeleted, cancellationToken);
+            var contract = await context.Contracts.FirstOrDefaultAsync(item => item.Id == contractId && !item.IsDeleted, cancellationToken);
+            if (milestone is null || contract is null)
+                return new VnPaySettlementResult(UnknownPaymentCode, "Contract milestone was not found.");
+            milestone.Status = MilestoneStatus.Paid;
+            milestone.UpdatedAt = now;
+            if (milestone.IsDeposit && contract.Status == ContractStatus.PendingDeposit)
+            {
+                contract.Status = ContractStatus.Active;
+                contract.DepositPaidAt = now;
+                contract.UpdatedAt = now;
+                context.WorkflowEvents.Add(new WorkflowEvent
+                {
+                    AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractStatusChanged",
+                    FromStatus = ContractStatus.PendingDeposit.ToString(), ToStatus = ContractStatus.Active.ToString(),
+                    Reason = "Mandatory deposit payment confirmed by VNPAY."
+                });
+                await NotifyContractPartiesAsync(contract, "contract.active", "Contract is active",
+                    "The required deposit was confirmed and the contract is now active.", cancellationToken);
+            }
+        }
+
+        context.WorkflowEvents.Add(new WorkflowEvent
+        {
+            AggregateType = "Payment", AggregateId = payment.Id, EventType = "PaymentStatusChanged",
+            FromStatus = previousStatus.ToString(), ToStatus = payment.Status.ToString(),
+            Reason = succeeded ? "VNPAY payment confirmed." : $"VNPAY payment failed with response {callback.ResponseCode}."
+        });
+        await NotifyPaymentPartiesAsync(payment, succeeded ? "payment.completed" : "payment.failed",
+            succeeded ? "Payment confirmed" : "Payment failed",
+            succeeded ? $"Payment {payment.PaymentNumber} was confirmed by VNPAY."
+                : $"Payment {payment.PaymentNumber} failed at VNPAY.", cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new VnPaySettlementResult(AcknowledgedCode, SuccessMessage);
     }
 
     private async Task NotifyPaymentPartiesAsync(Payment payment, string type, string title, string content, CancellationToken cancellationToken)

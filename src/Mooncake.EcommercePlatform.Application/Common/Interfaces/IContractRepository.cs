@@ -9,5 +9,9 @@ public interface IContractRepository
     Task<bool> IsPartyAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> HasSignedAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> BeginSignatureAsync(Guid contractId, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<ContractDocumentSaveResult?> SaveDocumentAsync(Guid contractId, Guid actorUserId,
+        string objectPath, string sha256, CancellationToken cancellationToken = default);
     Task<Contract?> SignAsync(Guid contractId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default);
 }
+
+public sealed record ContractDocumentSaveResult(Contract Contract, string? PreviousObjectPath);

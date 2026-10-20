@@ -14,6 +14,9 @@ public sealed record ApplySupplierRequest
     [Required, MaxLength(500)]
     public string Address { get; init; } = string.Empty;
 
+    [Required, EmailAddress, MaxLength(255)]
+    public string ContactEmail { get; init; } = string.Empty;
+
     [MaxLength(2000)]
     public string? Description { get; init; }
 

@@ -47,7 +47,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             await transaction.CommitAsync(cancellationToken);
             return true;
         }
-        if (contract.Status != ContractStatus.Draft) return false;
+        if (contract.Status != ContractStatus.Draft || string.IsNullOrWhiteSpace(contract.SignedDocumentUrl)) return false;
         contract.Status = ContractStatus.PendingSignature;
         contract.UpdatedBy = actorUserId;
         contract.UpdatedAt = clock.UtcNow;
@@ -62,6 +62,32 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<ContractDocumentSaveResult?> SaveDocumentAsync(Guid contractId, Guid actorUserId,
+        string objectPath, string sha256, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var contract = await context.Contracts
+            .FromSqlInterpolated($"SELECT * FROM contracts WHERE id = {contractId} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+        if (contract is null || contract.IsDeleted || contract.Status != ContractStatus.Draft
+            || !await IsPartyAsync(contract, actorUserId, cancellationToken))
+            return null;
+        var previousPath = contract.SignedDocumentUrl;
+        contract.SignedDocumentUrl = objectPath;
+        contract.SignedDocumentSha256 = sha256;
+        contract.UpdatedAt = clock.UtcNow;
+        contract.UpdatedBy = actorUserId;
+        context.WorkflowEvents.Add(new WorkflowEvent
+        {
+            AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractDocumentUploaded",
+            FromStatus = contract.Status.ToString(), ToStatus = contract.Status.ToString(), ActorUserId = actorUserId,
+            Metadata = $"sha256:{sha256}"
+        });
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new ContractDocumentSaveResult(contract, previousPath);
     }
 
     public async Task<Contract?> SignAsync(Guid contractId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default)
@@ -100,7 +126,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         if (contract.SignedByCustomerAt.HasValue && contract.SignedBySupplierAt.HasValue)
         {
             var snapshot = $"{contract.ContractNumber}\n{contract.Title}\n{contract.TotalValue:0.00}\n{contract.DeliveryDeadline:yyyy-MM-dd}\n{contract.TermsAndConditions}";
-            contract.SignedDocumentSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot)));
+            contract.SignedDocumentSha256 ??= Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot)));
             var totalValue = contract.TotalValue ?? 0m;
             var depositRule = await context.ContractDepositRules.AsNoTracking()
                 .Where(rule => !rule.IsDeleted && rule.AppliesToAll && rule.IsMandatory

@@ -39,6 +39,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<GoogleLoginAttempt> GoogleLoginAttempts => Set<GoogleLoginAttempt>();
+    public DbSet<OtpVerification> OtpVerifications => Set<OtpVerification>();
     public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
     public DbSet<RfqInvitation> RfqInvitations => Set<RfqInvitation>();
     public DbSet<RfqItem> RfqItems => Set<RfqItem>();

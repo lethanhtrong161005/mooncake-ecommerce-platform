@@ -9,5 +9,8 @@ public interface ISupplierService
     Task<SupplierProfileResponse> ApplyAsync(Guid userId, ApplySupplierRequest request, CancellationToken cancellationToken = default);
     Task<SupplierProfileResponse> GetMyProfileAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SupplierProfileResponse>> GetPendingAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SupplierProfileResponse>> GetVerifiedAsync(CancellationToken cancellationToken = default);
+    Task<SupplierProfileResponse> GetByIdAsync(Guid profileId, CancellationToken cancellationToken = default);
     Task<SupplierProfileResponse> ReviewAsync(Guid profileId, Guid adminUserId, ReviewSupplierRequest request, CancellationToken cancellationToken = default);
+    Task<SupplierProfileResponse> RevokeAsync(Guid profileId, Guid adminUserId, string reason, CancellationToken cancellationToken = default);
 }

@@ -6,12 +6,15 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Mooncake.EcommercePlatform.Application;
 using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Options;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Infrastructure;
+using Mooncake.EcommercePlatform.Infrastructure.Persistence;
+using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
 
 /// <summary>Registers HTTP, authentication, and application services for the Web API.</summary>
@@ -56,7 +59,9 @@ public static class WebApiServiceCollectionExtensions
             var isGoogleRequest = context.HttpContext.Request.Path.StartsWithSegments(GoogleAuthRoutePrefix);
             var path = context.HttpContext.Request.Path.Value ?? string.Empty;
             var traceId = context.HttpContext.Items["TraceId"]?.ToString() ?? string.Empty;
-            var message = isGoogleRequest ? MessageConstant.GoogleInvalidRequest : MessageConstant.InvalidRequest;
+            var isRegisterRequest = context.HttpContext.Request.Path.StartsWithSegments("/api/v1/auth/register");
+            var message = isGoogleRequest ? MessageConstant.GoogleInvalidRequest :
+                isRegisterRequest ? MessageConstant.InvalidRegisterData : MessageConstant.InvalidRequest;
             return new BadRequestObjectResult(ResponseHelper.Error<object>(400, message, path, traceId));
         };
     }
@@ -91,6 +96,27 @@ public static class WebApiServiceCollectionExtensions
                 ClockSkew = TimeSpan.Zero,
                 NameClaimType = ClaimTypes.NameIdentifier,
                 RoleClaimType = ClaimTypes.Role
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = async context =>
+                {
+                    if (context.Principal?.IsInRole("Supplier") != true) return;
+                    if (!Guid.TryParse(context.Principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+                    {
+                        context.Fail("Invalid supplier identity.");
+                        return;
+                    }
+                    var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+                    var valid = await db.Users.AsNoTracking().AnyAsync(user =>
+                        user.Id == userId && !user.IsDeleted && user.IsActive && user.Role == UserRole.Supplier,
+                        context.HttpContext.RequestAborted)
+                        && await db.SupplierProfiles.AsNoTracking().AnyAsync(profile =>
+                            profile.UserId == userId && !profile.IsDeleted &&
+                            profile.VerificationStatus == SupplierVerificationStatus.Verified,
+                            context.HttpContext.RequestAborted);
+                    if (!valid) context.Fail("Supplier verification is no longer valid.");
+                }
             };
         });
     }
@@ -160,8 +186,10 @@ public static class WebApiServiceCollectionExtensions
             {
                 var http = context.HttpContext;
                 http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                var message = http.Request.Path.StartsWithSegments("/api/v1/auth/register")
+                    ? MessageConstant.OtpRateLimited : MessageConstant.TooManyAttempts;
                 await http.Response.WriteAsJsonAsync(ResponseHelper.Error<object>(
-                    StatusCodes.Status429TooManyRequests, MessageConstant.TooManyAttempts,
+                    StatusCodes.Status429TooManyRequests, message,
                     http.Request.Path.Value ?? string.Empty,
                     http.Items["TraceId"]?.ToString() ?? string.Empty), cancellationToken);
             };

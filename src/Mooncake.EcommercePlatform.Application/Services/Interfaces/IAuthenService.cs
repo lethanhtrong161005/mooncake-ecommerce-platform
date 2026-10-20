@@ -6,6 +6,10 @@ using Mooncake.EcommercePlatform.Application.DTOs.Authen.Responses;
 /// <summary>Phone login and revocable token lifecycle.</summary>
 public interface IAuthenService
 {
+    Task<SendRegisterOtpResponse> SendRegisterOtpAsync(SendRegisterOtpRequest request, CancellationToken cancellationToken = default);
+    Task<SendRegisterOtpResponse> ResendRegisterOtpAsync(SendRegisterOtpRequest request, CancellationToken cancellationToken = default);
+    Task<VerifyRegisterOtpResponse> VerifyRegisterOtpAsync(VerifyRegisterOtpRequest request, CancellationToken cancellationToken = default);
+    Task<RegisterAccountResponse> RegisterAccountAsync(RegisterAccountRequest request, CancellationToken cancellationToken = default);
     /// <summary>Authenticates a user and issues a new token pair.</summary>
     Task<AuthenResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
 

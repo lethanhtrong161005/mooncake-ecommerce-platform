@@ -34,6 +34,9 @@ public class SupplierProfileConfiguration : IEntityTypeConfiguration<SupplierPro
             builder.Property(e => e.CompanyName)
                 .HasMaxLength(255)
                 .HasColumnName("company_name");
+            builder.Property(e => e.ContactEmail)
+                .HasMaxLength(255)
+                .HasColumnName("contact_email");
             builder.Property(e => e.ContractsBreached)
                 .HasDefaultValue(0)
                 .HasColumnName("contracts_breached");

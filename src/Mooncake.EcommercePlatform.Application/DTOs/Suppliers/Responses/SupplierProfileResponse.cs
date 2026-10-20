@@ -9,8 +9,11 @@ public sealed record SupplierProfileResponse(
     string? CompanyName,
     string? TaxCode,
     string? Address,
+    string? ContactEmail,
     string? Description,
     SupplierVerificationStatus VerificationStatus,
+    DateTime SubmittedAt,
+    DateTime? VerifiedAt,
     DateTime? ReviewedAt,
     string? RejectionReason,
     IReadOnlyList<SupplierDocumentResponse> Documents);

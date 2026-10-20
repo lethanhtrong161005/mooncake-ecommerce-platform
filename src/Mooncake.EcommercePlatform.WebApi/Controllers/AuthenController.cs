@@ -15,6 +15,45 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class AuthenController(IAuthenService authenService) : BaseApiController
 {
+    [HttpPost("register/send-otp")]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> SendRegisterOtpAsync(
+        [FromBody] SendRegisterOtpRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null) throw new HttpException(400, MessageConstant.InvalidRegisterData);
+        var result = await authenService.SendRegisterOtpAsync(request, cancellationToken);
+        return Success(result, MessageConstant.OtpSent);
+    }
+
+    [HttpPost("register/resend-otp")]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> ResendRegisterOtpAsync(
+        [FromBody] SendRegisterOtpRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null) throw new HttpException(400, MessageConstant.InvalidRegisterData);
+        var result = await authenService.ResendRegisterOtpAsync(request, cancellationToken);
+        return Success(result, MessageConstant.OtpResent);
+    }
+
+    [HttpPost("register/verify-otp")]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> VerifyRegisterOtpAsync(
+        [FromBody] VerifyRegisterOtpRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null) throw new HttpException(400, MessageConstant.InvalidRegisterData);
+        var result = await authenService.VerifyRegisterOtpAsync(request, cancellationToken);
+        return Success(result, MessageConstant.OtpVerified);
+    }
+
+    [HttpPost("register")]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> RegisterAccountAsync(
+        [FromBody] RegisterAccountRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null) throw new HttpException(400, MessageConstant.InvalidRegisterData);
+        var result = await authenService.RegisterAccountAsync(request, cancellationToken);
+        return Created(result, MessageConstant.RegisterSuccess);
+    }
     /// <summary>Creates a Google authorization URL with state and PKCE.</summary>
     [HttpPost("google/authorization-url")]
     [EnableRateLimiting("auth-login")]

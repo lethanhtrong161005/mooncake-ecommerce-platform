@@ -16,6 +16,8 @@ public class SupplierProfile : BaseEntity
 
     public string? Address { get; set; }
 
+    public string? ContactEmail { get; set; }
+
     public string? Description { get; set; }
 
     public decimal ReputationScore { get; set; }

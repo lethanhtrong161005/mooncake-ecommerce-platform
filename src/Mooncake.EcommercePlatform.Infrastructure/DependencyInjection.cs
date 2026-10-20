@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.Common.Options;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 using Mooncake.EcommercePlatform.Infrastructure.Repositories;
@@ -74,10 +75,13 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IGoogleAuthRepository, GoogleAuthRepository>();
+        services.AddScoped<IOtpRepository, OtpRepository>();
+        services.AddScoped<IRegisterOtpSender, ConsoleRegisterOtpSender>();
         services.AddMemoryCache();
         services.AddHttpClient<IGoogleIdentityClient, GoogleIdentityClient>(client =>
             client.Timeout = TimeSpan.FromSeconds(10));
         services.AddHostedService<GoogleLoginAttemptCleanupService>();
+        services.AddHostedService<OtpCleanupBackgroundService>();
         services.AddScoped<IAdminPlatformRepository, AdminPlatformRepository>();
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
@@ -88,6 +92,25 @@ public static class DependencyInjection
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+        var storageOptions = configuration.GetSection(SupabaseStorageOptions.SectionName)
+            .Get<SupabaseStorageOptions>()
+            ?? throw new InvalidOperationException("SupabaseStorage configuration is missing.");
+        if (!Uri.TryCreate(storageOptions.ProjectUrl, UriKind.Absolute, out var storageUrl)
+            || storageUrl.Scheme != Uri.UriSchemeHttps
+            || string.IsNullOrWhiteSpace(storageOptions.SecretKey)
+            || string.IsNullOrWhiteSpace(storageOptions.ContractBucket)
+            || storageOptions.MaxContractFileBytes is <= 0 or > 50 * 1024 * 1024
+            || storageOptions.SignedUrlLifetimeSeconds is < 60 or > 3600)
+            throw new InvalidOperationException("SupabaseStorage configuration is invalid.");
+        services.Configure<SupabaseStorageOptions>(configuration.GetSection(SupabaseStorageOptions.SectionName));
+        services.AddHttpClient<IContractFileStorage, SupabaseContractFileStorage>(client =>
+        {
+            client.BaseAddress = new Uri($"{storageOptions.ProjectUrl.TrimEnd('/')}/storage/v1/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.TryAddWithoutValidation("apikey", storageOptions.SecretKey);
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", storageOptions.SecretKey);
+        });
         services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<ITraceContext, TraceContext>();

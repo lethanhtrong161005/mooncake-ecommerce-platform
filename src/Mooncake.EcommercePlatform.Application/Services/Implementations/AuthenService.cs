@@ -19,6 +19,8 @@ public class AuthenService(
     IRefreshTokenRepository refreshTokens,
     IGoogleAuthRepository googleAuth,
     IGoogleIdentityClient googleClient,
+    IOtpRepository otpRepository,
+    IRegisterOtpSender otpSender,
     IDateTimeProvider clock,
     IOptions<JwtOptions> jwtOptions,
     IOptions<GoogleOAuthOptions> googleOptions) : IAuthenService
@@ -26,6 +28,83 @@ public class AuthenService(
     private const string BearerTokenType = "Bearer";
     private readonly JwtOptions _jwt = jwtOptions.Value;
     private readonly GoogleOAuthOptions _google = googleOptions.Value;
+
+    public Task<SendRegisterOtpResponse> SendRegisterOtpAsync(
+        SendRegisterOtpRequest request, CancellationToken cancellationToken = default) =>
+        IssueRegisterOtpAsync(request, false, cancellationToken);
+
+    public Task<SendRegisterOtpResponse> ResendRegisterOtpAsync(
+        SendRegisterOtpRequest request, CancellationToken cancellationToken = default) =>
+        IssueRegisterOtpAsync(request, true, cancellationToken);
+
+    private async Task<SendRegisterOtpResponse> IssueRegisterOtpAsync(
+        SendRegisterOtpRequest request, bool resend, CancellationToken cancellationToken)
+    {
+        var phone = ValidatePhone(request.PhoneNumber);
+        if (!otpSender.IsAvailable)
+            throw new HttpException(503, MessageConstant.OtpProviderUnavailable);
+        if (await users.GetByPhoneAsync(phone, cancellationToken) is not null)
+            throw new HttpException(409, MessageConstant.PhoneAlreadyRegistered);
+
+        var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString("D6");
+        await otpRepository.IssueAsync(phone, HashToken(otp), clock.UtcNow, resend, cancellationToken);
+        await otpSender.SendAsync(phone, otp, cancellationToken);
+        return new SendRegisterOtpResponse(phone, 60, 300);
+    }
+
+    public async Task<VerifyRegisterOtpResponse> VerifyRegisterOtpAsync(
+        VerifyRegisterOtpRequest request, CancellationToken cancellationToken = default)
+    {
+        var phone = ValidatePhone(request.PhoneNumber);
+        if (string.IsNullOrWhiteSpace(request.Otp))
+            throw new HttpException(400, MessageConstant.OtpRequired);
+        var otp = request.Otp.Trim();
+        if (otp.Length != 6 || !otp.All(c => c is >= '0' and <= '9'))
+            throw new HttpException(400, MessageConstant.OtpInvalid);
+        var token = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(48));
+        var remaining = await otpRepository.VerifyAsync(phone, HashToken(otp), HashToken(token),
+            clock.UtcNow, cancellationToken);
+        if (remaining == 0)
+            throw new HttpException(400, MessageConstant.OtpMaxAttemptsExceeded);
+        if (remaining > 0)
+            throw new HttpException(400, $"Mã OTP không chính xác. Bạn còn {remaining} lần thử.");
+        return new VerifyRegisterOtpResponse(phone, token, 600);
+    }
+
+    public async Task<RegisterAccountResponse> RegisterAccountAsync(
+        RegisterAccountRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.PhoneNumber) ||
+            string.IsNullOrWhiteSpace(request.VerificationToken) ||
+            string.IsNullOrWhiteSpace(request.FullName) ||
+            string.IsNullOrWhiteSpace(request.Password) ||
+            string.IsNullOrWhiteSpace(request.ConfirmPassword))
+            throw new HttpException(400, MessageConstant.InvalidRegisterData);
+        var phone = ValidatePhone(request.PhoneNumber);
+        var fullName = request.FullName.Trim();
+        if (fullName.Length is < 2 or > 100)
+            throw new HttpException(400, MessageConstant.FullNameInvalid);
+        if (request.Password.Length < 6)
+            throw new HttpException(400, MessageConstant.PasswordTooShort);
+        if (request.Password != request.ConfirmPassword)
+            throw new HttpException(400, MessageConstant.PasswordMismatch);
+        if (request.VerificationToken.Length > 512)
+            throw new HttpException(400, MessageConstant.VerificationSessionExpired);
+
+        var user = await otpRepository.RegisterAsync(phone, HashToken(request.VerificationToken),
+            fullName, PasswordHashUtils.Hash(request.Password), clock.UtcNow, cancellationToken);
+        return new RegisterAccountResponse(user.Id, phone, fullName, user.Role);
+    }
+
+    private static string ValidatePhone(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            throw new HttpException(400, MessageConstant.PhoneRequired);
+        var phone = PhoneNumberUtils.Normalize(input);
+        if (!PhoneNumberUtils.IsValid(phone))
+            throw new HttpException(400, MessageConstant.PhoneInvalid);
+        return phone;
+    }
 
     /// <inheritdoc/>
     public async Task<GoogleAuthorizationUrlResponse> CreateGoogleAuthorizationUrlAsync(

@@ -20,6 +20,7 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
         var path = httpContext.Request.Path.Value ?? string.Empty;
         var isAuthRequest = httpContext.Request.Path.StartsWithSegments("/api/v1/auth");
         var isGoogleAuthRequest = httpContext.Request.Path.StartsWithSegments("/api/v1/auth/google");
+        var isRegisterRequest = httpContext.Request.Path.StartsWithSegments("/api/v1/auth/register");
 
         switch (exception)
         {
@@ -43,6 +44,7 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
                     isAuthRequest
                         ? ResponseHelper.Error<object>(400,
                             isGoogleAuthRequest ? MessageConstant.GoogleInvalidRequest
+                                : isRegisterRequest ? MessageConstant.InvalidRegisterData
                                 : MessageConstant.InvalidRequest, path, traceId)
                         : ResponseHelper.Error<object>(400, new List<string> { badRequest.Message }, path, traceId),
                     cancellationToken);

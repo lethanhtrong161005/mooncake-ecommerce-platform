@@ -13,7 +13,7 @@ public sealed class AuthController(IAuthService authService) : BaseApiController
 {
     /// <summary>Registers a customer account.</summary>
     [AllowAnonymous]
-    [HttpPost("register")]
+    [HttpPost("register/email")]
     [EnableRateLimiting("auth-otp")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]

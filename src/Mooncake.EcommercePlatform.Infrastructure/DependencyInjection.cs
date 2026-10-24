@@ -3,11 +3,14 @@ namespace Mooncake.EcommercePlatform.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using CloudinaryDotNet;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 using Mooncake.EcommercePlatform.Infrastructure.Repositories;
 using Mooncake.EcommercePlatform.Infrastructure.Services;
+using Mooncake.EcommercePlatform.Infrastructure.Options;
 using Npgsql;
 using Npgsql.NameTranslation;
 
@@ -16,6 +19,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddCloudinaryStorage(configuration);
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -92,6 +96,25 @@ public static class DependencyInjection
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<ITraceContext, TraceContext>();
 
+        return services;
+    }
+
+    /// <summary>Registers upload-only storage without database or network access during configuration.</summary>
+    public static IServiceCollection AddCloudinaryStorage(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<CloudinaryOptions>()
+            .Bind(configuration.GetSection(CloudinaryOptions.SectionName))
+            .Validate(options => options.IsValid(), CloudinaryOptions.InvalidConfigurationMessage)
+            .ValidateOnStart();
+        services.AddSingleton<ICloudinaryUploadApi>(provider =>
+        {
+            var options = provider.GetRequiredService<IOptions<CloudinaryOptions>>().Value;
+            var client = new Cloudinary(new Account(options.CloudName, options.ApiKey, options.ApiSecret));
+            client.Api.Secure = options.Secure;
+            client.Api.Timeout = checked(options.UploadTimeoutSeconds * 1000);
+            return client;
+        });
+        services.AddScoped<ICloudinaryStorageService, CloudinaryStorageService>();
         return services;
     }
 }

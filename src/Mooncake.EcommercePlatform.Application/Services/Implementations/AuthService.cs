@@ -1,5 +1,12 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
+using Microsoft.Extensions.Options;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.Options;
+using Mooncake.EcommercePlatform.Application.DTOs.Authen.Responses;
+using GoogleLoginRequest = Mooncake.EcommercePlatform.Application.DTOs.Authen.Requests.GoogleLoginRequest;
+using PhoneLoginRequest = Mooncake.EcommercePlatform.Application.DTOs.Authen.Requests.LoginRequest;
+using RefreshTokenRequest = Mooncake.EcommercePlatform.Application.DTOs.Authen.Requests.RefreshTokenRequest;
 using System.Security.Cryptography;
 using System.Text;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
@@ -20,8 +27,16 @@ public sealed class AuthService(
     IRefreshTokenRepository refreshTokens,
     IUserHelper userHelper,
     IDateTimeProvider dateTimeProvider,
-    IEmailSender emailSender) : IAuthService
+    IEmailSender emailSender,
+    IGoogleAuthRepository googleAuth,
+    IGoogleIdentityClient googleClient,
+    IOptions<JwtOptions> jwtOptions,
+    IOptions<GoogleOAuthOptions> googleOptions) : IAuthService
 {
+    private const string BearerTokenType = "Bearer";
+    private readonly JwtOptions _jwt = jwtOptions.Value;
+    private readonly GoogleOAuthOptions _google = googleOptions.Value;
+
     private const string InvalidCredentialsMessage = "The email or password is incorrect.";
     private const string AccountLockedMessage = "The account is temporarily locked. Try again later.";
     private const string AccountInactiveMessage = "The account is inactive.";
@@ -268,4 +283,154 @@ public sealed class AuthService(
         return Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes($"{purpose}:{NormalizeEmail(email)}:{code}")));
     }
     private static string HashToken(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+
+    /// <inheritdoc/>
+    public async Task<GoogleAuthorizationUrlResponse> CreateGoogleAuthorizationUrlAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var now = dateTimeProvider.UtcNow;
+        var state = GoogleOAuthHelper.RandomToken(32);
+        var nonce = GoogleOAuthHelper.RandomToken(32);
+        var verifier = GoogleOAuthHelper.RandomToken(64);
+        await googleAuth.CreateAttemptAsync(new GoogleLoginAttempt
+        {
+            Id = Guid.NewGuid(),
+            StateHash = GoogleOAuthHelper.Sha256(state),
+            CodeVerifier = verifier,
+            Nonce = nonce,
+            ExpiresAtUtc = now.AddMinutes(_google.StateLifetimeMinutes),
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        }, cancellationToken);
+        return new GoogleAuthorizationUrlResponse(
+            GoogleOAuthHelper.BuildUrl(_google, state, nonce, verifier), state,
+            checked(_google.StateLifetimeMinutes * 60));
+    }
+
+    /// <inheritdoc/>
+    public async Task<AuthenResponse> GoogleLoginAsync(
+        GoogleLoginRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Code) || request.Code.Length > 4096 ||
+            string.IsNullOrWhiteSpace(request.State) || request.State.Length > 512)
+            throw new HttpException(400, MessageConstant.GoogleInvalidRequest);
+
+        var attempt = await googleAuth.ConsumeAttemptAsync(
+            GoogleOAuthHelper.Sha256(request.State), dateTimeProvider.UtcNow, cancellationToken);
+        if (attempt is null)
+            throw new HttpException(401, MessageConstant.GoogleInvalidState);
+
+        var identity = await googleClient.ExchangeAsync(
+            request.Code, attempt.CodeVerifier, attempt.Nonce, cancellationToken);
+        var user = await googleAuth.FindOrCreateUserAsync(
+            identity.Subject, identity.Email, identity.Name, identity.Picture,
+            dateTimeProvider.UtcNow, cancellationToken);
+        return await IssueAsync(user, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<AuthenResponse> LoginAsync(
+        PhoneLoginRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
+            throw new HttpException(400, MessageConstant.PhoneRequired);
+
+        var phone = PhoneNumberUtils.Normalize(request.PhoneNumber);
+        if (!PhoneNumberUtils.IsValid(phone))
+            throw new HttpException(400, MessageConstant.PhoneInvalid);
+        if (string.IsNullOrWhiteSpace(request.Password))
+            throw new HttpException(400, MessageConstant.PasswordRequired);
+
+        var user = await userRepository.GetByPhoneAsync(phone, cancellationToken);
+        if (user is null || user.IsDeleted || !user.IsActive ||
+            string.IsNullOrEmpty(user.PasswordHash) ||
+            !PasswordHashUtils.Verify(request.Password, user.PasswordHash, out var needsUpgrade))
+            throw new HttpException(401, MessageConstant.InvalidCredentials);
+
+        if (needsUpgrade)
+        {
+            user.PasswordHash = PasswordHashUtils.Hash(request.Password);
+            user.UpdatedAtUtc = dateTimeProvider.UtcNow;
+            await userRepository.UpdateAsync(user, cancellationToken);
+        }
+
+        return await IssueAsync(user, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<AuthenResponse> RefreshAsync(
+        RefreshTokenRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            throw new HttpException(401, MessageConstant.SessionExpired);
+
+        var oldHash = HashToken(request.RefreshToken);
+        var stored = await refreshTokens.GetByHashAsync(oldHash, cancellationToken);
+        var now = dateTimeProvider.UtcNow;
+        if (stored is null || stored.IsDeleted || stored.RevokedAtUtc is not null ||
+            stored.ExpiresAtUtc <= now)
+            throw new HttpException(401, MessageConstant.SessionExpired);
+
+        var user = await userRepository.GetByIdAsync(stored.UserId, cancellationToken);
+        if (user is null || user.IsDeleted || !user.IsActive)
+            throw new HttpException(401, MessageConstant.SessionExpired);
+
+        var raw = CreateRefreshToken();
+        var replacement = CreateRecord(user.Id, HashToken(raw), now);
+        if (!await refreshTokens.RotateAsync(oldHash, replacement, now, cancellationToken))
+            throw new HttpException(401, MessageConstant.SessionExpired);
+
+        return CreateResponse(user, raw, now);
+    }
+
+    /// <inheritdoc/>
+    public async Task LogoutAsync(
+        RefreshTokenRequest request, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+            await refreshTokens.RevokeAsync(
+                HashToken(request.RefreshToken), dateTimeProvider.UtcNow, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<AuthenUserResponse> GetCurrentUserAsync(
+        Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null || user.IsDeleted || !user.IsActive)
+            throw new HttpException(401, MessageConstant.SessionExpired);
+        return new AuthenUserResponse(user.Id, user.Phone, user.FullName, user.Role);
+    }
+
+    private async Task<AuthenResponse> IssueAsync(User user, CancellationToken cancellationToken)
+    {
+        var now = dateTimeProvider.UtcNow;
+        var raw = CreateRefreshToken();
+        await refreshTokens.CreateAsync(
+            CreateRecord(user.Id, HashToken(raw), now), cancellationToken);
+        return CreateResponse(user, raw, now);
+    }
+
+    private AuthenResponse CreateResponse(User user, string refreshToken, DateTime nowUtc) =>
+        new(
+            JwtTokenUtils.Generate(user, _jwt, nowUtc),
+            refreshToken,
+            BearerTokenType,
+            checked(_jwt.AccessTokenMinutes * 60),
+            new AuthenUserResponse(user.Id, user.Phone, user.FullName, user.Role));
+
+    private RefreshToken CreateRecord(Guid userId, string tokenHash, DateTime nowUtc) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TokenHash = tokenHash,
+            ExpiresAtUtc = nowUtc.AddDays(_jwt.RefreshTokenDays),
+            CreatedAtUtc = nowUtc,
+            UpdatedAtUtc = nowUtc
+        };
+
+    private static string CreateRefreshToken() =>
+        Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(64));
+
 }

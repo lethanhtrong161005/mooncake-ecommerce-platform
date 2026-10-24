@@ -12,7 +12,6 @@ public static class DependencyInjection
     {
         services.AddSingleton<IUserHelper, UserHelper>();
         services.AddScoped<IUserService, UserService>();
-        services.AddScoped<IAuthenService, AuthenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAdminPlatformService, AdminPlatformService>();
         services.AddScoped<ISupplierService, SupplierService>();

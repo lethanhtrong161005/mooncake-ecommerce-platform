@@ -143,6 +143,12 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         bid.Id = bid.Id == Guid.Empty ? Guid.NewGuid() : bid.Id;
         foreach (var item in items) { item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id; item.BidId = bid.Id; }
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var eligibility = await Mooncake.EcommercePlatform.Infrastructure.Helpers.SupplierEligibilityLockHelper.LockAsync(
+            context, bid.SupplierId, [], cancellationToken);
+        if (!Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanSell(eligibility.Owner, eligibility.Profile))
+            return false;
+        if (!await Mooncake.EcommercePlatform.Infrastructure.Helpers.ShopTradingLockHelper.CanTradeAsync(context, bid.SupplierId, cancellationToken))
+            return false;
         if (await context.Bids.AnyAsync(existing => existing.RfqId == bid.RfqId && existing.SupplierId == bid.SupplierId && !existing.IsDeleted, cancellationToken))
             return false;
         context.Bids.Add(bid);
@@ -167,6 +173,15 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
     public async Task<Contract?> AwardBidAsync(Guid rfqId, Guid bidId, string? selectionNote, Guid customerUserId, CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var selectedSupplier = await context.Bids.AsNoTracking().Where(x => x.Id == bidId && x.RfqId == rfqId && !x.IsDeleted)
+            .Select(x => (Guid?)x.SupplierId).SingleOrDefaultAsync(cancellationToken);
+        if (selectedSupplier == null) return null;
+        var eligibility = await Mooncake.EcommercePlatform.Infrastructure.Helpers.SupplierEligibilityLockHelper.LockAsync(
+            context, selectedSupplier.Value, [customerUserId], cancellationToken);
+        if (!Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanSell(eligibility.Owner, eligibility.Profile))
+            return null;
+        if (!await Mooncake.EcommercePlatform.Infrastructure.Helpers.ShopTradingLockHelper.CanTradeAsync(context, selectedSupplier.Value, cancellationToken))
+            return null;
         var rfq = await context.RequestForQuotations.FromSqlInterpolated($"SELECT * FROM request_for_quotations WHERE id = {rfqId} FOR UPDATE")
             .FirstOrDefaultAsync(cancellationToken);
         if (rfq is null || rfq.IsDeleted || rfq.CustomerId != customerUserId) return null;

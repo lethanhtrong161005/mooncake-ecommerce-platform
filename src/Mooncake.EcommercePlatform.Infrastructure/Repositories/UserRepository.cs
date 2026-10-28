@@ -31,6 +31,12 @@ public class UserRepository(ApplicationDbContext context) : IUserRepository
     public async Task<User> UpdateAsync(User user, CancellationToken cancellationToken = default)
     {
         context.Users.Update(user);
+        // Authentication/profile saves must never restore stale authority or inbox counters.
+        context.Entry(user).Property(x => x.Role).IsModified = false;
+        context.Entry(user).Property(x => x.RequestedRole).IsModified = false;
+        context.Entry(user).Property(x => x.IsActive).IsModified = false;
+        context.Entry(user).Property(x => x.IsDeleted).IsModified = false;
+        context.Entry(user).Property(x => x.NotificationSequence).IsModified = false;
         await context.SaveChangesAsync(cancellationToken);
         return user;
     }

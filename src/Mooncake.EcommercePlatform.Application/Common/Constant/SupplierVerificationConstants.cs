@@ -1,0 +1,66 @@
+namespace Mooncake.EcommercePlatform.Application.Common.Constant;
+
+/// <summary>Stable error codes, operation names and public messages for verification.</summary>
+public static class SupplierVerificationConstants
+{
+    public const string OnboardingStarted = "SupplierOnboardingStarted";
+    public const string Invalid = "SUPPLIER_INVALID_REQUEST";
+    public const string Forbidden = "SUPPLIER_OPERATION_FORBIDDEN";
+    public const string NotFound = "SUPPLIER_RESOURCE_NOT_FOUND";
+    public const string Conflict = "SUPPLIER_VERSION_CONFLICT";
+    public const string RateLimited = "SUPPLIER_RATE_LIMITED";
+    public const string AlreadyPending = "SUPPLIER_ALREADY_PENDING";
+    public const string AlreadyVerified = "SUPPLIER_ALREADY_VERIFIED";
+    public const string TaxConflict = "SUPPLIER_TAX_CODE_IN_USE";
+    public const string KeyMismatch = "IDEMPOTENCY_PAYLOAD_MISMATCH";
+    public const string DocumentNotReady = "DOCUMENT_NOT_READY";
+    public const string DocumentAttached = "DOCUMENT_ALREADY_ATTACHED";
+    public const string DocumentTooLarge = "DOCUMENT_TOO_LARGE";
+    public const string DocumentMalwareDetected = "DOCUMENT_MALWARE_DETECTED";
+    public const string StorageUnavailable = "DOCUMENT_STORAGE_UNAVAILABLE";
+    public const string ScannerUnavailable = "DOCUMENT_SCANNER_UNAVAILABLE";
+    public const string ScanFailureLog = "Supplier document scanning is unavailable. FailureType={FailureType}";
+    public const string UploadInProgress = "DOCUMENT_UPLOAD_IN_PROGRESS";
+    public const string Ready = "Ready";
+    public const string Uploading = "Uploading";
+    public const string Failed = "Failed";
+    public const string Quarantined = "Quarantined";
+    public const string Email = "Email";
+    public const string InApp = "InAppRealtime";
+    public const string Pending = "Pending";
+    public const string Completed = "Completed";
+    public const string Processing = "Processing";
+    public const string DeadLetter = "DeadLetter";
+    public const string Aggregate = "SupplierProfile";
+    public const string Category = "SupplierVerification";
+    public const string Submitted = "SupplierApplicationSubmitted";
+    public const string Resubmitted = "SupplierApplicationResubmitted";
+    public const string Approved = "SupplierVerificationApproved";
+    public const string Rejected = "SupplierVerificationRejected";
+    public const string Revoked = "SupplierVerificationRevoked";
+    public const string Read = "NotificationRead";
+    public const string BusinessLicense = "BusinessLicense";
+    public const string FoodSafety = "FoodSafetyCertificate";
+    public const string OptionalOther = "OptionalOther";
+    public const string NotSubmitted = "NotSubmitted";
+    public const string Success = "Supplier verification request completed successfully.";
+    public const string Error = "The supplier verification request could not be completed.";
+    public const string Queued = "Queued";
+    public const string Owner = "Owner";
+    public const string Admin = "Admin";
+    public const int MaxFileBytes = 10 * 1024 * 1024;
+    public const int MaxSubmissionBytes = 50 * 1024 * 1024;
+    public const int MaxDocuments = 10;
+    public const string RatePolicy = "supplier-verification";
+    public const string HubPath = "/hubs/supplier-verification";
+    public const string NotificationTitle = "Supplier verification updated";
+    public const string NotificationContent = "Sign in to view the latest supplier verification status.";
+    public const string EmailSubject = "Supplier verification result";
+    public const string EmailBody = "{0}\n\n{1}\n\nSign in to the marketplace to view the verification details.";
+    public const string EmailApproved = "Your supplier application has been approved.";
+    public const string EmailRejected = "Your supplier application needs to be updated before it can be approved.";
+    public const string EmailRevoked = "Your supplier verification has been revoked.";
+    public const string NotificationCreated = "NotificationCreated";
+    public const string VerificationChanged = "SupplierVerificationChanged";
+    public const string QueueChanged = "SupplierQueueChanged";
+}

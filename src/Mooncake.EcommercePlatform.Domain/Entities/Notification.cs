@@ -5,6 +5,11 @@ using Mooncake.EcommercePlatform.Domain.Common;
 /// <summary>Represents the Notification domain entity.</summary>
 public class Notification : BaseEntity
 {
+    public Guid? SourceEventId { get; set; }
+    public long? AggregateVersion { get; set; }
+    public string? AudienceKind { get; set; }
+    public long? Sequence { get; set; }
+    public DateTime? ReadAtUtc { get; set; }
     public Guid UserId { get; set; }
 
     public string? Type { get; set; }

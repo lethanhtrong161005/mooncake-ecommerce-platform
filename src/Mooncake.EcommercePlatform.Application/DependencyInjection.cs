@@ -15,6 +15,8 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAdminPlatformService, AdminPlatformService>();
         services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<IShopService, ShopService>();
+        services.AddScoped<IProductCatalogService, ProductCatalogService>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IPlatformBootstrapService, PlatformBootstrapService>();
         services.AddScoped<IPromotionService, PromotionService>();

@@ -49,7 +49,10 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
             Email = request.Email,
             FullName = request.FullName,
             Phone = phone,
-            Role = request.Role,
+            // Supplier authority is granted only by the verification workflow, including admin-created accounts.
+            Role = request.Role == Mooncake.EcommercePlatform.Domain.Enums.UserRole.Supplier ?
+                Mooncake.EcommercePlatform.Domain.Enums.UserRole.Customer : request.Role,
+            RequestedRole = request.Role,
             IsActive = true,
             PasswordHash = PasswordHashUtils.Hash(request.Password)
         };

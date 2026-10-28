@@ -7,7 +7,8 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 
-public sealed class ContractService(IContractRepository repository, IAuthService authService) : IContractService
+public sealed class ContractService(IContractRepository repository, IAuthService authService,
+    ISupplierRepository suppliers) : IContractService
 {
     public async Task<IReadOnlyList<ContractResponse>> GetMineAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default)
     {
@@ -64,6 +65,16 @@ public sealed class ContractService(IContractRepository repository, IAuthService
         var contract = await repository.GetContractAsync(contractId, cancellationToken);
         if (contract is null || contract.IsDeleted || !await repository.IsPartyAsync(contract, userId, cancellationToken))
             throw new HttpException(404, "Contract was not found.");
+        if (contract.CustomerId != userId)
+        {
+            var profile = await suppliers.GetProfileByIdAsync(contract.SupplierId, cancellationToken);
+            var owner = await suppliers.GetUserAsync(userId, cancellationToken);
+            Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.Require(
+                Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanSell(owner, profile) ||
+                (contract.SignedBySupplierAt.HasValue &&
+                 Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanFulfill(owner, profile, contract.CreatedAt)),
+                403, Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.Forbidden);
+        }
         return contract;
     }
 

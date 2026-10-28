@@ -20,7 +20,7 @@ internal static class CloudinaryUploadHelper
     internal const string ImageResourceType = "image";
     internal const string FileResourceType = "raw";
 
-    internal static string NormalizeFileName(Stream content, string fileName, string[] allowedExtensions)
+    internal static string NormalizeFileName(Stream content, string fileName, string[]? allowedExtensions)
     {
         ArgumentNullException.ThrowIfNull(content);
         if (!content.CanRead || string.IsNullOrWhiteSpace(fileName) || fileName.Any(char.IsControl))
@@ -28,7 +28,7 @@ internal static class CloudinaryUploadHelper
         var normalized = Path.GetFileName(fileName.Replace('\\', '/').Trim());
         if (string.IsNullOrWhiteSpace(normalized) || normalized.Length > 255)
             throw new ArgumentException(InvalidInputMessage, nameof(fileName));
-        if (!allowedExtensions.Contains(Path.GetExtension(normalized), StringComparer.OrdinalIgnoreCase))
+        if (allowedExtensions != null && !allowedExtensions.Contains(Path.GetExtension(normalized), StringComparer.OrdinalIgnoreCase))
             throw new ArgumentException(UnsupportedExtensionMessage, nameof(fileName));
         return normalized;
     }

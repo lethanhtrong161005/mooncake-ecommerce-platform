@@ -36,6 +36,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
                 .HasColumnName("created_at");
             builder.Property(e => e.CreatedBy).HasColumnName("created_by");
             builder.Property(e => e.Description).HasColumnName("description");
+            builder.Property(e => e.Ingredients).HasColumnName("ingredients");
             builder.Property(e => e.IsDeleted)
                 .HasDefaultValue(false)
                 .HasColumnName("is_deleted");

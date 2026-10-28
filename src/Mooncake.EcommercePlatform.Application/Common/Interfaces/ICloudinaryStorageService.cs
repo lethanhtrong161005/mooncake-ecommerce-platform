@@ -12,4 +12,8 @@ public interface ICloudinaryStorageService
     /// <summary>Uploads a raw file with private access. The caller owns the input stream.</summary>
     Task<CloudinaryUploadResponse> UploadFileAsync(Stream content, string fileName,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Uploads a private raw document of any format, subject to the configured byte limit.</summary>
+    Task<CloudinaryUploadResponse> UploadRawFileAsync(Stream content, string fileName,
+        CancellationToken cancellationToken = default);
 }

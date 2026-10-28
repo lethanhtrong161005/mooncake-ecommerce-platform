@@ -7,6 +7,10 @@ using System.Text.Json.Serialization;
 /// </summary>
 public class ApiResponse<T>
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ApiValidationError>? ValidationErrors { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ErrorCode { get; set; }
     /// <summary>HTTP status code mirrored in the body.</summary>
     public int Status { get; set; }
 
@@ -31,3 +35,5 @@ public class ApiResponse<T>
     /// <summary>UTC timestamp when this response was produced.</summary>
     public DateTime Time { get; set; } = DateTime.UtcNow;
 }
+
+public sealed record ApiValidationError(string Field, string Code, string Message);

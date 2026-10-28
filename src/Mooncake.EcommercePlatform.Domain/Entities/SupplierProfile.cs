@@ -6,6 +6,13 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 /// <summary>Represents the SupplierProfile domain entity.</summary>
 public class SupplierProfile : BaseEntity
 {
+    public long Version { get; set; }
+    public Guid? CurrentSubmissionId { get; set; }
+    public Guid? LastApprovedSubmissionId { get; set; }
+    public DateTime? LastSubmittedAtUtc { get; set; }
+    public DateTime? RevokedAtUtc { get; set; }
+    public Guid? RevokedByUserId { get; set; }
+    public string? RevocationReason { get; set; }
     public Guid UserId { get; set; }
 
     public string? CompanyName { get; set; }

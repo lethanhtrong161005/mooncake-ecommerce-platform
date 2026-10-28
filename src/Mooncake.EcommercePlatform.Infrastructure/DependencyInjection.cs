@@ -84,6 +84,15 @@ public static class DependencyInjection
         services.AddHostedService<GoogleLoginAttemptCleanupService>();
         services.AddScoped<IAdminPlatformRepository, AdminPlatformRepository>();
         services.AddScoped<ISupplierRepository, SupplierRepository>();
+        services.AddScoped<IShopRepository, ShopRepository>();
+        services.AddScoped<IProductCatalogRepository, ProductCatalogRepository>();
+        services.AddScoped<IShopCursorProtector, ShopCursorProtector>();
+        services.AddScoped<IFileSafetyScanner, ClamAvFileSafetyScanner>();
+        services.AddScoped<IShopMediaGateway, ShopMediaGateway>();
+        services.AddHttpClient<IVerificationDocumentGateway, VerificationDocumentGateway>(client =>
+            client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();

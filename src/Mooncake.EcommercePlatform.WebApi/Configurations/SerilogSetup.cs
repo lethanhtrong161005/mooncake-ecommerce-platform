@@ -22,6 +22,8 @@ public static class SerilogSetup
             // Root Level equivalent
             .MinimumLevel.Debug()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            // Hosting request-start logs include query strings; SignalR browser tokens must never be logged.
+            .MinimumLevel.Override("Microsoft.AspNetCore.Hosting.Diagnostics", LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Debug) // Hibernate SQL log equivalent (Debug mode)
             
             // Enrichers

@@ -53,4 +53,5 @@ src/Mooncake.EcommercePlatform.WebApi/appsettings.json
 
 # AI / Agents
 .agents/scratch/
+.tools/
 .gemini/

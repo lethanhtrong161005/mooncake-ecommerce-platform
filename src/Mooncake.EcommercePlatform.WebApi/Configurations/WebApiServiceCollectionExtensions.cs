@@ -43,6 +43,9 @@ public static class WebApiServiceCollectionExtensions
         services.AddFrontendCors(configuration);
         services.AddAuthenticationRateLimiting();
         services.AddAuthorization();
+        services.AddSupplierVerificationFeature(configuration);
+        services.AddShopFeature();
+        services.AddProductCatalogFeature();
         return services;
     }
 
@@ -50,8 +53,38 @@ public static class WebApiServiceCollectionExtensions
     {
         options.InvalidModelStateResponseFactory = context =>
         {
+            if (context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<Mooncake.EcommercePlatform.WebApi.Filters.ProductApiAttribute>() != null)
+            {
+                const string invalidField = "Invalid field value.";
+                var fields = context.ModelState.Where(x => x.Value?.Errors.Count > 0).SelectMany(x => x.Value!.Errors.Select(e =>
+                    new Mooncake.EcommercePlatform.Application.Common.DTOs.ApiValidationError(x.Key,
+                        ProductConstants.Invalid, string.IsNullOrWhiteSpace(e.ErrorMessage) ? invalidField : e.ErrorMessage))).ToArray();
+                return new BadRequestObjectResult(new Mooncake.EcommercePlatform.Application.Common.DTOs.ApiResponse<object> {
+                    Status = 400, ErrorCode = ProductConstants.Invalid, Message = ProductConstants.Error,
+                    ValidationErrors = fields, Errors = fields.Select(x => x.Message).ToList(),
+                    Path = context.HttpContext.Request.Path, TraceId = context.HttpContext.TraceIdentifier });
+            }
+            if (context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<Mooncake.EcommercePlatform.WebApi.Filters.ShopApiAttribute>() != null)
+            {
+                const string invalidField = "Invalid field value.";
+                var fields = context.ModelState.Where(x => x.Value?.Errors.Count > 0).SelectMany(x => x.Value!.Errors.Select(e =>
+                    new Mooncake.EcommercePlatform.Application.Common.DTOs.ApiValidationError(x.Key,
+                        Mooncake.EcommercePlatform.Application.Common.Constant.ShopConstants.Invalid,
+                        string.IsNullOrWhiteSpace(e.ErrorMessage) ? invalidField : e.ErrorMessage))).ToArray();
+                return new BadRequestObjectResult(new Mooncake.EcommercePlatform.Application.Common.DTOs.ApiResponse<object> {
+                    Status = 400, ErrorCode = Mooncake.EcommercePlatform.Application.Common.Constant.ShopConstants.Invalid,
+                    Message = Mooncake.EcommercePlatform.Application.Common.Constant.ShopConstants.Error,
+                    ValidationErrors = fields, Errors = fields.Select(x => x.Message).ToList(),
+                    Path = context.HttpContext.Request.Path, TraceId = context.HttpContext.TraceIdentifier });
+            }
             if (!context.HttpContext.Request.Path.StartsWithSegments(AuthRoutePrefix))
-                return new BadRequestObjectResult(context.ModelState);
+            {
+                var error = ResponseHelper.Error<object>(400,
+                    Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.Error,
+                    context.HttpContext.Request.Path, context.HttpContext.TraceIdentifier);
+                error.ErrorCode = Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.Invalid;
+                return new BadRequestObjectResult(error);
+            }
 
             var isGoogleRequest = context.HttpContext.Request.Path.StartsWithSegments(GoogleAuthRoutePrefix);
             var path = context.HttpContext.Request.Path.Value ?? string.Empty;
@@ -79,6 +112,16 @@ public static class WebApiServiceCollectionExtensions
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
         {
             options.MapInboundClaims = false;
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    if (context.Request.Path.StartsWithSegments(
+                        Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.HubPath))
+                        context.Token = context.Request.Query["access_token"];
+                    return Task.CompletedTask;
+                }
+            };
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuerSigningKey = true,
@@ -131,7 +174,7 @@ public static class WebApiServiceCollectionExtensions
 
         services.Configure<CorsOptions>(configuration.GetSection(CorsOptions.SectionName));
         services.AddCors(options => options.AddPolicy(CorsOptions.FrontendPolicyName,
-            policy => policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod()));
+            policy => policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
     }
 
     private static void AddAuthenticationRateLimiting(this IServiceCollection services)

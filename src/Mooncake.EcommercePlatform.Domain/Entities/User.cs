@@ -6,6 +6,7 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 /// <summary>Represents the User domain entity.</summary>
 public class User : BaseEntity
 {
+    public long NotificationSequence { get; set; }
     public string Email { get; set; } = string.Empty;
 
     public string? PasswordHash { get; set; }

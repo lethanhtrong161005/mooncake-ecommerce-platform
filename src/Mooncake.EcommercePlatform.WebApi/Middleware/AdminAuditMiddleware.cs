@@ -11,6 +11,7 @@ public sealed class AdminAuditMiddleware(RequestDelegate next, ILogger<AdminAudi
     public async Task InvokeAsync(HttpContext context, ApplicationDbContext dbContext)
     {
         await next(context);
+        if (context.GetEndpoint()?.Metadata.GetMetadata<Mooncake.EcommercePlatform.WebApi.Filters.ShopApiAttribute>() != null) return;
         if (!context.User.IsInRole("Admin") || context.Response.StatusCode is < 200 or >= 300 || HttpMethods.IsGet(context.Request.Method) ||
             !Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var actorId)) return;
         if (context.Request.Path.StartsWithSegments("/api/v1/admin/users") || context.Request.Path.StartsWithSegments("/api/v1/admin/system-config")) return;

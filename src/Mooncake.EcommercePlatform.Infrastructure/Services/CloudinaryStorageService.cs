@@ -19,14 +19,18 @@ public sealed class CloudinaryStorageService(ICloudinaryUploadApi client, IOptio
     public Task<CloudinaryUploadResponse> UploadFileAsync(Stream content, string fileName,
         CancellationToken cancellationToken = default) => UploadAsync(content, fileName, false, true, cancellationToken);
 
+    /// <inheritdoc />
+    public Task<CloudinaryUploadResponse> UploadRawFileAsync(Stream content, string fileName,
+        CancellationToken cancellationToken = default) => UploadAsync(content, fileName, false, true, cancellationToken, false);
+
     private async Task<CloudinaryUploadResponse> UploadAsync(Stream content, string fileName, bool image, bool isPrivate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool validateExtension = true)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var configuration = options.Value;
         if (!configuration.IsValid()) throw new InvalidOperationException(CloudinaryOptions.InvalidConfigurationMessage);
         var safeFileName = CloudinaryUploadHelper.NormalizeFileName(content, fileName,
-            image ? configuration.AllowedImageExtensions : configuration.AllowedFileExtensions);
+            image ? configuration.AllowedImageExtensions : validateExtension ? configuration.AllowedFileExtensions : null);
         var folder = image
             ? isPrivate ? configuration.PrivateImagesFolder : configuration.PublicImagesFolder
             : configuration.FilesFolder;

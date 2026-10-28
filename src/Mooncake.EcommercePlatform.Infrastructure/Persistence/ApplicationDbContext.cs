@@ -28,10 +28,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductCatalogOutboxEvent> ProductCatalogOutboxEvents => Set<ProductCatalogOutboxEvent>();
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
+    public DbSet<ProductInventoryMovement> ProductInventoryMovements => Set<ProductInventoryMovement>();
     public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
     public DbSet<ProductReviewLike> ProductReviewLikes => Set<ProductReviewLike>();
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
+    public DbSet<ProductSearchDocument> ProductSearchDocuments => Set<ProductSearchDocument>();
+    public DbSet<ProductViewEvent> ProductViewEvents => Set<ProductViewEvent>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<ReputationLog> ReputationLogs => Set<ReputationLog>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
@@ -44,7 +48,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<RfqItem> RfqItems => Set<RfqItem>();
     public DbSet<Shop> Shops => Set<Shop>();
     public DbSet<ShopTemplate> ShopTemplates => Set<ShopTemplate>();
+    public DbSet<ShopTemplateRevision> ShopTemplateRevisions => Set<ShopTemplateRevision>();
+    public DbSet<ShopMediaAsset> ShopMediaAssets => Set<ShopMediaAsset>();
+    public DbSet<ShopIdempotencyRecord> ShopIdempotencyRecords => Set<ShopIdempotencyRecord>();
+    public DbSet<ShopTemplateCatalogState> ShopTemplateCatalogStates => Set<ShopTemplateCatalogState>();
     public DbSet<SupplierProfile> SupplierProfiles => Set<SupplierProfile>();
+    public DbSet<SupplierVerificationSubmission> SupplierVerificationSubmissions => Set<SupplierVerificationSubmission>();
+    public DbSet<VerificationOutboxMessage> VerificationOutboxMessages => Set<VerificationOutboxMessage>();
+    public DbSet<VerificationIdempotencyRecord> VerificationIdempotencyRecords => Set<VerificationIdempotencyRecord>();
     public DbSet<SupplierVerificationDocument> SupplierVerificationDocuments => Set<SupplierVerificationDocument>();
     public DbSet<User> Users => Set<User>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
@@ -86,5 +97,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         // Apply all entity configurations in this assembly
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+        Mooncake.EcommercePlatform.Infrastructure.Persistence.Configurations.VerificationConfiguration.ConfigureVerification(modelBuilder);
+        Mooncake.EcommercePlatform.Infrastructure.Persistence.Configurations.ShopFeatureConfiguration.ConfigureShops(modelBuilder);
+        Mooncake.EcommercePlatform.Infrastructure.Persistence.Configurations.ProductCatalogConfiguration.ConfigureCatalog(modelBuilder);
     }
 }

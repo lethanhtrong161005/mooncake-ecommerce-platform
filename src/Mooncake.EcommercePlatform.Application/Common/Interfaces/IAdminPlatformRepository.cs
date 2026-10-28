@@ -13,10 +13,6 @@ public interface IAdminPlatformRepository
     Task<bool> IsSupplierVerifiedAsync(Guid userId, CancellationToken cancellationToken = default);
     Task SaveUserAndAuditAsync(User user, AuditLog auditLog, CancellationToken cancellationToken = default);
     Task SaveAuditAsync(AuditLog auditLog, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<Shop>> GetShopsAsync(CancellationToken cancellationToken = default);
-    Task<Shop?> GetShopForUpdateAsync(Guid shopId, CancellationToken cancellationToken = default);
-    Task<int> GetShopProductCountAsync(Guid shopId, CancellationToken cancellationToken = default);
-    Task SaveShopAsync(Shop shop, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ContractDepositRule>> GetContractDepositRulesAsync(CancellationToken cancellationToken = default);
     Task<ContractDepositRule?> GetContractDepositRuleAsync(Guid ruleId, CancellationToken cancellationToken = default);
     Task SaveContractDepositRuleAndAuditAsync(ContractDepositRule rule, AuditLog auditLog, CancellationToken cancellationToken = default);

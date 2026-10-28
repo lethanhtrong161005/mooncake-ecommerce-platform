@@ -18,6 +18,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.env = .env
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mooncake.EcommercePlatform.Verification.Tests", "tests\Mooncake.EcommercePlatform.Verification.Tests\Mooncake.EcommercePlatform.Verification.Tests.csproj", "{5EA2F9B0-34A0-4C29-A67F-AD250792A8ED}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,6 +44,10 @@ Global
 		{FD32BB80-3B41-4449-91EC-CDB45AA5DDE6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FD32BB80-3B41-4449-91EC-CDB45AA5DDE6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FD32BB80-3B41-4449-91EC-CDB45AA5DDE6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5EA2F9B0-34A0-4C29-A67F-AD250792A8ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5EA2F9B0-34A0-4C29-A67F-AD250792A8ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5EA2F9B0-34A0-4C29-A67F-AD250792A8ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5EA2F9B0-34A0-4C29-A67F-AD250792A8ED}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -49,6 +57,7 @@ Global
 		{22E5926A-807D-48E1-9FFC-D5224220FE16} = {FF606998-6627-49AD-BD29-CF5B0E6A625A}
 		{A3E4154C-4E87-4B2B-88EB-6C70E42A9A46} = {FF606998-6627-49AD-BD29-CF5B0E6A625A}
 		{FD32BB80-3B41-4449-91EC-CDB45AA5DDE6} = {FF606998-6627-49AD-BD29-CF5B0E6A625A}
+		{5EA2F9B0-34A0-4C29-A67F-AD250792A8ED} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {490769DB-3F9D-4C8A-AD2A-B546218D73AB}

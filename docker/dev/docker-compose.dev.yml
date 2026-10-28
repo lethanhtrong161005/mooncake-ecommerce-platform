@@ -4,6 +4,17 @@ version: "3.9"
 # This compose file only runs supporting local services.
 
 services:
+  clamav:
+    image: clamav/clamav:stable
+    container_name: mooncake-clamav-dev
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    environment:
+      TZ: Etc/UTC
+    restart: unless-stopped
+
   adminer:
     image: adminer:latest
     container_name: mooncake-adminer-dev
@@ -13,3 +24,6 @@ services:
       TZ: Etc/UTC
       ADMINER_DEFAULT_SERVER: db.supabase.co
     restart: unless-stopped
+
+volumes:
+  clamav-data:

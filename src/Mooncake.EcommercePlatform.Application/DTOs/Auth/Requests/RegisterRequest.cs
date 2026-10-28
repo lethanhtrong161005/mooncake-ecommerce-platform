@@ -19,6 +19,6 @@ public sealed record RegisterRequest
     public string Phone { get; init; } = string.Empty;
 
     [Required]
-    [RegularExpression("^(Customer|Supplier)$", ErrorMessage = "Role must be Customer or Supplier.")]
+    [RegularExpression("^Customer$", ErrorMessage = "New accounts must register as Customer. Supplier onboarding is available after sign-in.")]
     public string Role { get; init; } = nameof(UserRole.Customer);
 }

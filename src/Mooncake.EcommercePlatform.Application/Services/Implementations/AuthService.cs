@@ -22,6 +22,7 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 /// <summary>Implements account registration, verification and token lifecycle use cases.</summary>
 public sealed class AuthService(
     IUserRepository userRepository,
+    ISupplierRepository supplierVerification,
     IPasswordHasher passwordHasher,
     IAccessTokenService accessTokenService,
     IRefreshTokenRepository refreshTokens,
@@ -71,7 +72,7 @@ public sealed class AuthService(
             FullName = request.FullName?.Trim(),
             Phone = phone,
             Role = UserRole.Customer,
-            RequestedRole = Enum.Parse<UserRole>(request.Role, ignoreCase: false),
+            RequestedRole = UserRole.Customer,
             IsActive = true,
             CreatedAt = now,
             UpdatedAt = now
@@ -380,7 +381,7 @@ public sealed class AuthService(
         if (!await refreshTokens.RotateAsync(oldHash, replacement, now, cancellationToken))
             throw new HttpException(401, MessageConstant.SessionExpired);
 
-        return CreateResponse(user, raw, now);
+        return await CreateResponseAsync(user, raw, now, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -399,7 +400,8 @@ public sealed class AuthService(
         var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null || user.IsDeleted || !user.IsActive)
             throw new HttpException(401, MessageConstant.SessionExpired);
-        return new AuthenUserResponse(user.Id, user.Phone, user.FullName, user.Role);
+        return SupplierVerificationHelper.AuthUser(user,
+            await supplierVerification.GetProfileByUserIdAsync(userId, false, cancellationToken));
     }
 
     private async Task<AuthenResponse> IssueAsync(User user, CancellationToken cancellationToken)
@@ -408,16 +410,16 @@ public sealed class AuthService(
         var raw = CreateRefreshToken();
         await refreshTokens.CreateAsync(
             CreateRecord(user.Id, HashToken(raw), now), cancellationToken);
-        return CreateResponse(user, raw, now);
+        return await CreateResponseAsync(user, raw, now, cancellationToken);
     }
 
-    private AuthenResponse CreateResponse(User user, string refreshToken, DateTime nowUtc) =>
+    private async Task<AuthenResponse> CreateResponseAsync(User user, string refreshToken, DateTime nowUtc, CancellationToken ct) =>
         new(
             JwtTokenUtils.Generate(user, _jwt, nowUtc),
             refreshToken,
             BearerTokenType,
             checked(_jwt.AccessTokenMinutes * 60),
-            new AuthenUserResponse(user.Id, user.Phone, user.FullName, user.Role));
+            SupplierVerificationHelper.AuthUser(user, await supplierVerification.GetProfileByUserIdAsync(user.Id, false, ct)));
 
     private RefreshToken CreateRecord(Guid userId, string tokenHash, DateTime nowUtc) =>
         new()

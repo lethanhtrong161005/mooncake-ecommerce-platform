@@ -35,6 +35,15 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            var shopInfo = await context.Shops.AsNoTracking().SingleOrDefaultAsync(x => x.Id == order.ShopId, cancellationToken);
+            if (shopInfo == null) return false;
+            var eligibility = await Mooncake.EcommercePlatform.Infrastructure.Helpers.SupplierEligibilityLockHelper.LockAsync(
+                context, shopInfo.SupplierId, [order.CustomerId], cancellationToken);
+            if (!Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanSell(eligibility.Owner, eligibility.Profile))
+                return false;
+            var currentShop = await context.Shops.FromSqlInterpolated(
+                $"SELECT * FROM shops WHERE id = {order.ShopId} FOR SHARE").AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+            if (currentShop is not { IsDeleted: false, Status: ShopStatus.Active }) return false;
             context.Orders.Add(order);
             await context.SaveChangesAsync(cancellationToken);
             foreach (var group in items.GroupBy(item => item.VariantId))
@@ -151,6 +160,14 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
     public async Task<bool> ConfirmPendingOrderAsync(Order order, Guid actorUserId, CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var targetShop = await context.Shops.AsNoTracking().SingleAsync(x => x.Id == order.ShopId, cancellationToken);
+        var eligibility = await Mooncake.EcommercePlatform.Infrastructure.Helpers.SupplierEligibilityLockHelper.LockAsync(
+            context, targetShop.SupplierId, [actorUserId], cancellationToken);
+        if (eligibility.Profile?.UserId != actorUserId ||
+            !Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanSell(eligibility.Owner, eligibility.Profile))
+            return false;
+        if (!await Mooncake.EcommercePlatform.Infrastructure.Helpers.ShopTradingLockHelper.CanTradeAsync(context, targetShop.SupplierId, cancellationToken))
+            return false;
         var now = DateTime.UtcNow;
         var changed = await context.Orders.Where(item => item.Id == order.Id && item.Status == OrderStatus.Pending && !item.IsDeleted)
             .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.Status, OrderStatus.Confirmed)
@@ -179,6 +196,14 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
         CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var targetOrder = await context.Orders.AsNoTracking().SingleOrDefaultAsync(x => x.Id == orderId, cancellationToken);
+        if (targetOrder == null) return false;
+        var targetShop = await context.Shops.AsNoTracking().SingleAsync(x => x.Id == targetOrder.ShopId, cancellationToken);
+        var eligibility = await Mooncake.EcommercePlatform.Infrastructure.Helpers.SupplierEligibilityLockHelper.LockAsync(
+            context, targetShop.SupplierId, [actorUserId], cancellationToken);
+        if (actorUserId != targetOrder.CustomerId && (eligibility.Profile?.UserId != actorUserId ||
+            !Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanFulfill(
+                eligibility.Owner, eligibility.Profile, targetOrder.CreatedAt))) return false;
         var now = DateTime.UtcNow;
         var changed = await context.Orders.Where(order => order.Id == orderId && order.Status == expectedStatus && !order.IsDeleted)
             .ExecuteUpdateAsync(setters => setters.SetProperty(order => order.Status, nextStatus)
@@ -209,7 +234,8 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
     public Task<bool> IsShopOwnedByUserAsync(Guid shopId, Guid userId, CancellationToken cancellationToken = default) =>
         (from shop in context.Shops.AsNoTracking()
          join profile in context.SupplierProfiles.AsNoTracking() on shop.SupplierId equals profile.Id
-         where shop.Id == shopId && profile.UserId == userId && profile.VerificationStatus == SupplierVerificationStatus.Verified
+         where shop.Id == shopId && profile.UserId == userId &&
+               (profile.VerificationStatus == SupplierVerificationStatus.Verified || profile.RevokedAtUtc != null)
                && !shop.IsDeleted && !profile.IsDeleted
          select shop.Id).AnyAsync(cancellationToken);
 }

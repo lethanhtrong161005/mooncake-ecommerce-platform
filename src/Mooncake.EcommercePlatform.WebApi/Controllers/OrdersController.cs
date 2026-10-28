@@ -26,7 +26,7 @@ public sealed class OrdersController(IOrderService orderService) : BaseApiContro
         Success(await orderService.GetMyOrdersAsync(GetCurrentUserId(), false, cancellationToken), "Orders retrieved successfully.");
 
     /// <summary>Returns orders received by the authenticated supplier.</summary>
-    [Authorize(Roles = "Supplier")]
+    [Authorize(Policy = "SupplierExistingFulfillment")]
     [HttpGet("supplier")]
     public async Task<IActionResult> GetSupplierOrdersAsync(CancellationToken cancellationToken) =>
         Success(await orderService.GetMyOrdersAsync(GetCurrentUserId(), true, cancellationToken), "Supplier orders retrieved successfully.");
@@ -35,7 +35,7 @@ public sealed class OrdersController(IOrderService orderService) : BaseApiContro
     [Authorize(Roles = "Customer,Supplier,Admin")]
     [HttpGet("{orderId:guid}")]
     public async Task<IActionResult> GetAsync(Guid orderId, CancellationToken cancellationToken) =>
-        Success(await orderService.GetAsync(GetCurrentUserId(), User.IsInRole("Supplier"), orderId,
+        Success(await orderService.GetAsync(GetCurrentUserId(), User.IsInRole("Supplier") || User.HasClaim("supplier_fulfillment", "true"), orderId,
             User.IsInRole("Admin"), cancellationToken), "Order retrieved successfully.");
 
     /// <summary>Cancels a pending customer order and releases its inventory reservation.</summary>
@@ -57,13 +57,13 @@ public sealed class OrdersController(IOrderService orderService) : BaseApiContro
         Success(await orderService.RejectAsync(GetCurrentUserId(), orderId, request, cancellationToken), "Order rejected successfully.");
 
     /// <summary>Moves a confirmed order into production.</summary>
-    [Authorize(Roles = "Supplier")]
+    [Authorize(Policy = "SupplierExistingFulfillment")]
     [HttpPost("{orderId:guid}/processing")]
     public async Task<IActionResult> StartProcessingAsync(Guid orderId, CancellationToken cancellationToken) =>
         Success(await orderService.StartProcessingAsync(GetCurrentUserId(), orderId, cancellationToken), "Order processing started.");
 
     /// <summary>Marks a processing order as shipped.</summary>
-    [Authorize(Roles = "Supplier")]
+    [Authorize(Policy = "SupplierExistingFulfillment")]
     [HttpPost("{orderId:guid}/ship")]
     public async Task<IActionResult> MarkShippedAsync(Guid orderId, CancellationToken cancellationToken) =>
         Success(await orderService.MarkShippedAsync(GetCurrentUserId(), orderId, cancellationToken), "Order marked as shipped.");

@@ -29,9 +29,9 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
                     httpEx.StatusCode, path, traceId);
 
                 httpContext.Response.StatusCode = httpEx.StatusCode;
-                await httpContext.Response.WriteAsJsonAsync(
-                    ResponseHelper.Error<object>(httpEx.StatusCode, httpEx.Message, path, traceId),
-                    cancellationToken);
+                var response = ResponseHelper.Error<object>(httpEx.StatusCode, httpEx.Message, path, traceId);
+                response.ErrorCode = httpEx.ErrorCode;
+                await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
                 break;
 
             case BadHttpRequestException badRequest:

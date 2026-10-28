@@ -15,7 +15,7 @@ public sealed class AdminPlatformRepository(ApplicationDbContext context) : IAdm
                 (order, shop) => new { shop.SupplierId, order.TotalAmount })
             .GroupBy(row => row.SupplierId).Select(group => new { SupplierId = group.Key, Sales = group.Sum(row => row.TotalAmount) })
             .OrderByDescending(row => row.Sales).Take(5)
-            .Join(context.SupplierProfiles.AsNoTracking().Where(profile => !profile.IsDeleted), row => row.SupplierId, profile => profile.UserId,
+            .Join(context.SupplierProfiles.AsNoTracking().Where(profile => !profile.IsDeleted), row => row.SupplierId, profile => profile.Id,
                 (row, profile) => new AdminTopSupplierMetric(row.SupplierId, profile.CompanyName, row.Sales)).ToListAsync(cancellationToken);
 
         var topProducts = await context.OrderItems.AsNoTracking().Where(item => !item.IsDeleted)
@@ -36,7 +36,8 @@ public sealed class AdminPlatformRepository(ApplicationDbContext context) : IAdm
         return new AdminPlatformMetrics(
             await context.Users.CountAsync(user => !user.IsDeleted, cancellationToken),
             await context.Users.CountAsync(user => !user.IsDeleted && user.IsActive, cancellationToken),
-            await context.SupplierProfiles.CountAsync(profile => !profile.IsDeleted && profile.VerificationStatus == SupplierVerificationStatus.Pending, cancellationToken),
+            await context.SupplierProfiles.CountAsync(profile => !profile.IsDeleted && profile.CurrentSubmissionId != null &&
+                profile.VerificationStatus == SupplierVerificationStatus.Pending, cancellationToken),
             await context.Shops.CountAsync(shop => !shop.IsDeleted && shop.Status == ShopStatus.Active, cancellationToken),
             await context.Orders.CountAsync(order => !order.IsDeleted, cancellationToken),
             await context.Payments.Where(payment => !payment.IsDeleted && payment.Status == PaymentStatus.Completed).SumAsync(payment => (decimal?)payment.Amount, cancellationToken) ?? 0m,
@@ -80,21 +81,6 @@ public sealed class AdminPlatformRepository(ApplicationDbContext context) : IAdm
     public async Task SaveAuditAsync(AuditLog auditLog, CancellationToken cancellationToken = default)
     {
         context.AuditLogs.Add(auditLog);
-        await context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<Shop>> GetShopsAsync(CancellationToken cancellationToken = default) =>
-        await context.Shops.AsNoTracking().Where(shop => !shop.IsDeleted).OrderBy(shop => shop.Name).ToListAsync(cancellationToken);
-
-    public Task<Shop?> GetShopForUpdateAsync(Guid shopId, CancellationToken cancellationToken = default) =>
-        context.Shops.FirstOrDefaultAsync(shop => shop.Id == shopId && !shop.IsDeleted, cancellationToken);
-
-    public Task<int> GetShopProductCountAsync(Guid shopId, CancellationToken cancellationToken = default) =>
-        context.Products.CountAsync(product => product.ShopId == shopId && !product.IsDeleted, cancellationToken);
-
-    public async Task SaveShopAsync(Shop shop, CancellationToken cancellationToken = default)
-    {
-        context.Shops.Update(shop);
         await context.SaveChangesAsync(cancellationToken);
     }
 

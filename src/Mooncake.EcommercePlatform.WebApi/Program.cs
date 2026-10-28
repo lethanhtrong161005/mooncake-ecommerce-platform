@@ -57,10 +57,14 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors(CorsOptions.FrontendPolicyName);
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<CurrentAccountMiddleware>();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.UseMiddleware<AdminAuditMiddleware>();
 app.MapControllers();
+app.MapHub<Mooncake.EcommercePlatform.WebApi.Realtime.SupplierVerificationHub>(
+    Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.HubPath,
+    options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

@@ -49,19 +49,7 @@ public sealed class AdminPlatformController(IAdminPlatformService adminService) 
         return Success("User updated successfully.");
     }
 
-    [HttpGet("shops")]
-    public async Task<IActionResult> GetShopsAsync(CancellationToken cancellationToken) =>
-        Success(await adminService.GetShopsAsync(cancellationToken), "Shops retrieved successfully.");
-
-    [HttpPatch("shops/{shopId:guid}/status")]
-    public async Task<IActionResult> SetShopStatusAsync(Guid shopId, [FromBody] SetShopStatusRequest request, CancellationToken cancellationToken)
-    {
-        await adminService.SetShopStatusAsync(shopId, request.Status, cancellationToken);
-        return Success("Shop status updated successfully.");
-    }
-
     private Guid GetCurrentUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }
 
 public sealed record SetSystemConfigRequest(string ValueJson, string? Description);
-public sealed record SetShopStatusRequest(ShopStatus Status);

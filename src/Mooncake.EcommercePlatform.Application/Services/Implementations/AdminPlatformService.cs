@@ -8,7 +8,7 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 
-public sealed class AdminPlatformService(IAdminPlatformRepository repository, IUserRepository userRepository, IDateTimeProvider dateTimeProvider) : IAdminPlatformService
+public sealed class AdminPlatformService(IAdminPlatformRepository repository, IUserRepository userRepository, IDateTimeProvider dateTimeProvider, ISupplierRepository verification) : IAdminPlatformService
 {
     private const string ConfigAction = "SystemConfigUpdated";
     private const string UserAction = "UserUpdatedByAdmin";
@@ -57,50 +57,34 @@ public sealed class AdminPlatformService(IAdminPlatformRepository repository, IU
 
     public async Task UpdateUserAsync(Guid userId, AdminUserUpdateRequest request, Guid actorId, string? ipAddress, CancellationToken cancellationToken = default)
     {
-        if (request.IsActive is null && request.Role is null) throw new HttpException(400, "At least one user field must be supplied.");
-        if (request.Role is UserRole suppliedRole && !Enum.IsDefined(suppliedRole)) throw new HttpException(400, "Role value is invalid.");
-        if (request.Role == UserRole.Admin) throw new HttpException(400, "Admin role cannot be assigned through this endpoint.");
-        var user = await repository.GetUserForUpdateAsync(userId, cancellationToken) ?? throw new HttpException(404, "User was not found.");
-        if (user.Role == UserRole.Admin) throw new HttpException(409, "Administrative accounts cannot be changed through this endpoint.");
-        if (request.Role == UserRole.Supplier && !await repository.IsSupplierVerifiedAsync(userId, cancellationToken))
-            throw new HttpException(409, "Only verified supplier accounts can be assigned the Supplier role.");
-        var previous = new { user.IsActive, user.Role };
-        if (request.IsActive is bool active) user.IsActive = active;
-        if (request.Role is UserRole role) user.Role = role;
-        user.UpdatedBy = actorId;
-        user.UpdatedAt = dateTimeProvider.UtcNow;
-        var audit = new AuditLog
-        {
-            ActorUserId = actorId, Action = UserAction, EntityName = nameof(User), EntityId = userId.ToString(),
-            MetadataJson = JsonSerializer.Serialize(new { Before = previous, After = new { user.IsActive, user.Role } }),
-            IpAddress = ipAddress, CreatedAt = dateTimeProvider.UtcNow
-        };
-        await repository.SaveUserAndAuditAsync(user, audit, cancellationToken);
-        if (request.IsActive is false)
-            await userRepository.RevokeAllRefreshSessionsAsync(userId, dateTimeProvider.UtcNow, cancellationToken);
-    }
 
-    public async Task<IReadOnlyList<AdminShopResponse>> GetShopsAsync(CancellationToken cancellationToken = default)
-    {
-        var shops = await repository.GetShopsAsync(cancellationToken);
-        var results = new List<AdminShopResponse>(shops.Count);
-        foreach (var shop in shops)
+        await verification.InTransactionAsync([actorId, userId], async token =>
         {
-            var response = new Mooncake.EcommercePlatform.Application.DTOs.Catalog.Responses.ShopResponse(
-                shop.Id, shop.SupplierId, shop.Name, shop.Slug, shop.Description, shop.BannerUrl, shop.LogoUrl, shop.Status);
-            results.Add(new(response, await repository.GetShopProductCountAsync(shop.Id, cancellationToken)));
-        }
-        return results;
-    }
-
-    public async Task SetShopStatusAsync(Guid shopId, ShopStatus status, CancellationToken cancellationToken = default)
-    {
-        if (status is not (ShopStatus.Active or ShopStatus.Inactive or ShopStatus.Suspended))
-            throw new HttpException(400, "Shop status is invalid.");
-        var shop = await repository.GetShopForUpdateAsync(shopId, cancellationToken) ?? throw new HttpException(404, "Shop was not found.");
-        shop.Status = status;
-        shop.UpdatedAt = dateTimeProvider.UtcNow;
-        await repository.SaveShopAsync(shop, cancellationToken);
+            Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.RequireAdmin(
+                await verification.GetUserAsync(actorId, token), userId);
+    if (request.IsActive is null && request.Role is null) throw new HttpException(400, "At least one user field must be supplied.");
+            if (request.Role is UserRole suppliedRole && !Enum.IsDefined(suppliedRole)) throw new HttpException(400, "Role value is invalid.");
+            if (request.Role == UserRole.Admin) throw new HttpException(400, "Admin role cannot be assigned through this endpoint.");
+            var user = await repository.GetUserForUpdateAsync(userId, cancellationToken) ?? throw new HttpException(404, "User was not found.");
+            if (user.Role == UserRole.Admin) throw new HttpException(409, "Administrative accounts cannot be changed through this endpoint.");
+            if (request.Role == UserRole.Supplier && !await repository.IsSupplierVerifiedAsync(userId, cancellationToken))
+                throw new HttpException(409, "Only verified supplier accounts can be assigned the Supplier role.");
+            var previous = new { user.IsActive, user.Role };
+            if (request.IsActive is bool active) user.IsActive = active;
+            if (request.Role is UserRole role) user.Role = role;
+            user.UpdatedBy = actorId;
+            user.UpdatedAt = dateTimeProvider.UtcNow;
+            var audit = new AuditLog
+            {
+                ActorUserId = actorId, Action = UserAction, EntityName = nameof(User), EntityId = userId.ToString(),
+                MetadataJson = JsonSerializer.Serialize(new { Before = previous, After = new { user.IsActive, user.Role } }),
+                IpAddress = ipAddress, CreatedAt = dateTimeProvider.UtcNow
+            };
+            verification.AddAudit(audit);
+            if (request.IsActive is false)
+                await userRepository.RevokeAllRefreshSessionsAsync(userId, dateTimeProvider.UtcNow, cancellationToken);
+            return true;
+        }, cancellationToken);
     }
 
     public async Task<IReadOnlyList<ContractDepositRuleResponse>> GetContractDepositRulesAsync(CancellationToken cancellationToken = default) =>

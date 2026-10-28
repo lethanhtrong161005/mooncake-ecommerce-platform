@@ -12,7 +12,7 @@ public sealed class ContractsController(IContractService contractService) : Base
 {
     [HttpGet("mine")]
     public async Task<IActionResult> GetMineAsync(CancellationToken cancellationToken) =>
-        Success(await contractService.GetMineAsync(CurrentUserId, User.IsInRole("Supplier"), cancellationToken), "Contracts retrieved successfully.");
+        Success(await contractService.GetMineAsync(CurrentUserId, User.IsInRole("Supplier") || User.HasClaim("supplier_fulfillment", "true"), cancellationToken), "Contracts retrieved successfully.");
 
     [HttpGet("{contractId:guid}")]
     public async Task<IActionResult> GetAsync(Guid contractId, CancellationToken cancellationToken) =>

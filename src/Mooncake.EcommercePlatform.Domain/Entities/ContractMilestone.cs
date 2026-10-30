@@ -25,4 +25,10 @@ public class ContractMilestone : BaseEntity
     public decimal? Percentage { get; set; }
 
     public MilestoneStatus Status { get; set; } = MilestoneStatus.Pending;
+
+    /// <summary>Notes submitted by the supplier when reporting milestone progress.</summary>
+    public string? ProgressNotes { get; set; }
+
+    /// <summary>JSON array of evidence URLs uploaded by the supplier (e.g. photos of completed goods).</summary>
+    public string? EvidenceUrls { get; set; }
 }

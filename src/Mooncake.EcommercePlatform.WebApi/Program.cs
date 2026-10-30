@@ -66,5 +66,8 @@ app.MapControllers();
 app.MapHub<Mooncake.EcommercePlatform.WebApi.Realtime.SupplierVerificationHub>(
     Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.HubPath,
     options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<Mooncake.EcommercePlatform.WebApi.Realtime.NotificationHub>(
+    "/api/v1/hubs/notifications",
+    options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

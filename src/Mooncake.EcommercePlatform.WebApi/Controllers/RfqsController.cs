@@ -19,6 +19,12 @@ public sealed class RfqsController(IRfqService rfqService) : BaseApiController
     public async Task<IActionResult> GetMineAsync(CancellationToken cancellationToken) =>
         Success(await rfqService.GetMineAsync(CurrentUserId, cancellationToken), "RFQs retrieved successfully.");
 
+    [Authorize(Roles = "Supplier")]
+    [HttpGet("supplier")]
+    public async Task<IActionResult> GetSupplierInvitationsAsync(CancellationToken cancellationToken) =>
+        Success(await rfqService.GetSupplierInvitationsAsync(CurrentUserId, cancellationToken),
+            "RFQ invitations retrieved successfully.");
+
     [Authorize(Roles = "Customer, Supplier")]
     [HttpGet("{rfqId:guid}")]
     public async Task<IActionResult> GetAsync(Guid rfqId, CancellationToken cancellationToken) =>
@@ -36,6 +42,12 @@ public sealed class RfqsController(IRfqService rfqService) : BaseApiController
         await rfqService.CancelAsync(CurrentUserId, rfqId, request.Reason, cancellationToken);
         return Success("RFQ cancelled successfully.");
     }
+
+    [Authorize(Roles = "Customer")]
+    [HttpGet("{rfqId:guid}/suggested-suppliers")]
+    public async Task<IActionResult> GetSuggestedSuppliersAsync(Guid rfqId, CancellationToken cancellationToken) =>
+        Success(await rfqService.GetSuggestedSuppliersAsync(CurrentUserId, rfqId, cancellationToken),
+            "Suggested suppliers retrieved successfully.");
 
     [Authorize(Roles = "Customer")]
     [HttpPost("{rfqId:guid}/invitations")]

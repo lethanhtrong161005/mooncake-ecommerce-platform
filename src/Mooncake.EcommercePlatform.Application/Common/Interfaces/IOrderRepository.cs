@@ -14,6 +14,11 @@ public interface IOrderRepository
     Task<bool> CreateOrderAsync(Order order, IReadOnlyList<OrderItem> items, CancellationToken cancellationToken = default);
     Task<Order?> GetOrderAsync(Guid orderId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<OrderItem>> GetOrderItemsAsync(Guid orderId, CancellationToken cancellationToken = default);
+    Task<CustomPackagingStatus?> GetCustomPackagingStatusAsync(Guid orderId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<Guid, (CustomPackaging Packaging, int RevisionCount)>>
+        GetPackagingSummariesAsync(IReadOnlyCollection<Guid> orderIds,
+            CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Order>> GetCustomerOrdersAsync(Guid customerId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Order>> GetSupplierOrdersAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<bool> CancelPendingOrderAsync(Order order, Guid actorUserId, string reason, CancellationToken cancellationToken = default);

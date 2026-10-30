@@ -24,6 +24,8 @@ public class Order : BaseEntity
 
     public decimal ShippingFee { get; set; }
 
+    public decimal PackagingFee { get; set; }
+
     public decimal TotalAmount { get; set; }
 
     public string? Notes { get; set; }

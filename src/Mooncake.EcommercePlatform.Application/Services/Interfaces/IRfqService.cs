@@ -10,6 +10,8 @@ public interface IRfqService
     Task<RfqResponse> PublishAsync(Guid customerUserId, Guid rfqId, CancellationToken cancellationToken = default);
     Task CancelAsync(Guid customerUserId, Guid rfqId, string reason, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqResponse>> GetMineAsync(Guid customerUserId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RfqResponse>> GetSupplierInvitationsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SuggestedSupplierResponse>> GetSuggestedSuppliersAsync(Guid customerUserId, Guid rfqId, CancellationToken cancellationToken = default);
     Task<RfqResponse> GetAsync(Guid userId, bool isSupplier, Guid rfqId, CancellationToken cancellationToken = default);
     Task<RfqResponse> InviteAsync(Guid customerUserId, Guid rfqId, InviteSuppliersRequest request, CancellationToken cancellationToken = default);
     Task DeclineAsync(Guid supplierUserId, Guid rfqId, DeclineInvitationRequest request, CancellationToken cancellationToken = default);

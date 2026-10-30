@@ -22,6 +22,7 @@ public static class SupplierVerificationRegistration
         services.AddScoped<IVerificationNotificationService, VerificationNotificationService>();
         services.AddScoped<IVerificationReadTokenProtector, VerificationReadTokenProtector>();
         services.AddScoped<IVerificationRealtimePublisher, VerificationRealtimePublisher>();
+        services.AddScoped<IRealtimeNotificationPublisher, SignalRNotificationPublisher>();
         services.AddSingleton<IUserIdProvider, VerificationUserIdProvider>();
         services.AddHostedService<VerificationOutboxWorker>();
         services.AddAuthorization(options => options.AddPolicy("SupplierExistingFulfillment",

@@ -18,6 +18,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<ContractDepositRule> ContractDepositRules => Set<ContractDepositRule>();
+    public DbSet<ContractDispute> ContractDisputes => Set<ContractDispute>();
+    public DbSet<ContractExtension> ContractExtensions => Set<ContractExtension>();
     public DbSet<ContractMilestone> ContractMilestones => Set<ContractMilestone>();
     public DbSet<CustomPackaging> CustomPackagings => Set<CustomPackaging>();
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();

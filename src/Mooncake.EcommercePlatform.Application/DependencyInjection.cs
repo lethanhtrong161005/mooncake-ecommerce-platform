@@ -18,11 +18,17 @@ public static class DependencyInjection
         services.AddScoped<IShopService, ShopService>();
         services.AddScoped<IProductCatalogService, ProductCatalogService>();
         services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<ICustomPackagingService, CustomPackagingService>();
         services.AddScoped<IPlatformBootstrapService, PlatformBootstrapService>();
         services.AddScoped<IPromotionService, PromotionService>();
         services.AddScoped<IRfqService, RfqService>();
         services.AddScoped<IContractService, ContractService>();
         services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IDeliveryService, DeliveryService>();
+        services.AddScoped<IReviewService, ReviewService>();
+        services.AddScoped<IAiChatService, AiChatService>();
+        services.AddScoped<IAiAnalyticsService, AiAnalyticsService>();
+        services.AddScoped<INotificationService, NotificationService>();
         return services;
     }
 }

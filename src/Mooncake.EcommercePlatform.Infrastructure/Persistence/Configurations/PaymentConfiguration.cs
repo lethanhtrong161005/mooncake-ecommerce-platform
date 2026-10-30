@@ -59,6 +59,8 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             builder.Property(e => e.ExpiresAt).HasColumnName("expires_at");
             builder.Property(e => e.RefundedAmount).HasPrecision(12, 2).HasDefaultValue(0m).HasColumnName("refunded_amount");
             builder.Property(e => e.RefundReason).HasMaxLength(1000).HasColumnName("refund_reason");
+            builder.Property(e => e.EvidenceUrl).HasMaxLength(1000).HasColumnName("evidence_url");
+            builder.Property(e => e.EvidenceNotes).HasMaxLength(500).HasColumnName("evidence_notes");
             builder.Property(e => e.PaymentNumber)
                 .HasMaxLength(50)
                 .HasColumnName("payment_number");

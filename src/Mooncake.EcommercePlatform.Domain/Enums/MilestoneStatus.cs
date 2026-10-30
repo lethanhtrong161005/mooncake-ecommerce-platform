@@ -6,6 +6,8 @@ public enum MilestoneStatus
     Pending,
     AwaitingPayment,
     Paid,
+    InProgress,
+    PendingReview,
     CompletedOnTime,
     CompletedLate,
     Overdue,

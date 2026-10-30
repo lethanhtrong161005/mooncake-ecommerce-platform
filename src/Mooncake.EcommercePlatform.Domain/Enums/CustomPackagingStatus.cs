@@ -5,7 +5,9 @@ public enum CustomPackagingStatus
 {
     Pending,
     DesignReview,
+    RevisionRequested,
     Approved,
     InProduction,
+    Completed,
     Rejected
 }

@@ -34,6 +34,10 @@ public class Payment : BaseEntity
 
     public string? RefundReason { get; set; }
 
+    public string? EvidenceUrl { get; set; }
+
+    public string? EvidenceNotes { get; set; }
+
     public PaymentMethod Method { get; set; } = PaymentMethod.BankTransfer;
 
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;

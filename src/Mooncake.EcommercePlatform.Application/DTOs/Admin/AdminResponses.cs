@@ -17,7 +17,7 @@ public sealed record ContractDepositRuleResponse(Guid Id, string Name, decimal D
 public sealed record SaveContractDepositRuleRequest
 {
     [Required, MaxLength(255)] public string Name { get; init; } = string.Empty;
-    [Range(typeof(decimal), "0.01", "100")] public decimal DepositPercentage { get; init; }
+    [Range(0.01, 100.0)] public decimal DepositPercentage { get; init; }
     public bool IsMandatory { get; init; } = true;
     [Range(typeof(decimal), "0", "999999999999")] public decimal? MinContractValue { get; init; }
     [Range(1, 720)] public int PaymentDeadlineHours { get; init; } = 48;

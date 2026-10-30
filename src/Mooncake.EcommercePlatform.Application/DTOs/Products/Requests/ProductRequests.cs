@@ -11,7 +11,7 @@ public record ProductCoreRequest
     [MaxLength(10_000)] public string? Description { get; init; }
     [MaxLength(10_000)] public string? Ingredients { get; init; }
     [Required] public Guid? CategoryId { get; init; }
-    [Required, Range(typeof(decimal), "0", "9999999999.99")] public decimal? BasePrice { get; init; }
+    [Required, Range(typeof(decimal), "0", "9999999999")] public decimal? BasePrice { get; init; }
     [Required, Range(1, 1_000_000)] public int? MinOrderQty { get; init; }
     [Range(1, 1_000_000)] public int? MaxOrderQty { get; init; }
     [Required, RegularExpression("^(piece|box|set|tray)$")] public string Unit { get; init; } = string.Empty;
@@ -28,7 +28,7 @@ public record ProductVariantInput
     [MaxLength(50)] public string? SizeLabel { get; init; }
     [Range(1, 100_000)] public int? WeightGram { get; init; }
     [Required] public bool? IsGiftSet { get; init; }
-    [Required, Range(typeof(decimal), "-9999999999.99", "9999999999.99")] public decimal? PriceAdjustment { get; init; }
+    [Required, Range(typeof(decimal), "-9999999999", "9999999999")] public decimal? PriceAdjustment { get; init; }
     public Guid? ImageAssetId { get; init; }
 }
 
@@ -111,8 +111,8 @@ public sealed record ProductSearchQuery
     [Range(1, 50)] public int PageSize { get; init; } = 24;
     [MaxLength(100)] public string? Q { get; init; }
     [MaxLength(20)] public Guid[] CategoryIds { get; init; } = [];
-    [Range(typeof(decimal), "0", "9999999999.99")] public decimal? MinPrice { get; init; }
-    [Range(typeof(decimal), "0", "9999999999.99")] public decimal? MaxPrice { get; init; }
+    [Range(typeof(decimal), "0", "9999999999")] public decimal? MinPrice { get; init; }
+    [Range(typeof(decimal), "0", "9999999999")] public decimal? MaxPrice { get; init; }
     [Range(1, 1_000_000)] public int? MaxMinOrderQty { get; init; }
     public bool? SupportsCustomPackaging { get; init; }
     [Range(typeof(decimal), "0", "100")] public decimal? MinReputation { get; init; }

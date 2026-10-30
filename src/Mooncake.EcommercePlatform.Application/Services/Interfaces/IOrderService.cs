@@ -6,6 +6,8 @@ using Mooncake.EcommercePlatform.Application.DTOs.Orders.Responses;
 /// <summary>Bulk order placement, retrieval, confirmation, and cancellation use cases.</summary>
 public interface IOrderService
 {
+    Task<OrderQuotePreviewResponse> PreviewQuoteAsync(OrderQuotePreviewRequest request,
+        CancellationToken cancellationToken = default);
     Task<OrderResponse> CreateAsync(Guid customerId, string? idempotencyKey, CreateOrderRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<OrderResponse>> GetMyOrdersAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default);
     Task<OrderResponse> GetAsync(Guid userId, bool supplier, Guid orderId, bool admin = false, CancellationToken cancellationToken = default);

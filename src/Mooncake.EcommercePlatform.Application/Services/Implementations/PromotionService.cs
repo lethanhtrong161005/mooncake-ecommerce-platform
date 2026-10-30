@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Promotions.Requests;
@@ -88,6 +89,10 @@ public sealed class PromotionService(IPromotionRepository repository, IDateTimeP
             throw new HttpException(400, "The selected product does not belong to this shop.");
         if (await repository.NameExistsAsync(shopId, request.Name.Trim(), exceptPromotionId, cancellationToken))
             throw new HttpException(409, "A promotion with this name already exists in the shop.");
+        if (await repository.HasOverlappingRangeAsync(shopId, request.ProductId, request.MinQty,
+                request.MaxQty, request.StartAtUtc?.UtcDateTime, request.EndAtUtc?.UtcDateTime,
+                exceptPromotionId, cancellationToken))
+            throw new HttpException(409, B2BOrderingMessages.PromotionRangeOverlap);
     }
 
     private PromotionRule BuildPromotion(Guid shopId, SavePromotionRequest request, Guid supplierUserId) => new()

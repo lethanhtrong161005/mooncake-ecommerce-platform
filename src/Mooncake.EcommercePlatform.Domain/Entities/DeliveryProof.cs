@@ -22,5 +22,7 @@ public class DeliveryProof : BaseEntity
 
     public string? Notes { get; set; }
 
+    public string? TamperProofHash { get; set; }
+
     public ProofType ProofType { get; set; } = ProofType.Delivery;
 }

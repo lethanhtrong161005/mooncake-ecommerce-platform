@@ -40,6 +40,17 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
             builder.Property(e => e.IsPublic)
                 .HasDefaultValue(true)
                 .HasColumnName("is_public");
+            builder.Property(e => e.IsAnonymous)
+                .HasDefaultValue(false)
+                .HasColumnName("is_anonymous");
+            builder.Property(e => e.MediaUrls)
+                .HasColumnType("jsonb")
+                .HasColumnName("media_urls");
+            builder.Property(e => e.SupplierReply).HasColumnName("supplier_reply");
+            builder.Property(e => e.SupplierRepliedAt).HasColumnName("supplier_replied_at");
+            builder.Property(e => e.IsHiddenByAdmin)
+                .HasDefaultValue(false)
+                .HasColumnName("is_hidden_by_admin");
             builder.Property(e => e.OrderId).HasColumnName("order_id");
             builder.Property(e => e.OverallRating).HasColumnName("overall_rating");
             builder.Property(e => e.QualityRating).HasColumnName("quality_rating");

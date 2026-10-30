@@ -23,5 +23,15 @@ public class Review : BaseEntity
 
     public string? Comment { get; set; }
 
-    public bool IsPublic { get; set; }
+    public bool IsPublic { get; set; } = true;
+
+    public bool IsAnonymous { get; set; }
+
+    public string? MediaUrls { get; set; }
+
+    public string? SupplierReply { get; set; }
+
+    public DateTime? SupplierRepliedAt { get; set; }
+
+    public bool IsHiddenByAdmin { get; set; }
 }

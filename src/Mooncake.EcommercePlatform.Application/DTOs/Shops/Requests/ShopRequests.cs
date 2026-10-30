@@ -57,7 +57,7 @@ public record ThemeOverridesRequest
     [RegularExpression("^#[0-9a-fA-F]{6}$")] public string? SurfaceColor { get; init; }
     [RegularExpression("^#[0-9a-fA-F]{6}$")] public string? ButtonTextColor { get; init; }
     [Range(0, 24)] public int? BorderRadiusPx { get; init; }
-    [Range(typeof(decimal), "0.85", "1.25")] public decimal? FontScale { get; init; }
+    [Range(0.85, 1.25)] public decimal? FontScale { get; init; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -129,8 +129,8 @@ public record ShopPageQuery
 public sealed record ShopProductQuery : ShopPageQuery
 {
     public Guid? CategoryId { get; init; }
-    [Range(typeof(decimal), "0", "999999999999.99")] public decimal? MinPrice { get; init; }
-    [Range(typeof(decimal), "0", "999999999999.99")] public decimal? MaxPrice { get; init; }
+    [Range(0, 999999999999.99)] public decimal? MinPrice { get; init; }
+    [Range(0, 999999999999.99)] public decimal? MaxPrice { get; init; }
     [MaxLength(100)] public string? Flavor { get; init; }
     [MaxLength(100)] public string? Filling { get; init; }
     [Range(1, 10000)] public int? WeightGram { get; init; }

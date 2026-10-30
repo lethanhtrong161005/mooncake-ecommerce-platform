@@ -94,11 +94,22 @@ public static class DependencyInjection
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
             .RemoveAllLoggers();
         services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<ICustomPackagingRepository, CustomPackagingRepository>();
         services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRfqRepository, RfqRepository>();
         services.AddScoped<IContractRepository, ContractRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IDeliveryRepository, DeliveryRepository>();
+        services.AddScoped<IReviewRepository, ReviewRepository>();
+        services.AddScoped<IAiConversationRepository, AiConversationRepository>();
+        services.AddScoped<IAiAnalyticsReportRepository, AiAnalyticsReportRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
+        services.AddHttpClient<IGeminiGateway, GeminiGateway>();
+        services.AddOptions<VnPayOptions>().Bind(configuration.GetSection(VnPayOptions.SectionName))
+            .Validate(options => options.IsValid(), "VNPay configuration is invalid.");
+        services.AddSingleton<IVnPayGateway, VnPayGateway>();
         services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
         services.AddScoped<IAccessTokenService, JwtAccessTokenService>();

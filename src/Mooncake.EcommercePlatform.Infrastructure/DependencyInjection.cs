@@ -20,11 +20,12 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddCloudinaryStorage(configuration);
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? configuration["DB_CONNECTION_STRING"];
 
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            throw new InvalidOperationException("Database connection string is missing. Configure ConnectionStrings:DefaultConnection in appsettings.json.");
+            throw new InvalidOperationException("Database connection string is missing. Configure ConnectionStrings:DefaultConnection in appsettings.json or DB_CONNECTION_STRING.");
         }
 
         // Build NpgsqlDataSource with Enum & Vector mappings (using NpgsqlNullNameTranslator for PascalCase enum matching)

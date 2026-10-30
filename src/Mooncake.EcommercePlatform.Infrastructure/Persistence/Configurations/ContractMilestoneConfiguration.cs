@@ -55,5 +55,7 @@ public class ContractMilestoneConfiguration : IEntityTypeConfiguration<ContractM
             builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
         builder.Property(e => e.Status).HasColumnName("status");
         builder.HasIndex(e => e.Status, "idx_cm_status");
+        builder.Property(e => e.ProgressNotes).HasColumnType("text").HasColumnName("progress_notes");
+        builder.Property(e => e.EvidenceUrls).HasColumnType("text").HasColumnName("evidence_urls");
     }
 }

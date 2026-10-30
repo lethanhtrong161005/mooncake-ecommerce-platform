@@ -82,6 +82,28 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
         return responses;
     }
 
+    public async Task<IReadOnlyList<RfqResponse>> GetSupplierInvitationsAsync(Guid supplierUserId,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await GetVerifiedSupplierIdAsync(supplierUserId, cancellationToken);
+        var rfqs = await repository.GetSupplierInvitedRfqsAsync(supplierUserId, cancellationToken);
+        var responses = new List<RfqResponse>(rfqs.Count);
+        foreach (var rfq in rfqs)
+            responses.Add(await ToResponseAsync(rfq, true, cancellationToken));
+        return responses;
+    }
+
+    public async Task<IReadOnlyList<SuggestedSupplierResponse>> GetSuggestedSuppliersAsync(Guid customerUserId,
+        Guid rfqId, CancellationToken cancellationToken = default)
+    {
+        var rfq = await GetOwnedRfqAsync(customerUserId, rfqId, cancellationToken);
+        EnsureOpen(rfq);
+        var suppliers = await repository.GetSuggestedSuppliersAsync(rfqId, cancellationToken);
+        return suppliers.Select(profile => new SuggestedSupplierResponse(profile.UserId, profile.Id,
+            profile.CompanyName ?? "Verified supplier", profile.ReputationScore, profile.AvgRating,
+            profile.Address)).ToArray();
+    }
+
     public async Task<RfqResponse> GetAsync(Guid userId, bool isSupplier, Guid rfqId, CancellationToken cancellationToken = default)
     {
         var rfq = await repository.GetRfqAsync(rfqId, cancellationToken);
@@ -148,7 +170,7 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
         EnsureOpen(rfq);
         var invitation = await repository.GetInvitationAsync(rfqId, supplierId, cancellationToken)
                          ?? throw new HttpException(404, "RFQ invitation was not found.");
-        if (invitation.Status is RfqInvitationStatus.Declined or RfqInvitationStatus.BidSubmitted)
+        if (invitation.Status == RfqInvitationStatus.Declined)
             throw new HttpException(409, "This RFQ invitation has already been answered.");
         var rfqItems = await repository.GetRfqItemsAsync(rfqId, cancellationToken);
         if (request.Items.Count == 0 || request.Items.Any(item => item.UnitPrice <= 0)
@@ -157,16 +179,18 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
             throw new HttpException(400, "A bid must include a price for every RFQ item exactly once.");
         var rfqItemMap = rfqItems.ToDictionary(item => item.Id);
         var now = clock.UtcNow;
+        var existingBid = (await repository.GetBidsAsync(rfqId, supplierId, cancellationToken))
+            .SingleOrDefault(existing => existing.Status == BidStatus.Submitted);
         var bid = new Bid
         {
-            Id = Guid.NewGuid(),
+            Id = existingBid?.Id ?? Guid.NewGuid(),
             RfqId = rfqId,
             SupplierId = supplierId,
-            BidNumber = $"BID-{now:yyyy}-{Guid.NewGuid():N}"[..19].ToUpperInvariant(),
+            BidNumber = existingBid?.BidNumber ?? $"BID-{now:yyyy}-{Guid.NewGuid():N}"[..19].ToUpperInvariant(),
             EstimatedDeliveryDays = request.EstimatedDeliveryDays,
             ValidityDays = request.ValidityDays,
             Notes = request.Notes?.Trim(),
-            SubmittedAt = now,
+            SubmittedAt = existingBid?.SubmittedAt ?? now,
             Status = BidStatus.Submitted,
             CreatedBy = supplierUserId
         };

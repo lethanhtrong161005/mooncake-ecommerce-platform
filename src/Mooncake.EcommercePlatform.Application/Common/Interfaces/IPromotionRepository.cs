@@ -10,5 +10,8 @@ public interface IPromotionRepository
     Task<PromotionRule?> GetAsync(Guid promotionId, CancellationToken cancellationToken = default);
     Task<bool> ProductBelongsToShopAsync(Guid productId, Guid shopId, CancellationToken cancellationToken = default);
     Task<bool> NameExistsAsync(Guid shopId, string name, Guid? exceptPromotionId = null, CancellationToken cancellationToken = default);
+    Task<bool> HasOverlappingRangeAsync(Guid shopId, Guid? productId, int minQty, int? maxQty,
+        DateTime? startAtUtc, DateTime? endAtUtc, Guid? exceptPromotionId = null,
+        CancellationToken cancellationToken = default);
     Task SaveAsync(PromotionRule promotion, CancellationToken cancellationToken = default);
 }

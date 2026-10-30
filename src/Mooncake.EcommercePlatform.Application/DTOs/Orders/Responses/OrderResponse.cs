@@ -13,6 +13,7 @@ public sealed record OrderResponse(
     decimal DiscountAmount,
     decimal TaxAmount,
     decimal ShippingFee,
+    decimal PackagingFee,
     decimal TotalAmount,
     string? DeliveryAddress,
     string? RecipientName,
@@ -20,7 +21,13 @@ public sealed record OrderResponse(
     DateOnly? DeliveryDateExpected,
     string? Notes,
     DateTime CreatedAtUtc,
-    IReadOnlyList<OrderItemResponse> Items);
+    IReadOnlyList<OrderItemResponse> Items,
+    CustomPackagingSummaryResponse? CustomPackaging);
 
 /// <summary>Order line using product and SKU snapshots captured at checkout.</summary>
 public sealed record OrderItemResponse(Guid ProductId, Guid VariantId, string ProductName, string VariantName, string Sku, int Quantity, decimal UnitPrice, decimal DiscountAmount, decimal Subtotal);
+
+/// <summary>Compact packaging state embedded in order lists and details.</summary>
+public sealed record CustomPackagingSummaryResponse(Guid Id, string CompanyName,
+    string? CompanyLogoUrl, string? BoxDesignUrl, string PackagingType,
+    CustomPackagingStatus Status, int RevisionsCount);

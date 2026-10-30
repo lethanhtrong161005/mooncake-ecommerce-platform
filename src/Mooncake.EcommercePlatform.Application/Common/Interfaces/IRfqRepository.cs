@@ -6,6 +6,8 @@ public interface IRfqRepository
 {
     Task<RequestForQuotation?> GetRfqAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RequestForQuotation>> GetCustomerRfqsAsync(Guid customerUserId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RequestForQuotation>> GetSupplierInvitedRfqsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SupplierProfile>> GetSuggestedSuppliersAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<Guid?> GetVerifiedSupplierProfileIdAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqItem>> GetRfqItemsAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqInvitation>> GetInvitationsAsync(Guid rfqId, CancellationToken cancellationToken = default);

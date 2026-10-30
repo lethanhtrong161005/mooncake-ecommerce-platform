@@ -20,7 +20,7 @@ public sealed record SavePromotionRequest
     [Range(1, 1_000_000)]
     public int? MaxQty { get; init; }
 
-    [Range(typeof(decimal), "0.01", "9999999999")]
+    [Range(typeof(decimal), "0", "9999999999")]
     public decimal DiscountValue { get; init; }
 
     public DiscountType DiscountType { get; init; }

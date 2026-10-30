@@ -16,6 +16,28 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         await context.RequestForQuotations.AsNoTracking().Where(rfq => rfq.CustomerId == customerUserId && !rfq.IsDeleted)
             .OrderByDescending(rfq => rfq.CreatedAt).Take(100).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<RequestForQuotation>> GetSupplierInvitedRfqsAsync(Guid supplierUserId,
+        CancellationToken cancellationToken = default) =>
+        await (from invitation in context.RfqInvitations.AsNoTracking()
+               join profile in context.SupplierProfiles.AsNoTracking() on invitation.SupplierId equals profile.Id
+               join rfq in context.RequestForQuotations.AsNoTracking() on invitation.RfqId equals rfq.Id
+               where profile.UserId == supplierUserId && !profile.IsDeleted && !invitation.IsDeleted && !rfq.IsDeleted
+               orderby rfq.BidDeadline ascending
+               select rfq).Take(100).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<SupplierProfile>> GetSuggestedSuppliersAsync(Guid rfqId,
+        CancellationToken cancellationToken = default) =>
+        await (from profile in context.SupplierProfiles.AsNoTracking()
+               join shop in context.Shops.AsNoTracking() on profile.Id equals shop.SupplierId
+               join user in context.Users.AsNoTracking() on profile.UserId equals user.Id
+               where profile.VerificationStatus == SupplierVerificationStatus.Verified &&
+                     profile.ReputationScore >= 80 && shop.Status == ShopStatus.Active && user.IsActive &&
+                     !profile.IsDeleted && !shop.IsDeleted && !user.IsDeleted &&
+                     !context.RfqInvitations.Any(invitation => invitation.RfqId == rfqId &&
+                         invitation.SupplierId == profile.Id && !invitation.IsDeleted)
+               orderby profile.ReputationScore descending, profile.AvgRating descending
+               select profile).Take(10).ToListAsync(cancellationToken);
+
     public Task<Guid?> GetVerifiedSupplierProfileIdAsync(Guid supplierUserId, CancellationToken cancellationToken = default) =>
         context.SupplierProfiles.AsNoTracking().Where(profile => profile.UserId == supplierUserId && !profile.IsDeleted
                 && profile.VerificationStatus == SupplierVerificationStatus.Verified)
@@ -149,9 +171,26 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
             return false;
         if (!await Mooncake.EcommercePlatform.Infrastructure.Helpers.ShopTradingLockHelper.CanTradeAsync(context, bid.SupplierId, cancellationToken))
             return false;
-        if (await context.Bids.AnyAsync(existing => existing.RfqId == bid.RfqId && existing.SupplierId == bid.SupplierId && !existing.IsDeleted, cancellationToken))
+        var existingBid = await context.Bids.FirstOrDefaultAsync(existing => existing.RfqId == bid.RfqId && existing.SupplierId == bid.SupplierId &&
+                !existing.IsDeleted, cancellationToken);
+        if (existingBid is not null && existingBid.Status != BidStatus.Submitted)
             return false;
-        context.Bids.Add(bid);
+        if (existingBid is null)
+        {
+            context.Bids.Add(bid);
+        }
+        else
+        {
+            existingBid.TotalPrice = bid.TotalPrice;
+            existingBid.EstimatedDeliveryDays = bid.EstimatedDeliveryDays;
+            existingBid.ValidityDays = bid.ValidityDays;
+            existingBid.Notes = bid.Notes;
+            existingBid.UpdatedAt = DateTime.UtcNow;
+            existingBid.UpdatedBy = bid.CreatedBy;
+            var oldItems = await context.BidItems.Where(item => item.BidId == existingBid.Id).ToListAsync(cancellationToken);
+            context.BidItems.RemoveRange(oldItems);
+            foreach (var item in items) item.BidId = existingBid.Id;
+        }
         context.BidItems.AddRange(items);
         var invitation = await context.RfqInvitations.FirstOrDefaultAsync(item => item.RfqId == bid.RfqId
             && item.SupplierId == bid.SupplierId && !item.IsDeleted, cancellationToken);

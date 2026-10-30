@@ -34,6 +34,9 @@ public class DeliveryProofConfiguration : IEntityTypeConfiguration<DeliveryProof
                 .HasPrecision(11, 8)
                 .HasColumnName("location_lng");
             builder.Property(e => e.Notes).HasColumnName("notes");
+            builder.Property(e => e.TamperProofHash)
+                .HasMaxLength(64)
+                .HasColumnName("tamper_proof_hash");
             builder.Property(e => e.PhotoUrl).HasColumnName("photo_url");
             builder.Property(e => e.SignatureUrl).HasColumnName("signature_url");
             builder.Property(e => e.TakenAt).HasColumnName("taken_at");

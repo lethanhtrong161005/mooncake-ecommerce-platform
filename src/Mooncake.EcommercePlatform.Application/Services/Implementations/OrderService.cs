@@ -13,6 +13,54 @@ using System.Text.RegularExpressions;
 /// <summary>Implements bulk ordering and order status transitions.</summary>
 public sealed class OrderService(IOrderRepository repository, IDateTimeProvider dateTimeProvider) : IOrderService
 {
+    public async Task<OrderQuotePreviewResponse> PreviewQuoteAsync(OrderQuotePreviewRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.Items.Select(item => item.VariantId).Distinct().Count() != request.Items.Count)
+            throw new HttpException(400, "Each product variant can appear only once in a quote.");
+        var shop = await repository.GetShopAsync(request.ShopId, cancellationToken)
+                   ?? throw new HttpException(404, "Shop was not found.");
+        var productIds = request.Items.Select(item => item.ProductId).Distinct().ToArray();
+        var variantIds = request.Items.Select(item => item.VariantId).Distinct().ToArray();
+        var products = await repository.GetProductsAsync(productIds, cancellationToken);
+        var variants = await repository.GetVariantsAsync(variantIds, cancellationToken);
+        if (products.Count != productIds.Length || variants.Count != variantIds.Length)
+            throw new HttpException(400, "One or more selected products or variants are unavailable.");
+
+        var productsById = products.ToDictionary(product => product.Id);
+        var variantsById = variants.ToDictionary(variant => variant.Id);
+        var promotions = await repository.GetActivePromotionsAsync(shop.Id, cancellationToken);
+        var lines = new List<OrderQuoteLineResponse>(request.Items.Count);
+        decimal subtotal = 0;
+        decimal totalDiscount = 0;
+        foreach (var item in request.Items)
+        {
+            var product = productsById[item.ProductId];
+            var variant = variantsById[item.VariantId];
+            ValidateOrderLine(shop.Id, product, variant, item.Quantity);
+            var pricing = PromotionPricingHelper.Calculate(product.BasePrice + variant.PriceAdjustment,
+                item.Quantity, product.Id, promotions, dateTimeProvider.UtcNow);
+            var lineSubtotal = decimal.Round(pricing.OriginalUnitPrice * item.Quantity, 2,
+                MidpointRounding.AwayFromZero);
+            var lineTotal = lineSubtotal - pricing.TotalDiscount;
+            subtotal += lineSubtotal;
+            totalDiscount += pricing.TotalDiscount;
+            lines.Add(new OrderQuoteLineResponse(product.Id, variant.Id, product.Name, variant.Name,
+                variant.Sku, item.Quantity, pricing.OriginalUnitPrice, pricing.DiscountedUnitPrice,
+                lineSubtotal, pricing.TotalDiscount, lineTotal,
+                pricing.AppliedRule is null ? null : new AppliedPromotionResponse(pricing.AppliedRule.Id,
+                    pricing.AppliedRule.Name, pricing.AppliedRule.DiscountType,
+                    pricing.AppliedRule.DiscountValue)));
+        }
+
+        subtotal = decimal.Round(subtotal, 2, MidpointRounding.AwayFromZero);
+        totalDiscount = decimal.Round(totalDiscount, 2, MidpointRounding.AwayFromZero);
+        var finalTotal = subtotal - totalDiscount;
+        var effectiveRate = subtotal == 0 ? 0 : decimal.Round(totalDiscount / subtotal * 100, 2,
+            MidpointRounding.AwayFromZero);
+        return new OrderQuotePreviewResponse(subtotal, totalDiscount, finalTotal, effectiveRate, lines);
+    }
+
     public async Task<OrderResponse> CreateAsync(Guid customerId, string? idempotencyKey, CreateOrderRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(idempotencyKey))
@@ -58,17 +106,13 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
         {
             var product = productsById[requestedItem.ProductId];
             var variant = variantsById[requestedItem.VariantId];
-            if (product.ShopId != shop.Id || variant.ProductId != product.Id || product.Status != ProductStatus.Active || product.IsDeleted || variant.IsDeleted)
-                throw new HttpException(400, "All ordered variants must belong to active products in the selected shop.");
-            if (requestedItem.Quantity < product.MinOrderQty || product.MaxOrderQty is int maxQuantity && requestedItem.Quantity > maxQuantity)
-                throw new HttpException(400, $"Quantity for '{product.Name}' is outside the allowed order range.");
-            if (variant.StockQty < requestedItem.Quantity)
-                throw new HttpException(409, $"Insufficient stock for variant '{variant.Sku}'.");
+            ValidateOrderLine(shop.Id, product, variant, requestedItem.Quantity);
 
-            var unitPrice = product.BasePrice + variant.PriceAdjustment;
+            var pricing = PromotionPricingHelper.Calculate(product.BasePrice + variant.PriceAdjustment,
+                requestedItem.Quantity, product.Id, promotions, now);
+            var unitPrice = pricing.OriginalUnitPrice;
             var lineTotal = decimal.Round(unitPrice * requestedItem.Quantity, 2, MidpointRounding.AwayFromZero);
-            var discountedUnitPrice = GetDiscountedUnitPrice(unitPrice, requestedItem.Quantity, product.Id, promotions, now);
-            var lineDiscount = decimal.Round((unitPrice - discountedUnitPrice) * requestedItem.Quantity, 2, MidpointRounding.AwayFromZero);
+            var lineDiscount = pricing.TotalDiscount;
             subtotal += lineTotal;
             discountTotal += lineDiscount;
             items.Add(new OrderItem
@@ -80,6 +124,7 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
                 VariantSkuSnapshot = variant.Sku,
                 Quantity = requestedItem.Quantity,
                 UnitPrice = unitPrice,
+                PromotionRuleId = pricing.AppliedRule?.Id,
                 DiscountAmount = lineDiscount,
                 Subtotal = lineTotal - lineDiscount
             });
@@ -98,6 +143,7 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
             DiscountAmount = discountTotal,
             TaxAmount = 0,
             ShippingFee = 0,
+            PackagingFee = 0,
             TotalAmount = subtotal - discountTotal,
             Notes = request.Notes?.Trim(),
             DeliveryAddress = request.DeliveryAddress.Trim(),
@@ -126,9 +172,16 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
         var orders = supplier
             ? await repository.GetSupplierOrdersAsync(userId, cancellationToken)
             : await repository.GetCustomerOrdersAsync(userId, cancellationToken);
+        var packagingByOrder = await repository.GetPackagingSummariesAsync(
+            orders.Select(order => order.Id).ToArray(), cancellationToken);
         var results = new List<OrderResponse>(orders.Count);
         foreach (var order in orders)
-            results.Add(await ToResponseAsync(order, cancellationToken));
+        {
+            packagingByOrder.TryGetValue(order.Id, out var summary);
+            results.Add(OrderResponseHelper.ToResponse(order,
+                await repository.GetOrderItemsAsync(order.Id, cancellationToken), summary.Packaging,
+                summary.RevisionCount));
+        }
         return results;
     }
 
@@ -183,8 +236,16 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
         return await ToResponseAsync(order, cancellationToken);
     }
 
-    public Task<OrderResponse> StartProcessingAsync(Guid supplierUserId, Guid orderId, CancellationToken cancellationToken = default) =>
-        TransitionAsSupplierAsync(supplierUserId, orderId, OrderStatus.Confirmed, OrderStatus.Processing, cancellationToken);
+    public async Task<OrderResponse> StartProcessingAsync(Guid supplierUserId, Guid orderId,
+        CancellationToken cancellationToken = default)
+    {
+        var packagingStatus = await repository.GetCustomPackagingStatusAsync(orderId, cancellationToken);
+        if (packagingStatus.HasValue && packagingStatus != CustomPackagingStatus.Approved)
+            throw new HttpException(409,
+                Mooncake.EcommercePlatform.Application.Common.Constant.B2BOrderingMessages.PackagingProductionBlocked);
+        return await TransitionAsSupplierAsync(supplierUserId, orderId, OrderStatus.Confirmed,
+            OrderStatus.Processing, cancellationToken);
+    }
 
     public Task<OrderResponse> MarkShippedAsync(Guid supplierUserId, Guid orderId, CancellationToken cancellationToken = default) =>
         TransitionAsSupplierAsync(supplierUserId, orderId, OrderStatus.Processing, OrderStatus.Shipped, cancellationToken);
@@ -215,30 +276,24 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
         return await ToResponseAsync(order, cancellationToken);
     }
 
-    private async Task<OrderResponse> ToResponseAsync(Order order, CancellationToken cancellationToken) =>
-        OrderResponseHelper.ToResponse(order, await repository.GetOrderItemsAsync(order.Id, cancellationToken));
-
-    private static decimal GetDiscountedUnitPrice(decimal unitPrice, int quantity, Guid productId, IReadOnlyList<PromotionRule> rules, DateTime now)
+    private async Task<OrderResponse> ToResponseAsync(Order order, CancellationToken cancellationToken)
     {
-        var discountedPrice = unitPrice;
-        foreach (var rule in rules)
-        {
-            if (rule.ProductId.HasValue && rule.ProductId.Value != productId)
-                continue;
-            if (rule.MinQty.HasValue && quantity < rule.MinQty.Value || rule.MaxQty.HasValue && quantity > rule.MaxQty.Value)
-                continue;
-            if (rule.StartDate.HasValue && rule.StartDate.Value > now || rule.EndDate.HasValue && rule.EndDate.Value <= now)
-                continue;
+        var summaries = await repository.GetPackagingSummariesAsync([order.Id], cancellationToken);
+        summaries.TryGetValue(order.Id, out var summary);
+        return OrderResponseHelper.ToResponse(order,
+            await repository.GetOrderItemsAsync(order.Id, cancellationToken), summary.Packaging,
+            summary.RevisionCount);
+    }
 
-            var candidate = rule.DiscountType switch
-            {
-                DiscountType.Percentage => unitPrice * (1 - Math.Clamp(rule.DiscountValue, 0, 100) / 100),
-                DiscountType.FixedAmount => unitPrice - Math.Max(0, rule.DiscountValue),
-                DiscountType.FixedPrice => rule.DiscountValue,
-                _ => unitPrice
-            };
-            discountedPrice = Math.Min(discountedPrice, Math.Clamp(candidate, 0, unitPrice));
-        }
-        return decimal.Round(discountedPrice, 2, MidpointRounding.AwayFromZero);
+    private static void ValidateOrderLine(Guid shopId, Product product, ProductVariant variant, int quantity)
+    {
+        if (product.ShopId != shopId || variant.ProductId != product.Id ||
+            product.Status != ProductStatus.Active || product.IsDeleted || variant.IsDeleted)
+            throw new HttpException(400,
+                "All ordered variants must belong to active products in the selected shop.");
+        if (quantity < product.MinOrderQty || product.MaxOrderQty is int maxQuantity && quantity > maxQuantity)
+            throw new HttpException(400, $"Quantity for '{product.Name}' is outside the allowed order range.");
+        if (variant.StockQty < quantity)
+            throw new HttpException(409, $"Insufficient stock for variant '{variant.Sku}'.");
     }
 }

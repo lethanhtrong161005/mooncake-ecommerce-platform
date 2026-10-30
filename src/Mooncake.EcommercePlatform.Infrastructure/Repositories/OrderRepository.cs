@@ -51,9 +51,29 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
                 var quantity = group.Sum(item => item.Quantity);
                 var updated = await context.ProductVariants
                     .Where(variant => variant.Id == group.Key && !variant.IsDeleted && variant.StockQty >= quantity)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(variant => variant.StockQty, variant => variant.StockQty - quantity), cancellationToken);
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(variant => variant.StockQty, variant => variant.StockQty - quantity)
+                        .SetProperty(variant => variant.InventoryVersion, variant => variant.InventoryVersion + 1),
+                        cancellationToken);
                 if (updated != 1)
                     return false;
+                var inventory = await context.ProductVariants.AsNoTracking()
+                    .Where(variant => variant.Id == group.Key)
+                    .Select(variant => new { variant.ProductId, variant.ShopId, variant.StockQty })
+                    .SingleAsync(cancellationToken);
+                context.ProductInventoryMovements.Add(new ProductInventoryMovement
+                {
+                    ProductId = inventory.ProductId,
+                    VariantId = group.Key,
+                    ShopId = inventory.ShopId,
+                    ActorUserId = order.CustomerId,
+                    SourceType = "Order",
+                    SourceId = order.Id.ToString(),
+                    Delta = -quantity,
+                    PreviousQty = inventory.StockQty + quantity,
+                    CurrentQty = inventory.StockQty,
+                    Reason = "Inventory reserved for a bulk order"
+                });
             }
 
             foreach (var item in items)
@@ -98,6 +118,30 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
     public async Task<IReadOnlyList<OrderItem>> GetOrderItemsAsync(Guid orderId, CancellationToken cancellationToken = default) =>
         await context.OrderItems.AsNoTracking().Where(item => item.OrderId == orderId && !item.IsDeleted).ToListAsync(cancellationToken);
 
+    public Task<CustomPackagingStatus?> GetCustomPackagingStatusAsync(Guid orderId,
+        CancellationToken cancellationToken = default) =>
+        context.CustomPackagings.AsNoTracking().Where(packaging =>
+                packaging.OrderId == orderId && !packaging.IsDeleted)
+            .Select(packaging => (CustomPackagingStatus?)packaging.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, (CustomPackaging Packaging, int RevisionCount)>>
+        GetPackagingSummariesAsync(IReadOnlyCollection<Guid> orderIds,
+            CancellationToken cancellationToken = default)
+    {
+        var packagings = await context.CustomPackagings.AsNoTracking()
+            .Where(packaging => orderIds.Contains(packaging.OrderId) && !packaging.IsDeleted)
+            .ToListAsync(cancellationToken);
+        var packagingIds = packagings.Select(packaging => packaging.Id).ToArray();
+        var counts = await context.CustomPackagingRevisions.AsNoTracking()
+            .Where(revision => packagingIds.Contains(revision.CustomPackagingId) && !revision.IsDeleted)
+            .GroupBy(revision => revision.CustomPackagingId)
+            .Select(group => new { PackagingId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.PackagingId, item => item.Count, cancellationToken);
+        return packagings.ToDictionary(packaging => packaging.OrderId,
+            packaging => (packaging, counts.GetValueOrDefault(packaging.Id)));
+    }
+
     public async Task<IReadOnlyList<Order>> GetCustomerOrdersAsync(Guid customerId, CancellationToken cancellationToken = default) =>
         await context.Orders.AsNoTracking().Where(order => order.CustomerId == customerId && !order.IsDeleted)
             .OrderByDescending(order => order.CreatedAt).Take(100).ToListAsync(cancellationToken);
@@ -126,7 +170,27 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
         {
             var quantity = group.Sum(item => item.Quantity);
             await context.ProductVariants.Where(variant => variant.Id == group.Key)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(variant => variant.StockQty, variant => variant.StockQty + quantity), cancellationToken);
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(variant => variant.StockQty, variant => variant.StockQty + quantity)
+                    .SetProperty(variant => variant.InventoryVersion, variant => variant.InventoryVersion + 1),
+                    cancellationToken);
+            var inventory = await context.ProductVariants.AsNoTracking()
+                .Where(variant => variant.Id == group.Key)
+                .Select(variant => new { variant.ProductId, variant.ShopId, variant.StockQty })
+                .SingleAsync(cancellationToken);
+            context.ProductInventoryMovements.Add(new ProductInventoryMovement
+            {
+                ProductId = inventory.ProductId,
+                VariantId = group.Key,
+                ShopId = inventory.ShopId,
+                ActorUserId = actorUserId,
+                SourceType = "OrderCancellation",
+                SourceId = order.Id.ToString(),
+                Delta = quantity,
+                PreviousQty = inventory.StockQty - quantity,
+                CurrentQty = inventory.StockQty,
+                Reason = "Inventory released after order cancellation"
+            });
         }
         context.WorkflowEvents.Add(new WorkflowEvent
         {
@@ -205,10 +269,34 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
             !Mooncake.EcommercePlatform.Application.Common.Helpers.SupplierVerificationHelper.CanFulfill(
                 eligibility.Owner, eligibility.Profile, targetOrder.CreatedAt))) return false;
         var now = DateTime.UtcNow;
+        CustomPackaging? packaging = null;
+        if (nextStatus == OrderStatus.Processing)
+        {
+            packaging = await context.CustomPackagings.FromSqlInterpolated(
+                    $"SELECT * FROM custom_packagings WHERE order_id = {orderId} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken);
+            if (packaging is not null && packaging.Status != CustomPackagingStatus.Approved)
+                return false;
+        }
         var changed = await context.Orders.Where(order => order.Id == orderId && order.Status == expectedStatus && !order.IsDeleted)
             .ExecuteUpdateAsync(setters => setters.SetProperty(order => order.Status, nextStatus)
                 .SetProperty(order => order.UpdatedAt, now).SetProperty(order => order.UpdatedBy, actorUserId), cancellationToken);
         if (changed != 1) return false;
+        if (packaging is not null)
+        {
+            packaging.Status = CustomPackagingStatus.InProduction;
+            packaging.UpdatedAt = now;
+            packaging.UpdatedBy = actorUserId;
+        }
+        if (nextStatus == OrderStatus.Delivered)
+        {
+            await context.CustomPackagings.Where(item => item.OrderId == orderId &&
+                    item.Status == CustomPackagingStatus.InProduction && !item.IsDeleted)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.Status, CustomPackagingStatus.Completed)
+                    .SetProperty(item => item.UpdatedAt, now)
+                    .SetProperty(item => item.UpdatedBy, actorUserId), cancellationToken);
+        }
         var orderInfo = await context.Orders.AsNoTracking().Where(order => order.Id == orderId)
             .Select(order => new { order.CustomerId, order.ShopId, order.OrderNumber }).FirstAsync(cancellationToken);
         var supplierUserId = await (from shop in context.Shops

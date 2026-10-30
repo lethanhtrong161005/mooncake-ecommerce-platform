@@ -56,6 +56,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             builder.Property(e => e.ShippingFee)
                 .HasPrecision(12, 2)
                 .HasColumnName("shipping_fee");
+            builder.Property(e => e.PackagingFee)
+                .HasPrecision(12, 2)
+                .HasDefaultValue(0)
+                .HasColumnName("packaging_fee");
             builder.Property(e => e.ShopId).HasColumnName("shop_id");
             builder.Property(e => e.Subtotal)
                 .HasPrecision(12, 2)

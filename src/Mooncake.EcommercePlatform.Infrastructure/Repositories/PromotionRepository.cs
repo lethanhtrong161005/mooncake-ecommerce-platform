@@ -30,6 +30,21 @@ public sealed class PromotionRepository(ApplicationDbContext context) : IPromoti
         context.PromotionRules.AnyAsync(promotion => promotion.ShopId == shopId && promotion.Name.ToLower() == name.ToLower()
             && !promotion.IsDeleted && (exceptPromotionId == null || promotion.Id != exceptPromotionId), cancellationToken);
 
+    public Task<bool> HasOverlappingRangeAsync(Guid shopId, Guid? productId, int minQty, int? maxQty,
+        DateTime? startAtUtc, DateTime? endAtUtc, Guid? exceptPromotionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var maximumQuantity = maxQty ?? int.MaxValue;
+        var start = startAtUtc ?? DateTime.UnixEpoch;
+        var end = endAtUtc ?? DateTime.MaxValue;
+        return context.PromotionRules.AnyAsync(promotion => promotion.ShopId == shopId &&
+            promotion.ProductId == productId && promotion.IsActive && !promotion.IsDeleted &&
+            (exceptPromotionId == null || promotion.Id != exceptPromotionId) &&
+            promotion.MinQty <= maximumQuantity && (promotion.MaxQty == null || promotion.MaxQty >= minQty) &&
+            (promotion.StartDate == null || promotion.StartDate < end) &&
+            (promotion.EndDate == null || promotion.EndDate > start), cancellationToken);
+    }
+
     public async Task SaveAsync(PromotionRule promotion, CancellationToken cancellationToken = default)
     {
         if (promotion.Id == Guid.Empty)

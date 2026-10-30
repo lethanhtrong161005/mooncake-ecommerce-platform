@@ -11,6 +11,14 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 [Route("api/v1/orders")]
 public sealed class OrdersController(IOrderService orderService) : BaseApiController
 {
+    /// <summary>Calculates an authoritative bulk price without creating an order.</summary>
+    [AllowAnonymous]
+    [HttpPost("quote-preview")]
+    public async Task<IActionResult> PreviewQuoteAsync([FromBody] OrderQuotePreviewRequest request,
+        CancellationToken cancellationToken) =>
+        Success(await orderService.PreviewQuoteAsync(request, cancellationToken),
+            Application.Common.Constant.B2BOrderingMessages.QuoteCalculated);
+
     /// <summary>Places a bulk order and reserves its variant inventory.</summary>
     [Authorize(Roles = "Customer")]
     [HttpPost]

@@ -74,8 +74,11 @@ public static class DependencyInjection
             }
         });
 
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
         services.AddHttpContextAccessor();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IUserManagementRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IGoogleAuthRepository, GoogleAuthRepository>();
         services.AddMemoryCache();
@@ -83,6 +86,7 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(10));
         services.AddHostedService<GoogleLoginAttemptCleanupService>();
         services.AddScoped<IAdminPlatformRepository, AdminPlatformRepository>();
+        services.AddScoped<IShopRepository, ShopRepository>();
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<IShopRepository, ShopRepository>();
         services.AddScoped<IProductCatalogRepository, ProductCatalogRepository>();

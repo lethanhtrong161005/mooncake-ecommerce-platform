@@ -12,7 +12,8 @@ public record CreateUserRequest
     [MaxLength(100)]
     public string? FullName { get; init; }
 
-    [MaxLength(20)]
+    [MaxLength(25)]
+    [RegularExpression(@"^(?:\+?84|0)[\s.\-()]*[35789](?:[\s.\-()]*[0-9]){8}$", ErrorMessage = "Phone number is invalid.")]
     public string? Phone { get; init; }
 
     [Required][MinLength(8)]

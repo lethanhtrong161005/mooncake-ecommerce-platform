@@ -20,7 +20,7 @@ public sealed record CreateRfqItemRequest
     [MaxLength(2000)] public string? Description { get; init; }
     [Range(1, int.MaxValue)] public int Quantity { get; init; }
     [Required, MaxLength(50)] public string Unit { get; init; } = string.Empty;
-    [Range(0, double.MaxValue)] public decimal? TargetPrice { get; init; }
+    [Range(typeof(decimal), "0", "999999999999")] public decimal? TargetPrice { get; init; }
     [MaxLength(4000)] public string? Specifications { get; init; }
     [MaxLength(1000)] public string? PackagingRequirements { get; init; }
     public bool NeedsCustomPackaging { get; init; }

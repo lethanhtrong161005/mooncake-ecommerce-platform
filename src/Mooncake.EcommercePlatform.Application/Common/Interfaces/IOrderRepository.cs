@@ -1,5 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.DTOs.Orders.Models;
+using Mooncake.EcommercePlatform.Application.DTOs.Orders.Responses;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 

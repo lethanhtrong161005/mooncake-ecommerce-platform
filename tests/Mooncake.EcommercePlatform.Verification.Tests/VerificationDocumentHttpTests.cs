@@ -46,6 +46,7 @@ public sealed class VerificationDocumentHttpTests(PostgresVerificationFixture fi
                 return new CloudinaryUploadResponse("https://example.test/private-document", "fixture/document", "raw", "authenticated", storedBytes.Length);
             });
         var builder = WebApplication.CreateBuilder();
+        builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddControllers().AddApplicationPart(typeof(SuppliersController).Assembly);
         builder.Services.AddAuthorization(); builder.Services.AddExceptionHandler<GlobalExceptionHandler>(); builder.Services.AddProblemDetails();

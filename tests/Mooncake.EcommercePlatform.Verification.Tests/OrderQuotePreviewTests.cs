@@ -45,6 +45,47 @@ public sealed class OrderQuotePreviewTests
         Assert.Equal(409, failure.StatusCode);
     }
 
+    [Fact]
+    public async Task PreviewRejectsEmptyItemListBeforeReadingRepository()
+    {
+        var fixture = CreateFixture(stock: 20);
+        var failure = await Assert.ThrowsAsync<HttpException>(() => fixture.Service.PreviewQuoteAsync(
+            new OrderQuotePreviewRequest { ShopId = fixture.Shop.Id, Items = [] }));
+
+        Assert.Equal(400, failure.StatusCode);
+        fixture.Repository.Verify(item => item.GetShopAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task PreviewRejectsQuoteForSuspendedShop()
+    {
+        var fixture = CreateFixture(stock: 20, status: ShopStatus.Suspended);
+        var failure = await Assert.ThrowsAsync<HttpException>(() => fixture.Service.PreviewQuoteAsync(Request(fixture, 10)));
+
+        Assert.Equal(409, failure.StatusCode);
+        fixture.Repository.Verify(item => item.GetProductsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task PreviewRejectsQuantityBelowProductMinimum()
+    {
+        var fixture = CreateFixture(stock: 200);
+        var failure = await Assert.ThrowsAsync<HttpException>(() => fixture.Service.PreviewQuoteAsync(Request(fixture, 9)));
+
+        Assert.Equal(400, failure.StatusCode);
+    }
+
+    [Fact]
+    public async Task PreviewRejectsVariantAttachedToAnotherProduct()
+    {
+        var fixture = CreateFixture(stock: 200);
+        fixture.Variant.ProductId = Guid.NewGuid();
+
+        var failure = await Assert.ThrowsAsync<HttpException>(() => fixture.Service.PreviewQuoteAsync(Request(fixture, 10)));
+
+        Assert.Equal(400, failure.StatusCode);
+    }
+
     private static OrderQuotePreviewRequest Request(QuoteFixture fixture, int quantity) => new()
     {
         ShopId = fixture.Shop.Id,
@@ -56,12 +97,12 @@ public sealed class OrderQuotePreviewTests
         }]
     };
 
-    private static QuoteFixture CreateFixture(int stock)
+    private static QuoteFixture CreateFixture(int stock, ShopStatus status = ShopStatus.Active)
     {
         var repository = new Mock<IOrderRepository>();
         var clock = new Mock<IDateTimeProvider>();
         clock.SetupGet(item => item.UtcNow).Returns(new DateTime(2026, 10, 29, 5, 0, 0, DateTimeKind.Utc));
-        var shop = new Shop { Id = Guid.NewGuid(), Status = ShopStatus.Active };
+        var shop = new Shop { Id = Guid.NewGuid(), Status = status };
         var product = new Product
         {
             Id = Guid.NewGuid(), ShopId = shop.Id, Name = "Corporate box", BasePrice = 100,

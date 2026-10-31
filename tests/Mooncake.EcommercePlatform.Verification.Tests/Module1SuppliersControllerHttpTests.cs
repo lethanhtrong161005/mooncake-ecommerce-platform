@@ -36,6 +36,7 @@ public sealed class Module1SuppliersControllerHttpTests
     private HttpClient CreateClient(string role = "Supplier", bool authenticated = true)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
 
         builder.Services.AddControllers()

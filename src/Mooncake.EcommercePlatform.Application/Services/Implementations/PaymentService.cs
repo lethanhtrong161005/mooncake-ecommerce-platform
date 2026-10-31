@@ -257,6 +257,10 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
         var payment = await repository.GetPaymentByNumberAsync(paymentNumber, cancellationToken);
         if (payment is null || payment.Method != PaymentMethod.VNPay) return ("01", "Order not found");
         if (payment.Status == PaymentStatus.Completed) return ("02", "Order already confirmed");
+        if (!parameters.TryGetValue("vnp_Amount", out var amountText) ||
+            !long.TryParse(amountText, NumberStyles.None, CultureInfo.InvariantCulture, out var receivedAmount) ||
+            receivedAmount != decimal.Round(payment.Amount * 100m, 0, MidpointRounding.AwayFromZero))
+            return ("04", "Invalid Amount");
         if (!parameters.TryGetValue("vnp_ResponseCode", out var responseCode) || responseCode != "00")
         {
             await repository.FailVnPayPaymentAsync(paymentNumber,

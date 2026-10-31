@@ -81,6 +81,7 @@ public sealed class Module5RfqsControllerHttpTests
     private HttpClient CreateClient(string? role, Guid? explicitUserId = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
 
         builder.Services.AddControllers()

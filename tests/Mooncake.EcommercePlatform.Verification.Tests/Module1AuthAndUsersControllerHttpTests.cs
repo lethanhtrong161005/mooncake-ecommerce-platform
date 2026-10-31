@@ -35,6 +35,7 @@ public sealed class Module1AuthAndUsersControllerHttpTests
     private HttpClient CreateClient(string role = "Customer", bool authenticated = true)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
 
         builder.Services.AddControllers()

@@ -16,10 +16,14 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
     public async Task<OrderQuotePreviewResponse> PreviewQuoteAsync(OrderQuotePreviewRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.Items is not { Count: >= 1 and <= 100 })
+            throw new HttpException(400, "A quote must contain between 1 and 100 items.");
         if (request.Items.Select(item => item.VariantId).Distinct().Count() != request.Items.Count)
             throw new HttpException(400, "Each product variant can appear only once in a quote.");
         var shop = await repository.GetShopAsync(request.ShopId, cancellationToken)
                    ?? throw new HttpException(404, "Shop was not found.");
+        if (shop.Status != ShopStatus.Active)
+            throw new HttpException(409, "The shop is not accepting orders.");
         var productIds = request.Items.Select(item => item.ProductId).Distinct().ToArray();
         var variantIds = request.Items.Select(item => item.VariantId).Distinct().ToArray();
         var products = await repository.GetProductsAsync(productIds, cancellationToken);

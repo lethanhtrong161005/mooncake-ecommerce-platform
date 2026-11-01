@@ -45,6 +45,7 @@ public sealed class Module11SystemOperationsHttpTests
     var userId = role == "Admin" ? AdminUserId : CustomerUserId;
 
     var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+    builder.Logging.ClearProviders();
     builder.WebHost.UseUrls("http://127.0.0.1:0");
 
     builder.Services.AddControllers()

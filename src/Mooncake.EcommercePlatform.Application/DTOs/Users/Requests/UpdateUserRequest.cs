@@ -11,7 +11,8 @@ public record UpdateUserRequest
     [Required][EmailAddress][MaxLength(255)]
     public string Email { get; init; } = string.Empty;
 
-    [MaxLength(20)]
+    [MaxLength(25)]
+    [RegularExpression(@"^(?:\+?84|0)[\s.\-()]*[35789](?:[\s.\-()]*[0-9]){8}$", ErrorMessage = "Phone number is invalid.")]
     public string? Phone { get; init; }
 
     [MaxLength(500)]

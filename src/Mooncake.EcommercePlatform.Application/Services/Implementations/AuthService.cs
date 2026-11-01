@@ -14,10 +14,15 @@ using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Application.DTOs.Auth.Requests;
+using Mooncake.EcommercePlatform.Application.DTOs.Auth.Models;
 using Mooncake.EcommercePlatform.Application.DTOs.Auth.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
+using User = Mooncake.EcommercePlatform.Application.DTOs.Auth.Models.AuthUserData;
+using RefreshSession = Mooncake.EcommercePlatform.Application.DTOs.Auth.Models.AuthRefreshSessionData;
+using RefreshToken = Mooncake.EcommercePlatform.Application.DTOs.Auth.Models.AuthRefreshTokenData;
+using GoogleLoginAttempt = Mooncake.EcommercePlatform.Application.DTOs.Auth.Models.GoogleLoginAttemptData;
 
 /// <summary>Implements account registration, verification and token lifecycle use cases.</summary>
 public sealed class AuthService(
@@ -181,7 +186,7 @@ public sealed class AuthService(
     public async Task<AuthResponse> RefreshAsync(string refreshToken, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default)
     {
         var current = await userRepository.GetRefreshSessionByHashAsync(HashToken(refreshToken), cancellationToken);
-        if (current is null || current.RevokedAt is not null || current.ExpiresAt <= dateTimeProvider.UtcNow)
+        if (current is null || current.RevokedAtUtc is not null || current.ExpiresAtUtc <= dateTimeProvider.UtcNow)
             throw new HttpException(401, "The refresh token is invalid or expired.");
         var user = await userRepository.GetByIdAsync(current.UserId, cancellationToken);
         if (user is null || !user.IsActive || user.EmailVerifiedAt is null)
@@ -250,7 +255,7 @@ public sealed class AuthService(
             Id = Guid.NewGuid(),
             UserId = userId,
             TokenHash = HashToken(token),
-            ExpiresAt = dateTimeProvider.UtcNow.Add(RefreshLifetime),
+            ExpiresAtUtc = dateTimeProvider.UtcNow.Add(RefreshLifetime),
             CreatedFromIp = ipAddress,
             UserAgent = userAgent
         };

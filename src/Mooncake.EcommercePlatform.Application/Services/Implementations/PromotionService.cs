@@ -5,9 +5,9 @@ using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Promotions.Requests;
+using Mooncake.EcommercePlatform.Application.DTOs.Promotions.Models;
 using Mooncake.EcommercePlatform.Application.DTOs.Promotions.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
-using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 
 /// <summary>Implements supplier-owned quantity-tier promotions.</summary>
@@ -15,60 +15,53 @@ public sealed class PromotionService(IPromotionRepository repository, IDateTimeP
 {
     public async Task<IReadOnlyList<PromotionResponse>> GetMineAsync(Guid supplierUserId, CancellationToken cancellationToken = default)
     {
-        var shop = await GetVerifiedShopAsync(supplierUserId, cancellationToken);
-        var promotions = await repository.GetForShopAsync(shop.Id, cancellationToken);
+        var shopId = await GetVerifiedShopIdAsync(supplierUserId, cancellationToken);
+        var promotions = await repository.GetForShopAsync(shopId, cancellationToken);
         return promotions.Select(PromotionResponseHelper.ToResponse).ToList();
     }
 
     public async Task<PromotionResponse> CreateAsync(Guid supplierUserId, SavePromotionRequest request, CancellationToken cancellationToken = default)
     {
-        var shop = await GetVerifiedShopAsync(supplierUserId, cancellationToken);
-        await ValidateAsync(shop.Id, request, null, cancellationToken);
-        var promotion = BuildPromotion(shop.Id, request, supplierUserId);
+        var shopId = await GetVerifiedShopIdAsync(supplierUserId, cancellationToken);
+        await ValidateAsync(shopId, request, null, cancellationToken);
+        var promotion = BuildPromotion(shopId, request, supplierUserId);
         await repository.SaveAsync(promotion, cancellationToken);
         return PromotionResponseHelper.ToResponse(promotion);
     }
 
     public async Task<PromotionResponse> UpdateAsync(Guid supplierUserId, Guid promotionId, SavePromotionRequest request, CancellationToken cancellationToken = default)
     {
-        var shop = await GetVerifiedShopAsync(supplierUserId, cancellationToken);
+        var shopId = await GetVerifiedShopIdAsync(supplierUserId, cancellationToken);
         var promotion = await repository.GetAsync(promotionId, cancellationToken)
                         ?? throw new HttpException(404, "Promotion was not found.");
-        if (promotion.ShopId != shop.Id)
+        if (promotion.ShopId != shopId)
             throw new HttpException(404, "Promotion was not found.");
-        await ValidateAsync(shop.Id, request, promotionId, cancellationToken);
-
-        promotion.Name = request.Name.Trim();
-        promotion.Description = request.Description?.Trim();
-        promotion.ProductId = request.ProductId;
-        promotion.MinQty = request.MinQty;
-        promotion.MaxQty = request.MaxQty;
-        promotion.DiscountType = request.DiscountType;
-        promotion.DiscountValue = request.DiscountValue;
-        promotion.StartDate = request.StartAtUtc?.UtcDateTime;
-        promotion.EndDate = request.EndAtUtc?.UtcDateTime;
-        promotion.IsActive = true;
-        promotion.UpdatedBy = supplierUserId;
-        promotion.UpdatedAt = dateTimeProvider.UtcNow;
+        await ValidateAsync(shopId, request, promotionId, cancellationToken);
+        promotion = promotion with
+        {
+            Name = request.Name.Trim(), Description = request.Description?.Trim(), ProductId = request.ProductId,
+            MinQty = request.MinQty, MaxQty = request.MaxQty, DiscountType = request.DiscountType,
+            DiscountValue = request.DiscountValue, StartDateUtc = request.StartAtUtc?.UtcDateTime,
+            EndDateUtc = request.EndAtUtc?.UtcDateTime, IsActive = true, UpdatedBy = supplierUserId,
+            UpdatedAtUtc = dateTimeProvider.UtcNow
+        };
         await repository.SaveAsync(promotion, cancellationToken);
         return PromotionResponseHelper.ToResponse(promotion);
     }
 
     public async Task DeactivateAsync(Guid supplierUserId, Guid promotionId, CancellationToken cancellationToken = default)
     {
-        var shop = await GetVerifiedShopAsync(supplierUserId, cancellationToken);
+        var shopId = await GetVerifiedShopIdAsync(supplierUserId, cancellationToken);
         var promotion = await repository.GetAsync(promotionId, cancellationToken)
                         ?? throw new HttpException(404, "Promotion was not found.");
-        if (promotion.ShopId != shop.Id)
+        if (promotion.ShopId != shopId)
             throw new HttpException(404, "Promotion was not found.");
-        promotion.IsActive = false;
-        promotion.UpdatedBy = supplierUserId;
-        promotion.UpdatedAt = dateTimeProvider.UtcNow;
+        promotion = promotion with { IsActive = false, UpdatedBy = supplierUserId, UpdatedAtUtc = dateTimeProvider.UtcNow };
         await repository.SaveAsync(promotion, cancellationToken);
     }
 
-    private async Task<Shop> GetVerifiedShopAsync(Guid supplierUserId, CancellationToken cancellationToken) =>
-        await repository.GetVerifiedShopAsync(supplierUserId, cancellationToken)
+    private async Task<Guid> GetVerifiedShopIdAsync(Guid supplierUserId, CancellationToken cancellationToken) =>
+        await repository.GetVerifiedShopIdAsync(supplierUserId, cancellationToken)
         ?? throw new HttpException(403, "A verified supplier with an active shop is required.");
 
     private async Task ValidateAsync(Guid shopId, SavePromotionRequest request, Guid? exceptPromotionId, CancellationToken cancellationToken)
@@ -95,21 +88,9 @@ public sealed class PromotionService(IPromotionRepository repository, IDateTimeP
             throw new HttpException(409, B2BOrderingMessages.PromotionRangeOverlap);
     }
 
-    private PromotionRule BuildPromotion(Guid shopId, SavePromotionRequest request, Guid supplierUserId) => new()
-    {
-        ShopId = shopId,
-        ProductId = request.ProductId,
-        Name = request.Name.Trim(),
-        Description = request.Description?.Trim(),
-        MinQty = request.MinQty,
-        MaxQty = request.MaxQty,
-        DiscountType = request.DiscountType,
-        DiscountValue = request.DiscountValue,
-        StartDate = request.StartAtUtc?.UtcDateTime,
-        EndDate = request.EndAtUtc?.UtcDateTime,
-        IsActive = true,
-        CreatedBy = supplierUserId,
-        CreatedAt = dateTimeProvider.UtcNow,
-        UpdatedAt = dateTimeProvider.UtcNow
-    };
+    private PromotionData BuildPromotion(Guid shopId, SavePromotionRequest request, Guid supplierUserId) => new(
+        Guid.NewGuid(), shopId, request.ProductId, request.Name.Trim(), request.Description?.Trim(),
+        request.MinQty, request.MaxQty, request.DiscountType, request.DiscountValue,
+        request.StartAtUtc?.UtcDateTime, request.EndAtUtc?.UtcDateTime, true, supplierUserId, null,
+        dateTimeProvider.UtcNow, dateTimeProvider.UtcNow);
 }

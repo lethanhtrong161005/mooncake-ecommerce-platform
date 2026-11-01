@@ -17,7 +17,8 @@ public sealed record CreateOrderRequest
     [Required, MaxLength(255)]
     public string RecipientName { get; init; } = string.Empty;
 
-    [Required, Phone, MaxLength(20)]
+    [Required, Phone, MaxLength(25)]
+    [RegularExpression(@"^(?:\+?84|0)[\s.\-()]*[35789](?:[\s.\-()]*[0-9]){8}$", ErrorMessage = "Phone number is invalid.")]
     public string RecipientPhone { get; init; } = string.Empty;
 
     [MaxLength(2000)]

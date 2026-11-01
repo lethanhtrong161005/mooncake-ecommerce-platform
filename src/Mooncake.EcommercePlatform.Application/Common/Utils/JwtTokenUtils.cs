@@ -5,12 +5,12 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using Mooncake.EcommercePlatform.Application.Common.Options;
-using Mooncake.EcommercePlatform.Domain.Entities;
+using Mooncake.EcommercePlatform.Application.DTOs.Auth.Models;
 
 /// <summary>Creates short-lived signed access tokens.</summary>
 public static class JwtTokenUtils
 {
-    public static string Generate(User user, JwtOptions options, DateTime nowUtc)
+    public static string Generate(AuthUserData user, JwtOptions options, DateTime nowUtc)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key));
         var claims = new[]

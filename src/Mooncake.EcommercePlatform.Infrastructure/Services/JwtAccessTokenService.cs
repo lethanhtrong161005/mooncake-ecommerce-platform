@@ -5,7 +5,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
-using Mooncake.EcommercePlatform.Domain.Entities;
+using Mooncake.EcommercePlatform.Application.DTOs.Auth.Models;
 
 /// <summary>Creates short-lived HMAC-signed JWT access tokens.</summary>
 public sealed class JwtAccessTokenService : IAccessTokenService
@@ -24,7 +24,7 @@ public sealed class JwtAccessTokenService : IAccessTokenService
 
     public DateTime GetExpirationUtc() => DateTime.UtcNow.Add(TokenLifetime);
 
-    public string CreateToken(User user)
+    public string CreateToken(AuthUserData user)
     {
         var claims = new[]
         {

@@ -4,6 +4,7 @@ using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Responses;
+using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
@@ -231,14 +232,14 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
         return await ToBidResponseAsync(bid, cancellationToken);
     }
 
-    public async Task<Contract> AwardBidAsync(Guid customerUserId, Guid rfqId, Guid bidId, AwardBidRequest request, CancellationToken cancellationToken = default)
+    public async Task<ContractResponse> AwardBidAsync(Guid customerUserId, Guid rfqId, Guid bidId, AwardBidRequest request, CancellationToken cancellationToken = default)
     {
         var rfq = await GetOwnedRfqAsync(customerUserId, rfqId, cancellationToken);
         if (rfq.Status == RfqStatus.Awarded)
         {
             if (rfq.AwardedBidId != bidId) throw new HttpException(409, "A different bid has already been awarded for this RFQ.");
-            return await repository.AwardBidAsync(rfqId, bidId, request.SelectionNote?.Trim(), customerUserId, cancellationToken)
-                   ?? throw new HttpException(409, "The awarded contract could not be retrieved.");
+            return ToContractResponse(await repository.AwardBidAsync(rfqId, bidId, request.SelectionNote?.Trim(), customerUserId, cancellationToken)
+                   ?? throw new HttpException(409, "The awarded contract could not be retrieved."));
         }
         if (rfq.Status is not (RfqStatus.Open or RfqStatus.Closed)) throw new HttpException(409, "This RFQ has already been cancelled.");
         var invitations = await repository.GetInvitationsAsync(rfqId, cancellationToken);
@@ -250,9 +251,15 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
             throw new HttpException(404, "A submitted bid for this RFQ was not found.");
         if (selected.SubmittedAt.AddDays(selected.ValidityDays) <= clock.UtcNow)
             throw new HttpException(409, "This bid has expired.");
-        return await repository.AwardBidAsync(rfqId, bidId, request.SelectionNote?.Trim(), customerUserId, cancellationToken)
-               ?? throw new HttpException(409, "The RFQ or bid changed while it was being awarded. Refresh and try again.");
+        return ToContractResponse(await repository.AwardBidAsync(rfqId, bidId, request.SelectionNote?.Trim(), customerUserId, cancellationToken)
+               ?? throw new HttpException(409, "The RFQ or bid changed while it was being awarded. Refresh and try again."));
     }
+
+    private static ContractResponse ToContractResponse(Contract contract) => new(
+        contract.Id, contract.ContractNumber, contract.RfqId, contract.Title, contract.TotalValue,
+        contract.DeliveryDeadline, contract.TermsAndConditions, contract.Status,
+        contract.SignedByCustomerAt, contract.SignedBySupplierAt, contract.SignedDocumentSha256,
+        contract.DepositAmount, contract.DepositPaidAt, contract.CompletedAt);
 
     private async Task<RfqResponse> ToResponseAsync(RequestForQuotation rfq, bool hideTargetPrice, CancellationToken cancellationToken)
     {

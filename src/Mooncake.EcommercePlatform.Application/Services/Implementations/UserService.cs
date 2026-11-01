@@ -6,8 +6,8 @@ using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Responses;
+using Mooncake.EcommercePlatform.Application.DTOs.Auth.Models;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
-using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
 /// <summary>
@@ -44,7 +44,7 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
         if (phone is not null && await userRepository.GetByPhoneAsync(phone, cancellationToken) is not null)
             throw new HttpException(409, PhoneConflictMessage);
 
-        var user = new User
+        var user = new AuthUserData
         {
             Email = request.Email,
             FullName = request.FullName,

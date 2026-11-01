@@ -13,6 +13,7 @@ using Moq;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Responses;
+using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
@@ -80,6 +81,7 @@ public sealed class Module5RfqsControllerHttpTests
     private HttpClient CreateClient(string? role, Guid? explicitUserId = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
 
         builder.Services.AddControllers()
@@ -526,15 +528,9 @@ public sealed class Module5RfqsControllerHttpTests
         var client = CreateClient("Customer");
         var contractId = Guid.NewGuid();
 
-        var contract = new Contract
-        {
-            Id = contractId,
-            ContractNumber = "HD-2026-TEST01",
-            RfqId = RfqId,
-            CustomerId = CustomerId,
-            SupplierId = SupplierId,
-            Status = ContractStatus.Draft
-        };
+        var contract = new ContractResponse(
+            contractId, "HD-2026-TEST01", RfqId, null, null, null, null,
+            ContractStatus.Draft, null, null, null);
 
         rfqService.Setup(s => s.AwardBidAsync(CustomerId, RfqId, BidId, It.IsAny<AwardBidRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(contract);

@@ -37,6 +37,7 @@ public sealed class ShopHttpTests(PostgresVerificationFixture fixture) : IClassF
     {
         var (owner, admin) = await new ShopPostgresTests(fixture).SeedAsync();
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddControllers().AddApplicationPart(typeof(ShopsController).Assembly)
             .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));

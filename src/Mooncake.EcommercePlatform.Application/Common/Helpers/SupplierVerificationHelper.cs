@@ -8,6 +8,7 @@ using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.DTOs.Suppliers.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Suppliers.Responses;
+using Mooncake.EcommercePlatform.Application.DTOs.Auth.Models;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using C = Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants;
@@ -24,6 +25,19 @@ public static class SupplierVerificationHelper
         (CanSell(owner, profile) || (profile.RevokedAtUtc.HasValue &&
             transactionCreatedAt < profile.RevokedAtUtc.Value));
     public static Mooncake.EcommercePlatform.Application.DTOs.Authen.Responses.AuthenUserResponse AuthUser(User user, SupplierProfile? profile)
+    {
+        var eligible = user.IsActive && !user.IsDeleted && user.Role != UserRole.Admin &&
+            (user.RequestedRole == UserRole.Supplier || user.Role == UserRole.Supplier);
+        var verified = eligible && profile?.VerificationStatus == SupplierVerificationStatus.Verified &&
+            user.Role == UserRole.Supplier;
+        var canSubmit = eligible && user.EmailVerifiedAt.HasValue && (profile?.CurrentSubmissionId == null ||
+            profile.VerificationStatus is SupplierVerificationStatus.Rejected or SupplierVerificationStatus.Revoked);
+        return new(user.Id, user.Phone, user.FullName, user.Role, user.RequestedRole,
+            new(eligible, canSubmit, verified, verified, eligible && profile?.RevokedAtUtc != null),
+            eligible ? new(profile?.Id, profile?.CurrentSubmissionId == null ? C.NotSubmitted : profile.VerificationStatus.ToString(),
+                profile?.CurrentSubmissionId == null ? null : profile.VerificationStatus, profile?.Version ?? 0) : null);
+    }
+    public static Mooncake.EcommercePlatform.Application.DTOs.Authen.Responses.AuthenUserResponse AuthUser(AuthUserData user, SupplierProfile? profile)
     {
         var eligible = user.IsActive && !user.IsDeleted && user.Role != UserRole.Admin &&
             (user.RequestedRole == UserRole.Supplier || user.Role == UserRole.Supplier);

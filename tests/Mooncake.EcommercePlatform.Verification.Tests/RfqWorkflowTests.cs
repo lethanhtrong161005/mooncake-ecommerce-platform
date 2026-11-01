@@ -212,5 +212,84 @@ public sealed class RfqWorkflowTests
 
         Assert.Equal(409, ex.StatusCode);
     }
+
+    [Fact]
+    public async Task SubmitBidAsync_CreatesBidWithServerQuantityAndCalculatedSubtotal()
+    {
+        var rfqId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        Bid? savedBid = null;
+        IReadOnlyList<BidItem>? savedItems = null;
+        repository.Setup(r => r.GetVerifiedSupplierProfileIdAsync(supplierUserId, default)).ReturnsAsync(supplierProfileId);
+        repository.Setup(r => r.IsActiveSupplierAsync(supplierProfileId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.GetRfqAsync(rfqId, default)).ReturnsAsync(new RequestForQuotation
+        {
+            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(2)
+        });
+        repository.Setup(r => r.GetInvitationAsync(rfqId, supplierProfileId, default)).ReturnsAsync(new RfqInvitation
+        {
+            RfqId = rfqId, SupplierId = supplierProfileId, Status = RfqInvitationStatus.Invited
+        });
+        repository.Setup(r => r.GetRfqItemsAsync(rfqId, default)).ReturnsAsync([
+            new RfqItem { Id = itemId, RfqId = rfqId, ProductName = "Mooncake box", Quantity = 12, Unit = "Box" }
+        ]);
+        repository.Setup(r => r.GetBidsAsync(rfqId, supplierProfileId, default)).ReturnsAsync([]);
+        repository.Setup(r => r.GetBidItemsAsync(It.IsAny<Guid>(), default)).ReturnsAsync([]);
+        repository.Setup(r => r.CreateBidAsync(It.IsAny<Bid>(), It.IsAny<IReadOnlyList<BidItem>>(), default))
+            .Callback<Bid, IReadOnlyList<BidItem>, CancellationToken>((bid, items, _) =>
+            {
+                savedBid = bid;
+                savedItems = items;
+            }).ReturnsAsync(true);
+
+        var service = new RfqService(repository.Object, clock.Object);
+        var response = await service.SubmitBidAsync(supplierUserId, rfqId, new SubmitBidRequest
+        {
+            EstimatedDeliveryDays = 7,
+            ValidityDays = 30,
+            Items = [new SubmitBidItemRequest { RfqItemId = itemId, UnitPrice = 125000m }]
+        });
+
+        Assert.NotNull(savedBid);
+        Assert.Equal(BidStatus.Submitted, savedBid.Status);
+        Assert.Equal(1500000m, savedBid.TotalPrice);
+        Assert.Equal(1500000m, response.TotalPrice);
+        var savedItem = Assert.Single(savedItems!);
+        Assert.Equal(12, savedItem.Quantity);
+        Assert.Equal(1500000m, savedItem.Subtotal);
+        repository.Verify(r => r.CreateBidAsync(It.IsAny<Bid>(), It.IsAny<IReadOnlyList<BidItem>>(), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task SubmitBidAsync_RejectsBidThatDoesNotPriceEveryRfqItem()
+    {
+        var rfqId = Guid.NewGuid();
+        var firstItemId = Guid.NewGuid();
+        repository.Setup(r => r.GetVerifiedSupplierProfileIdAsync(supplierUserId, default)).ReturnsAsync(supplierProfileId);
+        repository.Setup(r => r.IsActiveSupplierAsync(supplierProfileId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.GetRfqAsync(rfqId, default)).ReturnsAsync(new RequestForQuotation
+        {
+            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(2)
+        });
+        repository.Setup(r => r.GetInvitationAsync(rfqId, supplierProfileId, default)).ReturnsAsync(new RfqInvitation
+        {
+            RfqId = rfqId, SupplierId = supplierProfileId, Status = RfqInvitationStatus.Invited
+        });
+        repository.Setup(r => r.GetRfqItemsAsync(rfqId, default)).ReturnsAsync([
+            new RfqItem { Id = firstItemId, RfqId = rfqId, ProductName = "Mooncake box", Quantity = 12, Unit = "Box" },
+            new RfqItem { Id = Guid.NewGuid(), RfqId = rfqId, ProductName = "Tea set", Quantity = 5, Unit = "Set" }
+        ]);
+
+        var service = new RfqService(repository.Object, clock.Object);
+        var error = await Assert.ThrowsAsync<HttpException>(() => service.SubmitBidAsync(supplierUserId, rfqId,
+            new SubmitBidRequest
+            {
+                EstimatedDeliveryDays = 7,
+                Items = [new SubmitBidItemRequest { RfqItemId = firstItemId, UnitPrice = 125000m }]
+            }));
+
+        Assert.Equal(400, error.StatusCode);
+        repository.Verify(r => r.CreateBidAsync(It.IsAny<Bid>(), It.IsAny<IReadOnlyList<BidItem>>(), default), Times.Never);
+    }
 }
 

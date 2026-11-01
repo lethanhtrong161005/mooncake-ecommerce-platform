@@ -15,7 +15,8 @@ public sealed record RegisterRequest
     [MaxLength(100)]
     public string? FullName { get; init; }
 
-    [Required, Phone, MaxLength(20)]
+    [Required, Phone, MaxLength(25)]
+    [RegularExpression(@"^(?:\+?84|0)[\s.\-()]*[35789](?:[\s.\-()]*[0-9]){8}$", ErrorMessage = "Phone number is invalid.")]
     public string Phone { get; init; } = string.Empty;
 
     [Required]

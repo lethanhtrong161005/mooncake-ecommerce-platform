@@ -99,6 +99,7 @@ public static class DependencyInjection
             .RemoveAllLoggers();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<ICustomPackagingRepository, CustomPackagingRepository>();
+        services.AddScoped<IPackagingTemplateRepository, PackagingTemplateRepository>();
         services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRfqRepository, RfqRepository>();

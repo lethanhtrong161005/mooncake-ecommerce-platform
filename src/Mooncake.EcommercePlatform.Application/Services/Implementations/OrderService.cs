@@ -11,7 +11,10 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 using System.Text.RegularExpressions;
 
 /// <summary>Implements bulk ordering and order status transitions.</summary>
-public sealed class OrderService(IOrderRepository repository, IDateTimeProvider dateTimeProvider) : IOrderService
+public sealed class OrderService(
+    IOrderRepository repository,
+    IDateTimeProvider dateTimeProvider,
+    ICustomPackagingService? customPackagingService = null) : IOrderService
 {
     public async Task<OrderQuotePreviewResponse> PreviewQuoteAsync(OrderQuotePreviewRequest request,
         CancellationToken cancellationToken = default)
@@ -168,6 +171,19 @@ public sealed class OrderService(IOrderRepository repository, IDateTimeProvider 
             }
             throw new HttpException(409, "Inventory changed while placing the order. Review the quantities and try again.");
         }
+
+        if (request.CustomPackaging != null && customPackagingService != null)
+        {
+            try
+            {
+                await customPackagingService.CreateAsync(customerId, order.Id, request.CustomPackaging, cancellationToken);
+            }
+            catch
+            {
+                // Soft-fail: order is already securely placed
+            }
+        }
+
         return OrderResponseHelper.ToResponse(order, items);
     }
 

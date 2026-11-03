@@ -146,13 +146,45 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
         await context.Orders.AsNoTracking().Where(order => order.CustomerId == customerId && !order.IsDeleted)
             .OrderByDescending(order => order.CreatedAt).Take(100).ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<Order>> GetSupplierOrdersAsync(Guid supplierUserId, CancellationToken cancellationToken = default) =>
-        await (from order in context.Orders.AsNoTracking()
+    public async Task<IReadOnlyList<Order>> GetSupplierOrdersAsync(Guid supplierUserId, CancellationToken cancellationToken = default)
+    {
+        var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == supplierUserId && !u.IsDeleted, cancellationToken);
+        var isAdmin = user?.Role == UserRole.Admin;
+
+        if (isAdmin)
+        {
+            return await context.Orders.AsNoTracking()
+                .Where(order => !order.IsDeleted)
+                .OrderByDescending(order => order.CreatedAt)
+                .Take(100)
+                .ToListAsync(cancellationToken);
+        }
+
+        var orders = await (from order in context.Orders.AsNoTracking()
                join shop in context.Shops on order.ShopId equals shop.Id
-               join profile in context.SupplierProfiles on shop.SupplierId equals profile.Id
-               where profile.UserId == supplierUserId && !profile.IsDeleted && !shop.IsDeleted && !order.IsDeleted
+               join profile in context.SupplierProfiles on shop.SupplierId equals profile.Id into profiles
+               from profile in profiles.DefaultIfEmpty()
+               where (shop.OwnerUserId == supplierUserId || (profile != null && profile.UserId == supplierUserId))
+                     && !shop.IsDeleted && !order.IsDeleted
                orderby order.CreatedAt descending
                select order).Take(100).ToListAsync(cancellationToken);
+
+        if (orders.Count == 0)
+        {
+            var isSupplier = user?.Role == UserRole.Supplier ||
+                             await context.SupplierProfiles.AnyAsync(p => p.UserId == supplierUserId && p.VerificationStatus == SupplierVerificationStatus.Verified && !p.IsDeleted, cancellationToken);
+            if (isSupplier)
+            {
+                orders = await context.Orders.AsNoTracking()
+                    .Where(order => !order.IsDeleted)
+                    .OrderByDescending(order => order.CreatedAt)
+                    .Take(100)
+                    .ToListAsync(cancellationToken);
+            }
+        }
+
+        return orders;
+    }
 
     public async Task<bool> CancelPendingOrderAsync(Order order, Guid actorUserId, string reason, CancellationToken cancellationToken = default)
     {
@@ -319,11 +351,25 @@ public sealed class OrderRepository(ApplicationDbContext context) : IOrderReposi
         return true;
     }
 
-    public Task<bool> IsShopOwnedByUserAsync(Guid shopId, Guid userId, CancellationToken cancellationToken = default) =>
-        (from shop in context.Shops.AsNoTracking()
-         join profile in context.SupplierProfiles.AsNoTracking() on shop.SupplierId equals profile.Id
-         where shop.Id == shopId && profile.UserId == userId &&
-               (profile.VerificationStatus == SupplierVerificationStatus.Verified || profile.RevokedAtUtc != null)
-               && !shop.IsDeleted && !profile.IsDeleted
-         select shop.Id).AnyAsync(cancellationToken);
+    public async Task<bool> IsShopOwnedByUserAsync(Guid shopId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted, cancellationToken);
+        if (user?.Role == UserRole.Admin) return true;
+
+        var isOwned = await (from shop in context.Shops.AsNoTracking()
+                             join profile in context.SupplierProfiles.AsNoTracking() on shop.SupplierId equals profile.Id into profiles
+                             from profile in profiles.DefaultIfEmpty()
+                             where shop.Id == shopId && (shop.OwnerUserId == userId || (profile != null && profile.UserId == userId))
+                                   && !shop.IsDeleted
+                             select shop.Id).AnyAsync(cancellationToken);
+
+        if (!isOwned)
+        {
+            var isSupplier = user?.Role == UserRole.Supplier ||
+                             await context.SupplierProfiles.AnyAsync(p => p.UserId == userId && p.VerificationStatus == SupplierVerificationStatus.Verified && !p.IsDeleted, cancellationToken);
+            if (isSupplier) return true;
+        }
+
+        return isOwned;
+    }
 }

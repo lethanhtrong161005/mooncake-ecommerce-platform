@@ -4,14 +4,37 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Packaging.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 
 /// <summary>Customer and supplier custom packaging collaboration endpoints.</summary>
 [Authorize]
 [Route("api/v1/orders/{orderId:guid}/custom-packaging")]
-public sealed class CustomPackagingController(ICustomPackagingService service) : BaseApiController
+public sealed class CustomPackagingController(
+    ICustomPackagingService service,
+    ICloudinaryStorageService? cloudinaryStorage = null) : BaseApiController
 {
+    /// <summary>Uploads a customer corporate logo to Cloudinary for custom packaging.</summary>
+    [AllowAnonymous]
+    [HttpPost("/api/v1/custom-packaging/upload-logo")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadLogoAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "Vui lòng chọn tệp ảnh logo." });
+
+        if (file.Length > 10 * 1024 * 1024)
+            return BadRequest(new { message = "Kích thước tệp ảnh không được vượt quá 10MB." });
+
+        if (cloudinaryStorage is null)
+            return BadRequest(new { message = "Dịch vụ tải ảnh chưa sẵn sàng." });
+
+        await using var stream = file.OpenReadStream();
+        var upload = await cloudinaryStorage.UploadImageAsync(stream, file.FileName, false, cancellationToken);
+        return Success(new { url = upload.Url, publicId = upload.PublicId }, "Tải lên logo doanh nghiệp thành công.");
+    }
+
     /// <summary>Creates the custom packaging brief for a customer order.</summary>
     [Authorize(Roles = "Customer")]
     [HttpPost]
@@ -22,7 +45,7 @@ public sealed class CustomPackagingController(ICustomPackagingService service) :
             B2BOrderingMessages.PackagingCreated);
 
     /// <summary>Returns a packaging brief and its complete revision timeline.</summary>
-    [Authorize(Roles = "Customer,Supplier")]
+    [Authorize(Roles = "Customer,Supplier,Admin")]
     [HttpGet]
     public async Task<IActionResult> GetAsync(Guid orderId, CancellationToken cancellationToken) =>
         Success(await service.GetAsync(GetCurrentUserId(), IsSupplier(), orderId, cancellationToken),
@@ -47,5 +70,5 @@ public sealed class CustomPackagingController(ICustomPackagingService service) :
 
     private Guid GetCurrentUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    private bool IsSupplier() => User.IsInRole("Supplier") || User.HasClaim("supplier_fulfillment", "true");
+    private bool IsSupplier() => User.IsInRole("Supplier") || User.IsInRole("Admin") || User.HasClaim("supplier_fulfillment", "true");
 }

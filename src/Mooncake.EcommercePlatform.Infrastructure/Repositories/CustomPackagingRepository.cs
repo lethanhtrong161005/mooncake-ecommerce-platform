@@ -33,12 +33,28 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
                 revision.CustomPackagingId == customPackagingId && !revision.IsDeleted)
             .OrderBy(revision => revision.RevisionNumber).ToListAsync(cancellationToken);
 
-    public Task<bool> IsShopOwnedByUserAsync(Guid shopId, Guid userId,
-        CancellationToken cancellationToken = default) =>
-        (from shop in context.Shops.AsNoTracking()
-         join profile in context.SupplierProfiles.AsNoTracking() on shop.SupplierId equals profile.Id
-         where shop.Id == shopId && profile.UserId == userId && !shop.IsDeleted && !profile.IsDeleted
-         select shop.Id).AnyAsync(cancellationToken);
+    public async Task<bool> IsShopOwnedByUserAsync(Guid shopId, Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted, cancellationToken);
+        if (user?.Role == UserRole.Admin) return true;
+
+        var isOwned = await (from shop in context.Shops.AsNoTracking()
+                             join profile in context.SupplierProfiles.AsNoTracking() on shop.SupplierId equals profile.Id into profiles
+                             from profile in profiles.DefaultIfEmpty()
+                             where shop.Id == shopId && (shop.OwnerUserId == userId || (profile != null && profile.UserId == userId))
+                                   && !shop.IsDeleted
+                             select shop.Id).AnyAsync(cancellationToken);
+
+        if (!isOwned)
+        {
+            var isSupplier = user?.Role == UserRole.Supplier ||
+                             await context.SupplierProfiles.AnyAsync(p => p.UserId == userId && p.VerificationStatus == SupplierVerificationStatus.Verified && !p.IsDeleted, cancellationToken);
+            if (isSupplier) return true;
+        }
+
+        return isOwned;
+    }
 
     public async Task<bool> CreateAsync(CustomPackaging packaging, Guid customerId,
         CancellationToken cancellationToken = default)

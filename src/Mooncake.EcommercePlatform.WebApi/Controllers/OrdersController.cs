@@ -53,13 +53,13 @@ public sealed class OrdersController(IOrderService orderService) : BaseApiContro
         Success(await orderService.CancelAsync(GetCurrentUserId(), orderId, request, cancellationToken), "Order cancelled successfully.");
 
     /// <summary>Confirms a pending order received by the authenticated supplier.</summary>
-    [Authorize(Roles = "Supplier")]
+    [Authorize(Policy = "SupplierExistingFulfillment")]
     [HttpPost("{orderId:guid}/confirm")]
     public async Task<IActionResult> ConfirmAsync(Guid orderId, CancellationToken cancellationToken) =>
         Success(await orderService.ConfirmAsync(GetCurrentUserId(), orderId, cancellationToken), "Order confirmed successfully.");
 
     /// <summary>Rejects a pending order and releases its reserved inventory.</summary>
-    [Authorize(Roles = "Supplier")]
+    [Authorize(Policy = "SupplierExistingFulfillment")]
     [HttpPost("{orderId:guid}/reject")]
     public async Task<IActionResult> RejectAsync(Guid orderId, [FromBody] CancelOrderRequest request, CancellationToken cancellationToken) =>
         Success(await orderService.RejectAsync(GetCurrentUserId(), orderId, request, cancellationToken), "Order rejected successfully.");

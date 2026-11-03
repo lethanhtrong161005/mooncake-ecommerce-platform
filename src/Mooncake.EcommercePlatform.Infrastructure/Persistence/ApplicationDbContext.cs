@@ -22,6 +22,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ContractExtension> ContractExtensions => Set<ContractExtension>();
     public DbSet<ContractMilestone> ContractMilestones => Set<ContractMilestone>();
     public DbSet<CustomPackaging> CustomPackagings => Set<CustomPackaging>();
+    public DbSet<PackagingTemplate> PackagingTemplates => Set<PackagingTemplate>();
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<DeliveryProof> DeliveryProofs => Set<DeliveryProof>();

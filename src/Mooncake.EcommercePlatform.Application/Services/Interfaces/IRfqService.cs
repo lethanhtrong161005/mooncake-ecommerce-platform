@@ -1,5 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Responses;
 using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses;
@@ -10,6 +12,8 @@ public interface IRfqService
     Task<RfqResponse> PublishAsync(Guid customerUserId, Guid rfqId, CancellationToken cancellationToken = default);
     Task CancelAsync(Guid customerUserId, Guid rfqId, string reason, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqResponse>> GetMineAsync(Guid customerUserId, CancellationToken cancellationToken = default);
+    Task<PagedResult<RfqResponse>> GetPageAsync(Guid userId, bool supplier, RfqPageQueryRequest query,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqResponse>> GetSupplierInvitationsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SuggestedSupplierResponse>> GetSuggestedSuppliersAsync(Guid customerUserId, Guid rfqId, CancellationToken cancellationToken = default);
     Task<RfqResponse> GetAsync(Guid userId, bool isSupplier, Guid rfqId, CancellationToken cancellationToken = default);

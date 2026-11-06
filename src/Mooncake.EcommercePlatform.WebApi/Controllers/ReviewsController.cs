@@ -35,9 +35,10 @@ public sealed class ReviewsController(IReviewService reviewService) : BaseApiCon
 
     [AllowAnonymous]
     [HttpGet("shops/{slug}")]
-    public async Task<IActionResult> GetShopReviewsAsync(string slug, [FromQuery] int? rating, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
+    public async Task<IActionResult> GetShopReviewsAsync(string slug, [FromQuery] int? rating,
+        [FromQuery] int? page, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
     {
-        var result = await reviewService.GetShopReviewsAsync(slug, rating, pageNumber, pageSize, ct);
+        var result = await reviewService.GetShopReviewsAsync(slug, rating, page ?? pageNumber, pageSize, ct);
         return Success(result, "Lấy danh sách đánh giá gian hàng thành công.");
     }
 

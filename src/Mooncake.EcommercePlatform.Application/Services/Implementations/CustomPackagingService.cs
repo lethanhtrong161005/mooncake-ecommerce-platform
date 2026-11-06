@@ -20,11 +20,11 @@ public sealed class CustomPackagingService(
     {
         var order = await GetOrderAsync(orderId, cancellationToken);
         if (order.CustomerId != customerId)
-            throw new HttpException(404, B2BOrderingMessages.OrderNotFound);
+            throw new HttpException(404, B2BOrderingMessages.OrderNotFound, OrderErrorCodes.TenantForbidden);
         if (order.Status is not (OrderStatus.Pending or OrderStatus.Confirmed))
-            throw new HttpException(409, B2BOrderingMessages.PackagingOrderStatusInvalid);
+            throw new HttpException(409, B2BOrderingMessages.PackagingOrderStatusInvalid, OrderErrorCodes.StateConflict);
         if (await repository.GetByOrderIdAsync(orderId, cancellationToken) is not null)
-            throw new HttpException(409, B2BOrderingMessages.PackagingAlreadyExists);
+            throw new HttpException(409, B2BOrderingMessages.PackagingAlreadyExists, OrderErrorCodes.StateConflict);
 
         var now = dateTimeProvider.UtcNow;
         var packaging = new CustomPackaging
@@ -42,19 +42,23 @@ public sealed class CustomPackagingService(
             UpdatedAt = now
         };
         if (!await repository.CreateAsync(packaging, customerId, cancellationToken))
-            throw new HttpException(409, B2BOrderingMessages.PackagingAlreadyExists);
+            throw new HttpException(409, B2BOrderingMessages.PackagingAlreadyExists, OrderErrorCodes.StateConflict);
         return CustomPackagingResponseHelper.ToResponse(packaging, []);
     }
 
-    public async Task<CustomPackagingResponse> GetAsync(Guid userId, bool supplier, Guid orderId,
+    public Task<CustomPackagingResponse> GetAsync(Guid userId, bool supplier, Guid orderId,
+        CancellationToken cancellationToken = default) =>
+        GetAsync(userId, supplier, orderId, false, cancellationToken);
+
+    public async Task<CustomPackagingResponse> GetAsync(Guid userId, bool supplier, Guid orderId, bool admin,
         CancellationToken cancellationToken = default)
     {
         var order = await GetOrderAsync(orderId, cancellationToken);
-        var authorized = supplier
+        var authorized = admin || (supplier
             ? await repository.IsShopOwnedByUserAsync(order.ShopId, userId, cancellationToken)
-            : order.CustomerId == userId;
+            : order.CustomerId == userId);
         if (!authorized)
-            throw new HttpException(404, B2BOrderingMessages.PackagingNotFound);
+            throw new HttpException(404, B2BOrderingMessages.PackagingNotFound, OrderErrorCodes.TenantForbidden);
         var packaging = await repository.GetByOrderIdAsync(orderId, cancellationToken)
                         ?? throw new HttpException(404, B2BOrderingMessages.PackagingNotFound);
         return CustomPackagingResponseHelper.ToResponse(packaging,
@@ -67,16 +71,17 @@ public sealed class CustomPackagingService(
     {
         var order = await GetOrderAsync(orderId, cancellationToken);
         if (!await repository.IsShopOwnedByUserAsync(order.ShopId, supplierUserId, cancellationToken))
-            throw new HttpException(404, B2BOrderingMessages.PackagingNotFound);
+            throw new HttpException(404, B2BOrderingMessages.PackagingNotFound, OrderErrorCodes.TenantForbidden);
         var packaging = await repository.GetByOrderIdAsync(orderId, cancellationToken)
                         ?? throw new HttpException(404, B2BOrderingMessages.PackagingNotFound);
         if (packaging.Status is not (CustomPackagingStatus.Pending or
             CustomPackagingStatus.DesignReview or CustomPackagingStatus.RevisionRequested))
-            throw new HttpException(409, B2BOrderingMessages.PackagingRevisionLocked);
+            throw new HttpException(409, B2BOrderingMessages.PackagingRevisionLocked, OrderErrorCodes.StateConflict);
 
         var now = dateTimeProvider.UtcNow;
         var revision = new CustomPackagingRevision
         {
+            Id = Guid.NewGuid(),
             CustomPackagingId = packaging.Id,
             MockupUrl = CustomPackagingRequestHelper.NormalizeHttpsUrl(request.MockupUrl),
             SupplierNotes = request.SupplierNotes?.Trim(),
@@ -88,9 +93,8 @@ public sealed class CustomPackagingService(
             CreatedAt = now,
             UpdatedAt = now
         };
-        var savedRevision = await repository.SubmitRevisionAsync(packaging, revision,
-            order.CustomerId, cancellationToken)
-            ?? throw new HttpException(409, B2BOrderingMessages.PackagingRevisionLocked);
+        _ = await repository.SubmitRevisionAsync(packaging, revision, order.CustomerId, cancellationToken)
+            ?? throw new HttpException(409, B2BOrderingMessages.PackagingRevisionLocked, OrderErrorCodes.StateConflict);
         var revisions = await repository.GetRevisionsAsync(packaging.Id, cancellationToken);
         return CustomPackagingResponseHelper.ToResponse(packaging, revisions);
     }
@@ -101,23 +105,23 @@ public sealed class CustomPackagingService(
     {
         var order = await GetOrderAsync(orderId, cancellationToken);
         if (order.CustomerId != customerId)
-            throw new HttpException(404, B2BOrderingMessages.PackagingRevisionNotFound);
+            throw new HttpException(404, B2BOrderingMessages.PackagingRevisionNotFound, OrderErrorCodes.TenantForbidden);
         var packaging = await repository.GetByOrderIdAsync(orderId, cancellationToken)
                         ?? throw new HttpException(404, B2BOrderingMessages.PackagingNotFound);
         var revision = await repository.GetRevisionAsync(revisionId, cancellationToken);
         if (revision is null || revision.CustomPackagingId != packaging.Id)
             throw new HttpException(404, B2BOrderingMessages.PackagingRevisionNotFound);
         if (revision.Status != CustomPackagingStatus.DesignReview)
-            throw new HttpException(409, B2BOrderingMessages.PackagingRevisionStatusInvalid);
+            throw new HttpException(409, B2BOrderingMessages.PackagingRevisionStatusInvalid, OrderErrorCodes.StateConflict);
 
         var approve = string.Equals(request.Action, "Approve", StringComparison.Ordinal);
         var notes = request.Notes?.Trim();
         if (!approve && (notes?.Length ?? 0) < 10)
-            throw new HttpException(400, B2BOrderingMessages.PackagingRevisionNotesRequired);
+            throw new HttpException(400, B2BOrderingMessages.PackagingRevisionNotesRequired, OrderErrorCodes.ValidationError);
         var now = dateTimeProvider.UtcNow;
         if (!await repository.ReviewRevisionAsync(packaging, revision, approve, notes,
             customerId, now, cancellationToken))
-            throw new HttpException(409, B2BOrderingMessages.PackagingRevisionStatusInvalid);
+            throw new HttpException(409, B2BOrderingMessages.PackagingRevisionStatusInvalid, OrderErrorCodes.StateConflict);
         return new PackagingReviewResponse(packaging.Status, packaging.BoxDesignUrl, now);
     }
 

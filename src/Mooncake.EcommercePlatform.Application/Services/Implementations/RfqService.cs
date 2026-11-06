@@ -1,6 +1,8 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Responses;
@@ -12,6 +14,31 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 public sealed class RfqService(IRfqRepository repository, IDateTimeProvider clock) : IRfqService
 {
     private const int MaximumInvitations = 10;
+
+    public async Task<PagedResult<RfqResponse>> GetPageAsync(Guid userId, bool supplier,
+        RfqPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "deadlineAsc", "deadlineDesc");
+        if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value))
+            throw new HttpException(400, "Invalid RFQ status filter.", "VALIDATION_ERROR");
+        if (supplier) _ = await GetVerifiedSupplierIdAsync(userId, cancellationToken);
+        var page = await repository.GetRfqsPageAsync(userId, supplier, query, cancellationToken);
+        if (page.Items.Count == 0)
+            return new PagedResult<RfqResponse>([], page.Page, page.PageSize, page.TotalCount);
+        var (items, invitations, bids) = await repository.GetRfqPageDetailsAsync(
+            page.Items.Select(rfq => rfq.Id).ToArray(), cancellationToken);
+        var byRfq = items.GroupBy(item => item.RfqId).ToDictionary(group => group.Key, group => group.ToList());
+        var responses = page.Items.Select(rfq => new RfqResponse(rfq.Id, rfq.RfqNumber, rfq.Title,
+            rfq.Description, rfq.DeliveryAddress, rfq.DeliveryDateRequired, rfq.BudgetRangeMin,
+            rfq.BudgetRangeMax, rfq.BidDeadline, rfq.Status,
+            byRfq.GetValueOrDefault(rfq.Id, []).Select(item => new RfqItemResponse(item.Id,
+                item.ProductName, item.Description, item.Quantity, item.Unit,
+                supplier ? null : item.TargetPrice, item.Specifications, item.PackagingRequirements,
+                item.NeedsCustomPackaging)).ToArray(),
+            invitations.GetValueOrDefault(rfq.Id), bids.GetValueOrDefault(rfq.Id))).ToArray();
+        return new PagedResult<RfqResponse>(responses, page.Page, page.PageSize, page.TotalCount);
+    }
 
     public async Task<RfqResponse> CreateAsync(Guid customerUserId, CreateRfqRequest request, CancellationToken cancellationToken = default)
     {

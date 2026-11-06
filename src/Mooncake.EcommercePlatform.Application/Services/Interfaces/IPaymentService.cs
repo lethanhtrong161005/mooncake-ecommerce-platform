@@ -1,5 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Responses;
 
@@ -17,6 +19,8 @@ public interface IPaymentService
     Task<(string Code, string Message)> ProcessVnPayIpnAsync(IReadOnlyDictionary<string, string> parameters,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PaymentResponse>> GetMineAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default);
+    Task<PagedResult<PaymentResponse>> GetMinePageAsync(Guid userId, bool supplier, PaymentPageQueryRequest query,
+        CancellationToken cancellationToken = default);
     Task<PaymentResponse> ConfirmAsync(Guid paymentId, Guid adminUserId, string reason, string? ipAddress, CancellationToken cancellationToken = default);
     Task<PaymentResponse> RefundAsync(Guid paymentId, Guid adminUserId, string reason, string? ipAddress, CancellationToken cancellationToken = default);
 }

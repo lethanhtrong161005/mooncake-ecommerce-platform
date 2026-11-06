@@ -11,8 +11,14 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 public sealed class ContractsController(IContractService contractService) : BaseApiController
 {
     [HttpGet("mine")]
-    public async Task<IActionResult> GetMineAsync(CancellationToken cancellationToken) =>
-        Success(await contractService.GetMineAsync(CurrentUserId, User.IsInRole("Supplier") || User.HasClaim("supplier_fulfillment", "true"), cancellationToken), "Contracts retrieved successfully.");
+    public async Task<IActionResult> GetMineAsync([FromQuery] ContractPageQueryRequest query,
+        CancellationToken cancellationToken) =>
+        Success<object>(Request.Query.ContainsKey("page")
+            ? await contractService.GetMinePageAsync(CurrentUserId,
+                User.IsInRole("Supplier") || User.HasClaim("supplier_fulfillment", "true"), query, cancellationToken)
+            : await contractService.GetMineAsync(CurrentUserId,
+                User.IsInRole("Supplier") || User.HasClaim("supplier_fulfillment", "true"), cancellationToken),
+            "Contracts retrieved successfully.");
 
     [HttpGet("{contractId:guid}")]
     public async Task<IActionResult> GetAsync(Guid contractId, CancellationToken cancellationToken) =>

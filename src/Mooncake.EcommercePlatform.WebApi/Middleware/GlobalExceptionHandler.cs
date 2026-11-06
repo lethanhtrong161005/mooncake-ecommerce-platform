@@ -1,7 +1,7 @@
 namespace Mooncake.EcommercePlatform.WebApi.Middleware;
 
-using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Microsoft.AspNetCore.Diagnostics;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
 
@@ -31,6 +31,7 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
                 httpContext.Response.StatusCode = httpEx.StatusCode;
                 var response = ResponseHelper.Error<object>(httpEx.StatusCode, httpEx.Message, path, traceId);
                 response.ErrorCode = httpEx.ErrorCode;
+                response.Data = httpEx.ErrorData;
                 await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
                 break;
 

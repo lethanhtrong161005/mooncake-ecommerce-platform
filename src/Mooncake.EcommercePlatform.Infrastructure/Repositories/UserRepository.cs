@@ -1,8 +1,11 @@
 namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.DTOs.Auth.Models;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Models;
+using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
@@ -52,6 +55,33 @@ public class UserRepository(ApplicationDbContext context) : IUserRepository, IUs
 
     public async Task<IEnumerable<AuthUserData>> GetAllAsync(CancellationToken cancellationToken = default) =>
         (await context.Users.AsNoTracking().Where(u => !u.IsDeleted).ToListAsync(cancellationToken)).Select(ToData);
+
+    public async Task<PagedResult<AuthUserData>> GetPageAsync(UserPageQueryRequest query,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<User> rows = context.Users.AsNoTracking().Where(user => !user.IsDeleted);
+        if (query.Role.HasValue) rows = rows.Where(user => user.Role == query.Role.Value);
+        if (query.IsActive.HasValue) rows = rows.Where(user => user.IsActive == query.IsActive.Value);
+        if (query.From.HasValue) rows = rows.Where(user => user.CreatedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(user => user.CreatedAt <= query.To.Value);
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(user => EF.Functions.ILike(user.Email, term)
+                || user.FullName != null && EF.Functions.ILike(user.FullName, term)
+                || user.Phone != null && EF.Functions.ILike(user.Phone, term));
+        }
+        var total = await rows.CountAsync(cancellationToken);
+        rows = query.Sort switch
+        {
+            "createdAtAsc" => rows.OrderBy(user => user.CreatedAt).ThenBy(user => user.Id),
+            "fullNameAsc" => rows.OrderBy(user => user.FullName).ThenBy(user => user.Id),
+            "fullNameDesc" => rows.OrderByDescending(user => user.FullName).ThenByDescending(user => user.Id),
+            _ => rows.OrderByDescending(user => user.CreatedAt).ThenByDescending(user => user.Id)
+        };
+        var items = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        return new PagedResult<AuthUserData>(items.Select(ToData).ToList(), query.Page, query.PageSize, total);
+    }
 
     public async Task<AuthUserData?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         Map(await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted, cancellationToken));

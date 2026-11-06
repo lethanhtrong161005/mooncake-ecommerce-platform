@@ -98,6 +98,7 @@ public static class DependencyInjection
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
             .RemoveAllLoggers();
         services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IEnterpriseOrderRepository, EnterpriseOrderRepository>();
         services.AddScoped<ICustomPackagingRepository, CustomPackagingRepository>();
         services.AddScoped<IPackagingTemplateRepository, PackagingTemplateRepository>();
         services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();

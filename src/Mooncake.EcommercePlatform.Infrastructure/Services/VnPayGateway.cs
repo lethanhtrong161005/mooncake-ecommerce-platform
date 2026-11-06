@@ -15,13 +15,16 @@ public sealed class VnPayGateway(IOptions<VnPayOptions> options) : IVnPayGateway
 
     public string CreatePaymentUrl(Payment payment, string returnUrl, string clientIpAddress, DateTime createdAtUtc)
     {
+        var orderInfo = payment.OrderId.HasValue
+            ? $"Order payment {payment.PaymentNumber}"
+            : $"Contract deposit {payment.PaymentNumber}";
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["vnp_Version"] = "2.1.0", ["vnp_Command"] = "pay", ["vnp_TmnCode"] = settings.TmnCode,
             ["vnp_Amount"] = decimal.ToInt64(decimal.Round(payment.Amount * 100m, 0)).ToString(),
             ["vnp_CreateDate"] = createdAtUtc.ToString("yyyyMMddHHmmss"), ["vnp_CurrCode"] = "VND",
             ["vnp_IpAddr"] = string.IsNullOrWhiteSpace(clientIpAddress) ? "127.0.0.1" : clientIpAddress,
-            ["vnp_Locale"] = "vn", ["vnp_OrderInfo"] = $"Contract deposit {payment.PaymentNumber}",
+            ["vnp_Locale"] = "vn", ["vnp_OrderInfo"] = orderInfo,
             ["vnp_OrderType"] = "other", ["vnp_ReturnUrl"] = returnUrl,
             ["vnp_TxnRef"] = payment.PaymentNumber
         };

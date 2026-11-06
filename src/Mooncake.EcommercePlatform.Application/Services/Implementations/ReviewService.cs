@@ -2,6 +2,8 @@ namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
 using System.Text.Json;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Application.DTOs.Reviews.Requests;
@@ -258,6 +260,7 @@ public sealed class ReviewService : IReviewService
         int pageSize,
         CancellationToken ct = default)
     {
+        PagedQueryHelper.Validate(new PagedQuery { Page = pageNumber, PageSize = pageSize });
         var supplier = await repository.GetSupplierByShopSlugAsync(slug, ct);
         if (supplier == null)
         {
@@ -299,6 +302,8 @@ public sealed class ReviewService : IReviewService
             ShopSlug = slug,
             AverageRating = Math.Round(overallAvg, 2),
             TotalReviews = totalCount,
+            Page = pageNumber,
+            PageSize = pageSize,
             QualityAverage = Math.Round(qualityAvg, 2),
             DeliveryAverage = Math.Round(deliveryAvg, 2),
             ServiceAverage = Math.Round(serviceAvg, 2),
@@ -322,6 +327,7 @@ public sealed class ReviewService : IReviewService
         string? sortBy,
         CancellationToken ct = default)
     {
+        PagedQueryHelper.Validate(new PagedQuery { Page = pageNumber, PageSize = pageSize });
         var product = await repository.GetProductByIdAsync(productId, ct);
         if (product == null)
         {

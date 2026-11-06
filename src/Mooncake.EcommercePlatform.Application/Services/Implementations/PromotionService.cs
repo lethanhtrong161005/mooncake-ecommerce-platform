@@ -1,5 +1,6 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
@@ -13,6 +14,16 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 /// <summary>Implements supplier-owned quantity-tier promotions.</summary>
 public sealed class PromotionService(IPromotionRepository repository, IDateTimeProvider dateTimeProvider) : IPromotionService
 {
+    public async Task<PagedResult<PromotionResponse>> GetMinePageAsync(Guid supplierUserId,
+        PromotionPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "startAtAsc", "startAtDesc");
+        var shopId = await GetVerifiedShopIdAsync(supplierUserId, cancellationToken);
+        var page = await repository.GetForShopPageAsync(shopId, query, cancellationToken);
+        return new PagedResult<PromotionResponse>(page.Items.Select(PromotionResponseHelper.ToResponse).ToList(),
+            page.Page, page.PageSize, page.TotalCount);
+    }
     public async Task<IReadOnlyList<PromotionResponse>> GetMineAsync(Guid supplierUserId, CancellationToken cancellationToken = default)
     {
         var shopId = await GetVerifiedShopIdAsync(supplierUserId, cancellationToken);

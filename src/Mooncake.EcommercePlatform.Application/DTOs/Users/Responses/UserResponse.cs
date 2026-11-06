@@ -11,5 +11,6 @@ public record UserResponse(
     string? AvatarUrl,
     UserRole Role,
     DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc
+    DateTime UpdatedAtUtc,
+    bool IsActive = true
 );

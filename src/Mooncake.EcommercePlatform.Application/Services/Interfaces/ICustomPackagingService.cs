@@ -10,6 +10,8 @@ public interface ICustomPackagingService
         CreateCustomPackagingRequest request, CancellationToken cancellationToken = default);
     Task<CustomPackagingResponse> GetAsync(Guid userId, bool supplier, Guid orderId,
         CancellationToken cancellationToken = default);
+    Task<CustomPackagingResponse> GetAsync(Guid userId, bool supplier, Guid orderId, bool admin,
+        CancellationToken cancellationToken = default);
     Task<CustomPackagingResponse> SubmitRevisionAsync(Guid supplierUserId, Guid orderId,
         SubmitPackagingRevisionRequest request, CancellationToken cancellationToken = default);
     Task<PackagingReviewResponse> ReviewRevisionAsync(Guid customerId, Guid orderId,

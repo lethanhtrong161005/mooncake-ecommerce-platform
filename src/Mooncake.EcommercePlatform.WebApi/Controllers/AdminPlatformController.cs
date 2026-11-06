@@ -25,8 +25,12 @@ public sealed class AdminPlatformController(IAdminPlatformService adminService) 
             HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken), "System configuration updated successfully.");
 
     [HttpGet("audit-logs")]
-    public async Task<IActionResult> GetAuditLogsAsync([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default) =>
-        Success(await adminService.GetAuditLogsAsync(page, pageSize, cancellationToken), "Audit logs retrieved successfully.");
+    public async Task<IActionResult> GetAuditLogsAsync([FromQuery] AuditLogPageQueryRequest query,
+        CancellationToken cancellationToken = default) =>
+        Success<object>(Request.Query.ContainsKey("page")
+            ? await adminService.GetAuditLogsPageAsync(query, cancellationToken)
+            : await adminService.GetAuditLogsAsync(1, 50, cancellationToken),
+            "Audit logs retrieved successfully.");
 
     [HttpGet("contract-deposit-rules")]
     public async Task<IActionResult> GetContractDepositRulesAsync(CancellationToken cancellationToken) =>

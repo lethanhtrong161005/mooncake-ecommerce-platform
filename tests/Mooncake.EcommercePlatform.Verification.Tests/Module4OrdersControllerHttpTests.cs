@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.DTOs.Orders.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Orders.Responses;
@@ -38,6 +39,7 @@ public sealed class Module4OrdersControllerHttpTests
     private static readonly Guid RevisionId = Guid.NewGuid();
 
     private readonly Mock<IOrderService> orderService = new();
+    private readonly Mock<IDirectBulkOrderService> enterpriseService = new();
     private readonly Mock<IPromotionService> promotionService = new();
     private readonly Mock<ICustomPackagingService> packagingService = new();
 
@@ -148,6 +150,7 @@ public sealed class Module4OrdersControllerHttpTests
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.AddProblemDetails();
         builder.Services.AddSingleton(orderService.Object);
+        builder.Services.AddSingleton(enterpriseService.Object);
         builder.Services.AddSingleton(promotionService.Object);
         builder.Services.AddSingleton(packagingService.Object);
 
@@ -334,6 +337,40 @@ public sealed class Module4OrdersControllerHttpTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(1, json.GetProperty("data").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task GetCustomerOrders_WithPage_ReturnsExactTotalAndFilters()
+    {
+        var client = CreateClient("Customer");
+        enterpriseService.Setup(service => service.GetOrdersPageAsync(CustomerId, false,
+                It.Is<OrderPageQueryRequest>(query => query.Page == 2 && query.PageSize == 10
+                    && query.Q == "MC-2026"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PagedResult<OrderResponse>([CreateOrder(OrderStatus.Pending)], 2, 10, 25));
+
+        var response = await client.GetAsync("/api/v1/orders/mine?page=2&pageSize=10&q=MC-2026");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var data = json.GetProperty("data");
+        Assert.Equal(25, data.GetProperty("totalCount").GetInt32());
+        Assert.Equal(3, data.GetProperty("totalPages").GetInt32());
+        Assert.Equal(1, data.GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task GetSupplierOrders_WithPage_UsesSupplierScope()
+    {
+        var client = CreateClient("Supplier");
+        enterpriseService.Setup(service => service.GetOrdersPageAsync(SupplierId, true,
+                It.IsAny<OrderPageQueryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PagedResult<OrderResponse>([], 1, 10, 0));
+
+        var response = await client.GetAsync("/api/v1/orders/supplier?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        enterpriseService.Verify(service => service.GetOrdersPageAsync(SupplierId, true,
+            It.IsAny<OrderPageQueryRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

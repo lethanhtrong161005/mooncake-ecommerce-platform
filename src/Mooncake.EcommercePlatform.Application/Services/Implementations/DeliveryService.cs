@@ -3,7 +3,10 @@ namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
@@ -11,59 +14,61 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 
+/// <summary>Implements shipment scheduling, status tracking, and Proof-of-Delivery verification.</summary>
 public sealed class DeliveryService(
     IDeliveryRepository repository,
     IDateTimeProvider clock) : IDeliveryService
 {
+    public async Task<PagedResult<DeliveryResponse>> GetMinePageAsync(Guid userId, bool isSupplier,
+        DeliveryPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "scheduledDateAsc", "scheduledDateDesc");
+        if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value)
+            || query.ScheduledFrom > query.ScheduledTo)
+            throw new HttpException(400, "Invalid delivery filter.", OrderErrorCodes.ValidationError);
+        var page = await repository.GetDeliveriesPageAsync(userId, isSupplier, query, cancellationToken);
+        var items = await MapDeliveryListAsync(page.Items, cancellationToken);
+        return new PagedResult<DeliveryResponse>(items, page.Page, page.PageSize, page.TotalCount);
+    }
+
     private static readonly Regex PhoneRegex = new(@"^(0|\+84)(3|5|7|8|9)[0-9]{8}$", RegexOptions.Compiled);
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetMineAsync(Guid userId, bool isSupplier, CancellationToken cancellationToken = default)
     {
         var deliveries = await repository.GetDeliveriesForUserAsync(userId, isSupplier, cancellationToken);
-        var responses = new List<DeliveryResponse>(deliveries.Count);
-        foreach (var delivery in deliveries)
-        {
-            var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
-            responses.Add(ToResponse(delivery, proofs.Count));
-        }
-        return responses;
+        return await MapDeliveryListAsync(deliveries, cancellationToken);
     }
 
     public async Task<DeliveryDetailResponse> GetAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default)
     {
         var delivery = await repository.GetByIdAsync(deliveryId, cancellationToken)
-            ?? throw new HttpException(404, "Không tìm thấy thông tin chuyến giao hàng.");
+            ?? throw new HttpException(404, DeliveryMessages.DeliveryNotFound);
 
         var canAccess = await repository.CanAccessDeliveryAsync(deliveryId, userId, cancellationToken);
         if (!canAccess)
-            throw new HttpException(403, "Bạn không có quyền truy cập thông tin chuyến giao hàng này.");
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
 
         var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
-        return ToDetailResponse(delivery, proofs.Select(ToProofResponse).ToArray());
+        return DeliveryResponseHelper.ToDetailResponse(delivery, proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray());
     }
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetByContractAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default)
     {
+        if (!await repository.CanAccessContractAsync(contractId, userId, cancellationToken))
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
+
         var deliveries = await repository.GetByContractIdAsync(contractId, cancellationToken);
-        var responses = new List<DeliveryResponse>(deliveries.Count);
-        foreach (var delivery in deliveries)
-        {
-            var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
-            responses.Add(ToResponse(delivery, proofs.Count));
-        }
-        return responses;
+        return await MapDeliveryListAsync(deliveries, cancellationToken);
     }
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetByOrderAsync(Guid userId, Guid orderId, CancellationToken cancellationToken = default)
     {
+        if (!await repository.CanAccessOrderAsync(orderId, userId, cancellationToken))
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
+
         var deliveries = await repository.GetByOrderIdAsync(orderId, cancellationToken);
-        var responses = new List<DeliveryResponse>(deliveries.Count);
-        foreach (var delivery in deliveries)
-        {
-            var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
-            responses.Add(ToResponse(delivery, proofs.Count));
-        }
-        return responses;
+        return await MapDeliveryListAsync(deliveries, cancellationToken);
     }
 
     public async Task<DeliveryResponse> CreateAsync(Guid userId, CreateDeliveryRequest request, CancellationToken cancellationToken = default)
@@ -71,26 +76,40 @@ public sealed class DeliveryService(
         if ((!request.ContractId.HasValue && !request.OrderId.HasValue) ||
             (request.ContractId.HasValue && request.OrderId.HasValue))
         {
-            throw new HttpException(400, "Chuyến giao hàng bắt buộc phải gắn với duy nhất một Hợp đồng hoặc một Đơn hàng.");
+            throw new HttpException(400, DeliveryMessages.TargetLinkInvalid, OrderErrorCodes.ValidationError);
         }
 
         if (string.IsNullOrWhiteSpace(request.FromAddress))
-            throw new HttpException(400, "Địa chỉ xuất hàng không được để trống.");
+            throw new HttpException(400, DeliveryMessages.FromAddressRequired, OrderErrorCodes.ValidationError);
 
         if (string.IsNullOrWhiteSpace(request.ToAddress))
-            throw new HttpException(400, "Địa chỉ nhận hàng không được để trống.");
+            throw new HttpException(400, DeliveryMessages.ToAddressRequired, OrderErrorCodes.ValidationError);
 
         if (string.IsNullOrWhiteSpace(request.RecipientName))
-            throw new HttpException(400, "Tên người nhận không được để trống.");
+            throw new HttpException(400, DeliveryMessages.RecipientNameRequired, OrderErrorCodes.ValidationError);
 
         if (string.IsNullOrWhiteSpace(request.RecipientPhone) || !PhoneRegex.IsMatch(request.RecipientPhone.Trim()))
-            throw new HttpException(400, "Số điện thoại người nhận không hợp lệ (định dạng 10 số di động Việt Nam).");
+            throw new HttpException(400, DeliveryMessages.RecipientPhoneInvalid, OrderErrorCodes.ValidationError);
 
         if (request.ScheduledDate.HasValue && request.ScheduledDate.Value < DateOnly.FromDateTime(clock.UtcNow.AddDays(-1)))
-            throw new HttpException(400, "Ngày dự kiến giao hàng không được ở trong quá khứ.");
+            throw new HttpException(400, DeliveryMessages.ScheduledDateInPast, OrderErrorCodes.ValidationError);
+
+        if (request.ContractId.HasValue)
+        {
+            if (!await repository.CanManageContractAsync(request.ContractId.Value, userId, cancellationToken))
+                throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
+        }
+        else if (request.OrderId.HasValue)
+        {
+            if (!await repository.CanManageOrderAsync(request.OrderId.Value, userId, cancellationToken))
+                throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
+
+            var existingOrderDeliveries = await repository.GetByOrderIdAsync(request.OrderId.Value, cancellationToken) ?? [];
+            if (existingOrderDeliveries.Any(d => d.Status is not (DeliveryStatus.Failed or DeliveryStatus.Returned)))
+                throw new HttpException(409, DeliveryMessages.SingleDeliveryLimitExceeded, OrderErrorCodes.SingleDeliveryLimit);
+        }
 
         var deliveryNumber = $"DEL-{clock.UtcNow:yyyyMM}-{Random.Shared.Next(1000, 9999)}";
-
         var delivery = new Delivery
         {
             Id = Guid.NewGuid(),
@@ -111,17 +130,20 @@ public sealed class DeliveryService(
         };
 
         var created = await repository.CreateAsync(delivery, cancellationToken);
-        return ToResponse(created, 0);
+        return DeliveryResponseHelper.ToResponse(created, 0);
     }
 
     public async Task<DeliveryResponse> UpdateStatusAsync(Guid userId, Guid deliveryId, UpdateDeliveryStatusRequest request, CancellationToken cancellationToken = default)
     {
         var delivery = await repository.GetByIdAsync(deliveryId, cancellationToken)
-            ?? throw new HttpException(404, "Không tìm thấy thông tin chuyến giao hàng.");
+            ?? throw new HttpException(404, DeliveryMessages.DeliveryNotFound);
 
         var canManage = await repository.CanManageDeliveryAsync(deliveryId, userId, cancellationToken);
         if (!canManage)
-            throw new HttpException(403, "Bạn không có quyền cập nhật trạng thái chuyến giao hàng này.");
+            throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
+
+        if (delivery.OrderId.HasValue && request.Status == DeliveryStatus.Delivered)
+            throw new HttpException(409, "Direct order deliveries can only be marked delivered after customer receipt confirmation.", OrderErrorCodes.StateConflict);
 
         ValidateStateTransition(delivery.Status, request.Status);
 
@@ -129,9 +151,7 @@ public sealed class DeliveryService(
         {
             var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
             if (!proofs.Any(p => p.ProofType == ProofType.Delivery))
-            {
-                throw new HttpException(400, "Bắt buộc phải có bằng chứng giao hàng (Delivery PoD) trước khi chuyển sang trạng thái Đã giao hàng.");
-            }
+                throw new HttpException(400, DeliveryMessages.ProofRequiredBeforeDelivered, OrderErrorCodes.DeliveryProofRequired);
             delivery.ActualDeliveryDate = request.ActualDeliveryDate ?? DateOnly.FromDateTime(clock.UtcNow);
         }
 
@@ -147,17 +167,17 @@ public sealed class DeliveryService(
 
         var updated = await repository.UpdateAsync(delivery, cancellationToken);
         var proofCount = (await repository.GetProofsAsync(deliveryId, cancellationToken)).Count;
-        return ToResponse(updated, proofCount);
+        return DeliveryResponseHelper.ToResponse(updated, proofCount);
     }
 
     public async Task<DeliveryResponse> UpdateCarrierInfoAsync(Guid userId, Guid deliveryId, UpdateCarrierInfoRequest request, CancellationToken cancellationToken = default)
     {
         var delivery = await repository.GetByIdAsync(deliveryId, cancellationToken)
-            ?? throw new HttpException(404, "Không tìm thấy thông tin chuyến giao hàng.");
+            ?? throw new HttpException(404, DeliveryMessages.DeliveryNotFound);
 
         var canManage = await repository.CanManageDeliveryAsync(deliveryId, userId, cancellationToken);
         if (!canManage)
-            throw new HttpException(403, "Bạn không có quyền cập nhật thông tin vận chuyển này.");
+            throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
 
         if (!string.IsNullOrWhiteSpace(request.TrackingCode))
             delivery.TrackingCode = request.TrackingCode.Trim();
@@ -168,7 +188,7 @@ public sealed class DeliveryService(
         if (!string.IsNullOrWhiteSpace(request.RecipientPhone))
         {
             if (!PhoneRegex.IsMatch(request.RecipientPhone.Trim()))
-                throw new HttpException(400, "Số điện thoại người nhận không hợp lệ.");
+                throw new HttpException(400, DeliveryMessages.RecipientPhoneInvalid, OrderErrorCodes.ValidationError);
             delivery.RecipientPhone = request.RecipientPhone.Trim();
         }
 
@@ -186,35 +206,35 @@ public sealed class DeliveryService(
 
         var updated = await repository.UpdateAsync(delivery, cancellationToken);
         var proofCount = (await repository.GetProofsAsync(deliveryId, cancellationToken)).Count;
-        return ToResponse(updated, proofCount);
+        return DeliveryResponseHelper.ToResponse(updated, proofCount);
     }
 
     public async Task<DeliveryProofResponse> SubmitProofAsync(Guid userId, Guid deliveryId, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default)
     {
         var delivery = await repository.GetByIdAsync(deliveryId, cancellationToken)
-            ?? throw new HttpException(404, "Không tìm thấy thông tin chuyến giao hàng.");
+            ?? throw new HttpException(404, DeliveryMessages.DeliveryNotFound);
 
         var canManage = await repository.CanManageDeliveryAsync(deliveryId, userId, cancellationToken);
         if (!canManage)
-            throw new HttpException(403, "Bạn không có quyền nộp bằng chứng cho chuyến giao hàng này.");
+            throw new HttpException(403, DeliveryMessages.ProofSubmitDenied, OrderErrorCodes.TenantForbidden);
 
         if (delivery.Status == DeliveryStatus.Delivered)
-            throw new HttpException(409, "Chuyến giao hàng này đã được xác nhận hoàn tất trước đó.");
+            throw new HttpException(409, DeliveryMessages.DeliveryAlreadyCompleted, OrderErrorCodes.StateConflict);
 
         if (request.LocationLat.HasValue && (request.LocationLat.Value < -90m || request.LocationLat.Value > 90m))
-            throw new HttpException(400, "Tọa độ vĩ độ (Latitude) không hợp lệ [-90, 90].");
+            throw new HttpException(400, DeliveryMessages.LatitudeInvalid, OrderErrorCodes.ValidationError);
 
         if (request.LocationLng.HasValue && (request.LocationLng.Value < -180m || request.LocationLng.Value > 180m))
-            throw new HttpException(400, "Tọa độ kinh độ (Longitude) không hợp lệ [-180, 180].");
+            throw new HttpException(400, DeliveryMessages.LongitudeInvalid, OrderErrorCodes.ValidationError);
 
         var photoUrl = request.PhotoUrl ?? request.PhotoBase64;
         var signatureUrl = request.SignatureUrl ?? request.SignatureBase64;
 
         if (string.IsNullOrWhiteSpace(photoUrl))
-            throw new HttpException(400, "Ảnh chụp bằng chứng hiện trường là bắt buộc.");
+            throw new HttpException(400, DeliveryMessages.PhotoRequired, OrderErrorCodes.ValidationError);
 
-        if (request.ProofType == ProofType.Delivery && string.IsNullOrWhiteSpace(signatureUrl))
-            throw new HttpException(400, "Chữ ký người nhận là bắt buộc khi xác nhận bàn giao thành công.");
+        if (delivery.ContractId.HasValue && request.ProofType == ProofType.Delivery && string.IsNullOrWhiteSpace(signatureUrl))
+            throw new HttpException(400, DeliveryMessages.SignatureRequiredForContract, OrderErrorCodes.ValidationError);
 
         var rawPayload = $"{deliveryId}|{request.ProofType}|{request.LocationLat}|{request.LocationLng}|{clock.UtcNow:O}|{photoUrl}|{signatureUrl}";
         var tamperProofHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawPayload))).ToLowerInvariant();
@@ -226,7 +246,7 @@ public sealed class DeliveryService(
             ProofType = request.ProofType,
             PhotoUrl = photoUrl,
             SignatureUrl = signatureUrl,
-            TakenBy = string.IsNullOrWhiteSpace(request.TakenBy) ? "Tài xế giao hàng" : request.TakenBy.Trim(),
+            TakenBy = string.IsNullOrWhiteSpace(request.TakenBy) ? DeliveryMessages.DefaultDriverLabel : request.TakenBy.Trim(),
             TakenAt = clock.UtcNow,
             LocationLat = request.LocationLat,
             LocationLng = request.LocationLng,
@@ -240,11 +260,21 @@ public sealed class DeliveryService(
 
         if (request.ProofType == ProofType.Delivery)
         {
-            delivery.Status = DeliveryStatus.Delivered;
-            delivery.ActualDeliveryDate = DateOnly.FromDateTime(clock.UtcNow);
-            delivery.UpdatedBy = userId;
-            delivery.UpdatedAt = clock.UtcNow;
-            await repository.UpdateAsync(delivery, cancellationToken);
+            if (delivery.OrderId.HasValue)
+            {
+                delivery.Status = DeliveryStatus.AwaitingCustomerConfirmation;
+                delivery.UpdatedBy = userId;
+                delivery.UpdatedAt = clock.UtcNow;
+                await repository.UpdateAsync(delivery, cancellationToken);
+            }
+            else
+            {
+                delivery.Status = DeliveryStatus.Delivered;
+                delivery.ActualDeliveryDate = DateOnly.FromDateTime(clock.UtcNow);
+                delivery.UpdatedBy = userId;
+                delivery.UpdatedAt = clock.UtcNow;
+                await repository.UpdateAsync(delivery, cancellationToken);
+            }
         }
         else if (request.ProofType == ProofType.Pickup && (delivery.Status == DeliveryStatus.Pending || delivery.Status == DeliveryStatus.Confirmed))
         {
@@ -261,38 +291,53 @@ public sealed class DeliveryService(
             await repository.UpdateAsync(delivery, cancellationToken);
         }
 
-        return ToProofResponse(createdProof);
+        return DeliveryResponseHelper.ToProofResponse(createdProof);
     }
 
     public async Task<IReadOnlyList<DeliveryProofResponse>> GetProofsAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default)
     {
         var canAccess = await repository.CanAccessDeliveryAsync(deliveryId, userId, cancellationToken);
         if (!canAccess)
-            throw new HttpException(403, "Bạn không có quyền truy cập bằng chứng của chuyến giao hàng này.");
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
 
         var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
-        return proofs.Select(ToProofResponse).ToArray();
+        return proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray();
     }
 
     public async Task<DeliveryProofResponse> GetProofDetailAsync(Guid userId, Guid proofId, CancellationToken cancellationToken = default)
     {
         var proof = await repository.GetProofByIdAsync(proofId, cancellationToken)
-            ?? throw new HttpException(404, "Không tìm thấy thông tin bằng chứng PoD.");
+            ?? throw new HttpException(404, DeliveryMessages.ProofNotFound);
 
         var canAccess = await repository.CanAccessDeliveryAsync(proof.DeliveryId, userId, cancellationToken);
         if (!canAccess)
-            throw new HttpException(403, "Bạn không có quyền truy cập bằng chứng này.");
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
 
-        return ToProofResponse(proof);
+        return DeliveryResponseHelper.ToProofResponse(proof);
     }
 
     public async Task<bool> VerifyProofIntegrityAsync(Guid proofId, CancellationToken cancellationToken = default)
     {
         var proof = await repository.GetProofByIdAsync(proofId, cancellationToken);
-        if (proof == null || string.IsNullOrWhiteSpace(proof.TamperProofHash))
-            return false;
+        return proof is not null && !string.IsNullOrWhiteSpace(proof.TamperProofHash) && proof.TamperProofHash.Length == 64;
+    }
 
-        return proof.TamperProofHash.Length == 64;
+    private async Task<IReadOnlyList<DeliveryResponse>> MapDeliveryListAsync(IReadOnlyList<Delivery> deliveries, CancellationToken cancellationToken)
+    {
+        if (deliveries.Count == 0)
+            return [];
+
+        var counts = await repository.GetProofCountsAsync(deliveries.Select(d => d.Id).ToArray(), cancellationToken);
+        var responses = new List<DeliveryResponse>(deliveries.Count);
+        foreach (var delivery in deliveries)
+        {
+            var proofCount = counts is not null
+                ? counts.GetValueOrDefault(delivery.Id, 0)
+                : (await repository.GetProofsAsync(delivery.Id, cancellationToken)).Count;
+            responses.Add(DeliveryResponseHelper.ToResponse(delivery, proofCount));
+        }
+
+        return responses;
     }
 
     private static void ValidateStateTransition(DeliveryStatus current, DeliveryStatus next)
@@ -304,7 +349,9 @@ public sealed class DeliveryService(
             DeliveryStatus.Pending => next is DeliveryStatus.Confirmed or DeliveryStatus.PickedUp or DeliveryStatus.Failed,
             DeliveryStatus.Confirmed => next is DeliveryStatus.PickedUp or DeliveryStatus.InTransit or DeliveryStatus.Failed,
             DeliveryStatus.PickedUp => next is DeliveryStatus.InTransit or DeliveryStatus.Failed,
-            DeliveryStatus.InTransit => next is DeliveryStatus.Delivered or DeliveryStatus.Failed or DeliveryStatus.Returned,
+            DeliveryStatus.InTransit => next is DeliveryStatus.AwaitingCustomerConfirmation or DeliveryStatus.Delivered or DeliveryStatus.Failed or DeliveryStatus.Returned,
+            DeliveryStatus.AwaitingCustomerConfirmation => next is DeliveryStatus.Delivered or DeliveryStatus.Disputed or DeliveryStatus.Failed or DeliveryStatus.Returned,
+            DeliveryStatus.Disputed => next is DeliveryStatus.Delivered or DeliveryStatus.Returned,
             DeliveryStatus.Failed => next is DeliveryStatus.InTransit or DeliveryStatus.Returned,
             DeliveryStatus.Delivered => false,
             DeliveryStatus.Returned => false,
@@ -312,68 +359,6 @@ public sealed class DeliveryService(
         };
 
         if (!isValid)
-        {
-            throw new HttpException(400, $"Không thể chuyển đổi trạng thái chuyến giao từ '{current}' sang '{next}'.");
-        }
+            throw new HttpException(400, $"Cannot transition delivery status from '{current}' to '{next}'.", OrderErrorCodes.StateConflict);
     }
-
-    private static DeliveryResponse ToResponse(Delivery d, int proofCount) => new()
-    {
-        Id = d.Id,
-        ContractId = d.ContractId,
-        OrderId = d.OrderId,
-        DeliveryNumber = d.DeliveryNumber,
-        DeliveryType = d.DeliveryType,
-        Status = d.Status,
-        ScheduledDate = d.ScheduledDate,
-        ActualDeliveryDate = d.ActualDeliveryDate,
-        FromAddress = d.FromAddress,
-        ToAddress = d.ToAddress,
-        RecipientName = d.RecipientName,
-        RecipientPhone = d.RecipientPhone,
-        TrackingCode = d.TrackingCode,
-        Notes = d.Notes,
-        ProofCount = proofCount,
-        CreatedAt = d.CreatedAt,
-        UpdatedAt = d.UpdatedAt
-    };
-
-    private static DeliveryDetailResponse ToDetailResponse(Delivery d, IReadOnlyList<DeliveryProofResponse> proofs) => new()
-    {
-        Id = d.Id,
-        ContractId = d.ContractId,
-        OrderId = d.OrderId,
-        DeliveryNumber = d.DeliveryNumber,
-        DeliveryType = d.DeliveryType,
-        Status = d.Status,
-        ScheduledDate = d.ScheduledDate,
-        ActualDeliveryDate = d.ActualDeliveryDate,
-        FromAddress = d.FromAddress,
-        ToAddress = d.ToAddress,
-        RecipientName = d.RecipientName,
-        RecipientPhone = d.RecipientPhone,
-        TrackingCode = d.TrackingCode,
-        Notes = d.Notes,
-        ProofCount = proofs.Count,
-        Proofs = proofs,
-        CreatedAt = d.CreatedAt,
-        UpdatedAt = d.UpdatedAt
-    };
-
-    private static DeliveryProofResponse ToProofResponse(DeliveryProof p) => new()
-    {
-        Id = p.Id,
-        DeliveryId = p.DeliveryId,
-        ProofType = p.ProofType,
-        PhotoUrl = p.PhotoUrl,
-        SignatureUrl = p.SignatureUrl,
-        TakenBy = p.TakenBy,
-        TakenAt = p.TakenAt,
-        LocationLat = p.LocationLat,
-        LocationLng = p.LocationLng,
-        Notes = p.Notes,
-        TamperProofHash = p.TamperProofHash,
-        IsVerified = !string.IsNullOrWhiteSpace(p.TamperProofHash),
-        CreatedAt = p.CreatedAt
-    };
 }

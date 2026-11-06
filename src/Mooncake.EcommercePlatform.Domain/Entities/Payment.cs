@@ -8,6 +8,8 @@ public class Payment : BaseEntity
 {
     public Guid? OrderId { get; set; }
 
+    public Guid? PartId { get; set; }
+
     public Guid? ContractId { get; set; }
 
     public Guid? MilestoneId { get; set; }

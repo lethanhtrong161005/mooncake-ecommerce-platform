@@ -16,6 +16,11 @@ public static class B2BOrderingMessages
     public const string PackagingRevisionStatusInvalid = "Only a design under review can be reviewed.";
     public const string PackagingRevisionNotesRequired = "Revision notes must contain at least 10 characters.";
     public const string PackagingProductionBlocked = "Custom packaging design must be approved before production can start.";
+    public const string PackagingNotSupported = "Custom packaging is not supported for one or more products in this order.";
     public const string OrderNotFound = "Order was not found.";
     public const string PromotionRangeOverlap = "The quantity range overlaps with an existing active promotion rule.";
+    public const string LogoFileRequired = "Please select a corporate logo image file.";
+    public const string LogoFileTooLarge = "Corporate logo file size cannot exceed 10 MB.";
+    public const string LogoStorageUnavailable = "Image storage service is currently unavailable.";
+    public const string LogoUploaded = "Corporate logo uploaded successfully.";
 }

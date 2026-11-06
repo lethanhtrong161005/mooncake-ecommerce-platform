@@ -1,5 +1,8 @@
 namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Requests;
+
 using Mooncake.EcommercePlatform.Domain.Entities;
 
 public interface IRfqRepository
@@ -7,6 +10,11 @@ public interface IRfqRepository
     Task<RequestForQuotation?> GetRfqAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RequestForQuotation>> GetCustomerRfqsAsync(Guid customerUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RequestForQuotation>> GetSupplierInvitedRfqsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
+    Task<PagedResult<RequestForQuotation>> GetRfqsPageAsync(Guid userId, bool supplier,
+        RfqPageQueryRequest query, CancellationToken cancellationToken = default);
+    Task<(IReadOnlyList<RfqItem> Items, IReadOnlyDictionary<Guid, int> InvitationCounts,
+        IReadOnlyDictionary<Guid, int> BidCounts)> GetRfqPageDetailsAsync(Guid[] rfqIds,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SupplierProfile>> GetSuggestedSuppliersAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<Guid?> GetVerifiedSupplierProfileIdAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqItem>> GetRfqItemsAsync(Guid rfqId, CancellationToken cancellationToken = default);

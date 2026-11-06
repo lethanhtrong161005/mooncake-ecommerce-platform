@@ -19,9 +19,12 @@ public sealed class AdminContractsController(IContractService contractService) :
     }
 
     [HttpGet("/api/v1/admin/disputes")]
-    public async Task<IActionResult> ListDisputesAsync([FromQuery] string? status = null, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> ListDisputesAsync([FromQuery] ContractDisputePageQueryRequest query,
+        CancellationToken cancellationToken = default)
     {
-        var result = await contractService.ListDisputesAsync(status, cancellationToken);
+        object result = Request.Query.ContainsKey("page")
+            ? await contractService.ListDisputesPageAsync(query, cancellationToken)
+            : await contractService.ListDisputesAsync(query.Status, cancellationToken);
         return Success(result, "Lấy danh sách tranh chấp hợp đồng thành công.");
     }
 

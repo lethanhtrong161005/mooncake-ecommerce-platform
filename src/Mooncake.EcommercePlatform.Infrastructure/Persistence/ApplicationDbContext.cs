@@ -29,6 +29,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<ShopOrderPolicy> ShopOrderPolicies => Set<ShopOrderPolicy>();
+    public DbSet<ShopShippingRate> ShopShippingRates => Set<ShopShippingRate>();
+    public DbSet<InventoryReservation> InventoryReservations => Set<InventoryReservation>();
+    public DbSet<OrderPaymentObligation> OrderPaymentObligations => Set<OrderPaymentObligation>();
+    public DbSet<OrderPaymentPart> OrderPaymentParts => Set<OrderPaymentPart>();
+    public DbSet<PackagingFeeChangeRequest> PackagingFeeChangeRequests => Set<PackagingFeeChangeRequest>();
+    public DbSet<OrderCancellationRequest> OrderCancellationRequests => Set<OrderCancellationRequest>();
+    public DbSet<OrderRefundCase> OrderRefundCases => Set<OrderRefundCase>();
+    public DbSet<OrderFinancialLedgerEntry> OrderFinancialLedgerEntries => Set<OrderFinancialLedgerEntry>();
+    public DbSet<SupplierPayoutAccount> SupplierPayoutAccounts => Set<SupplierPayoutAccount>();
+    public DbSet<SupplierPayoutRequest> SupplierPayoutRequests => Set<SupplierPayoutRequest>();
+    public DbSet<OrderDeliveryDispute> OrderDeliveryDisputes => Set<OrderDeliveryDispute>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductCatalogOutboxEvent> ProductCatalogOutboxEvents => Set<ProductCatalogOutboxEvent>();
@@ -103,5 +115,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         Mooncake.EcommercePlatform.Infrastructure.Persistence.Configurations.VerificationConfiguration.ConfigureVerification(modelBuilder);
         Mooncake.EcommercePlatform.Infrastructure.Persistence.Configurations.ShopFeatureConfiguration.ConfigureShops(modelBuilder);
         Mooncake.EcommercePlatform.Infrastructure.Persistence.Configurations.ProductCatalogConfiguration.ConfigureCatalog(modelBuilder);
+        Mooncake.EcommercePlatform.Infrastructure.Persistence.Configurations.DirectBulkOrderEnterpriseConfiguration.ConfigureEnterpriseBulkOrder(modelBuilder);
     }
 }

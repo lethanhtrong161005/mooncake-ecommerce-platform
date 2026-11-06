@@ -16,6 +16,7 @@ public sealed class ProductReviewsController(IReviewService reviewService) : Bas
         [FromQuery] Guid? variantId,
         [FromQuery] int? rating,
         [FromQuery] bool? hasMedia,
+        [FromQuery] int? page,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? sortBy = "most_helpful",
@@ -27,7 +28,8 @@ public sealed class ProductReviewsController(IReviewService reviewService) : Bas
             currentUserId = parsedUserId;
         }
 
-        var result = await reviewService.GetProductReviewsFeedAsync(productId, currentUserId, variantId, rating, hasMedia, pageNumber, pageSize, sortBy, ct);
+        var result = await reviewService.GetProductReviewsFeedAsync(productId, currentUserId, variantId, rating, hasMedia,
+            page ?? pageNumber, pageSize, sortBy, ct);
         return Success(result, "Lấy luồng đánh giá sản phẩm thành công.");
     }
 

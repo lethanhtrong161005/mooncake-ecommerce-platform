@@ -16,13 +16,18 @@ public sealed class RfqsController(IRfqService rfqService) : BaseApiController
 
     [Authorize(Roles = "Customer")]
     [HttpGet("mine")]
-    public async Task<IActionResult> GetMineAsync(CancellationToken cancellationToken) =>
-        Success(await rfqService.GetMineAsync(CurrentUserId, cancellationToken), "RFQs retrieved successfully.");
+    public async Task<IActionResult> GetMineAsync([FromQuery] RfqPageQueryRequest query, CancellationToken cancellationToken) =>
+        Success<object>(Request.Query.ContainsKey("page")
+            ? await rfqService.GetPageAsync(CurrentUserId, false, query, cancellationToken)
+            : await rfqService.GetMineAsync(CurrentUserId, cancellationToken), "RFQs retrieved successfully.");
 
     [Authorize(Roles = "Supplier")]
     [HttpGet("supplier")]
-    public async Task<IActionResult> GetSupplierInvitationsAsync(CancellationToken cancellationToken) =>
-        Success(await rfqService.GetSupplierInvitationsAsync(CurrentUserId, cancellationToken),
+    public async Task<IActionResult> GetSupplierInvitationsAsync([FromQuery] RfqPageQueryRequest query,
+        CancellationToken cancellationToken) =>
+        Success<object>(Request.Query.ContainsKey("page")
+            ? await rfqService.GetPageAsync(CurrentUserId, true, query, cancellationToken)
+            : await rfqService.GetSupplierInvitationsAsync(CurrentUserId, cancellationToken),
             "RFQ invitations retrieved successfully.");
 
     [Authorize(Roles = "Customer, Supplier")]

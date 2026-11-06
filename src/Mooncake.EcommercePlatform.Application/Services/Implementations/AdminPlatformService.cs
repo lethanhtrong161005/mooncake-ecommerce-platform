@@ -2,6 +2,8 @@ namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
 using System.Text.Json;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Admin;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
@@ -53,6 +55,18 @@ public sealed class AdminPlatformService(IAdminPlatformRepository repository, IU
         return (await repository.GetAuditLogsAsync(page, pageSize, cancellationToken))
             .Select(log => new AuditLogResponse(log.Id, log.ActorUserId, log.Action, log.EntityName, log.EntityId,
                 log.MetadataJson, log.IpAddress, log.CreatedAtUtc)).ToList();
+    }
+
+    public async Task<PagedResult<AuditLogResponse>> GetAuditLogsPageAsync(AuditLogPageQueryRequest query,
+        CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query, 200);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc");
+        var page = await repository.GetAuditLogsPageAsync(query, cancellationToken);
+        return new PagedResult<AuditLogResponse>(page.Items.Select(log =>
+            new AuditLogResponse(log.Id, log.ActorUserId, log.Action, log.EntityName, log.EntityId,
+                log.MetadataJson, log.IpAddress, log.CreatedAtUtc)).ToList(),
+            page.Page, page.PageSize, page.TotalCount);
     }
 
     public async Task UpdateUserAsync(Guid userId, AdminUserUpdateRequest request, Guid actorId, string? ipAddress, CancellationToken cancellationToken = default)

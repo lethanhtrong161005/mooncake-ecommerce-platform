@@ -1,5 +1,8 @@
 namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.DTOs.Ai.Requests;
+
 using Mooncake.EcommercePlatform.Application.DTOs.Ai.Responses;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
@@ -12,6 +15,8 @@ public interface IAiAnalyticsReportRepository
     Task<AiAnalyticsReport?> FindRecentReportAsync(Guid requestedBy, AiReportType reportType, TimeSpan withinDuration, CancellationToken cancellationToken = default);
 
     Task<List<AiAnalyticsReport>> ListReportsAsync(Guid requestedBy, AiReportType? reportType, int limit = 20, CancellationToken cancellationToken = default);
+    Task<PagedResult<AiAnalyticsReport>> ListReportsPageAsync(Guid requestedBy, AiReportPageQueryRequest query,
+        CancellationToken cancellationToken = default);
 
     Task<AiAnalyticsReport> CreateReportAsync(AiAnalyticsReport report, CancellationToken cancellationToken = default);
 

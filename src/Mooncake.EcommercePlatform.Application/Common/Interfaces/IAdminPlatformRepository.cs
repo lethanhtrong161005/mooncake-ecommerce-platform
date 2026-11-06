@@ -1,5 +1,8 @@
 namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.DTOs.Admin;
+
 using Mooncake.EcommercePlatform.Domain.Entities;
 
 public interface IAdminPlatformRepository
@@ -9,6 +12,8 @@ public interface IAdminPlatformRepository
     Task<SystemConfig?> GetSystemConfigAsync(string key, CancellationToken cancellationToken = default);
     Task SaveSystemConfigAsync(SystemConfig config, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AuditLog>> GetAuditLogsAsync(int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<PagedResult<AuditLog>> GetAuditLogsPageAsync(AuditLogPageQueryRequest query,
+        CancellationToken cancellationToken = default);
     Task<User?> GetUserForUpdateAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<bool> IsSupplierVerifiedAsync(Guid userId, CancellationToken cancellationToken = default);
     Task SaveUserAndAuditAsync(User user, AuditLog auditLog, CancellationToken cancellationToken = default);

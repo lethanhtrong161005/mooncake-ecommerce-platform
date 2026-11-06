@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.AddScoped<IShopService, ShopService>();
         services.AddScoped<IProductCatalogService, ProductCatalogService>();
         services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IDirectBulkOrderService, DirectBulkOrderService>();
         services.AddScoped<ICustomPackagingService, CustomPackagingService>();
         services.AddScoped<IPackagingTemplateService, PackagingTemplateService>();
         services.AddScoped<IPlatformBootstrapService, PlatformBootstrapService>();

@@ -27,6 +27,14 @@ public sealed record CreateOrderRequest
 
     public DateOnly? DeliveryDateExpected { get; init; }
 
+    [MaxLength(40)]
+    public string? ShippingZoneCode { get; init; }
+
+    [MaxLength(64)]
+    public string? AcceptedPriceVersion { get; init; }
+
+    public bool? AcceptedTerms { get; init; }
+
     /// <summary>Optional custom branding and packaging brief attached to this order.</summary>
     public CreateCustomPackagingRequest? CustomPackaging { get; init; }
 }

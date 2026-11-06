@@ -1,0 +1,39 @@
+namespace Mooncake.EcommercePlatform.Application.Common.Constant;
+
+/// <summary>English API and domain messages for shipment and Proof-of-Delivery workflows.</summary>
+public static class DeliveryMessages
+{
+    public const string DeliveriesRetrieved = "Deliveries retrieved successfully.";
+    public const string DeliveryRetrieved = "Delivery details retrieved successfully.";
+    public const string ContractDeliveriesRetrieved = "Contract deliveries retrieved successfully.";
+    public const string OrderDeliveriesRetrieved = "Order deliveries retrieved successfully.";
+    public const string DeliveryCreated = "Delivery created successfully.";
+    public const string DeliveryStatusUpdated = "Delivery status updated successfully.";
+    public const string CarrierInfoUpdated = "Delivery carrier information updated successfully.";
+    public const string ProofSubmitted = "Proof of delivery submitted successfully.";
+    public const string ProofsRetrieved = "Delivery proofs retrieved successfully.";
+    public const string ProofRetrieved = "Delivery proof details retrieved successfully.";
+    public const string ProofVerified = "Delivery proof integrity verified successfully.";
+    public const string ValidSessionRequired = "A valid authenticated user session is required.";
+
+    public const string DeliveryNotFound = "Delivery record was not found.";
+    public const string ProofNotFound = "Proof of delivery record was not found.";
+    public const string AccessDenied = "You do not have permission to access this delivery.";
+    public const string ManageDenied = "You do not have permission to manage this delivery.";
+    public const string ProofSubmitDenied = "You do not have permission to submit proof for this delivery.";
+    public const string TargetLinkInvalid = "A delivery must be linked to exactly one contract or one order.";
+    public const string FromAddressRequired = "Dispatch origin address is required.";
+    public const string ToAddressRequired = "Destination delivery address is required.";
+    public const string RecipientNameRequired = "Recipient name is required.";
+    public const string RecipientPhoneInvalid = "Recipient phone number must be a valid 10-digit Vietnamese mobile number.";
+    public const string ScheduledDateInPast = "Scheduled delivery date cannot be in the past.";
+    public const string SingleDeliveryLimitExceeded = "Direct bulk orders support only a single active shipment in v1.";
+    public const string ProofRequiredBeforeDelivered = "A delivery proof photo is required before marking the shipment as delivered.";
+    public const string DeliveryAlreadyCompleted = "This delivery has already been completed.";
+    public const string LatitudeInvalid = "Latitude must be within [-90, 90].";
+    public const string LongitudeInvalid = "Longitude must be within [-180, 180].";
+    public const string PhotoRequired = "On-site delivery photo evidence is required.";
+    public const string SignatureRequiredForContract = "Recipient signature is required when submitting contract delivery proof.";
+    public const string DefaultDriverLabel = "Delivery Driver";
+}
+

@@ -1,7 +1,10 @@
 namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.DTOs.Ai.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Ai.Responses;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
@@ -49,6 +52,22 @@ public class AiAnalyticsReportRepository : IAiAnalyticsReportRepository
             .OrderByDescending(r => r.CreatedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PagedResult<AiAnalyticsReport>> ListReportsPageAsync(Guid requestedBy,
+        AiReportPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        IQueryable<AiAnalyticsReport> rows = _dbContext.AiAnalyticsReports.AsNoTracking()
+            .Where(report => report.RequestedBy == requestedBy && !report.IsDeleted);
+        if (query.Type.HasValue) rows = rows.Where(report => report.ReportType == query.Type.Value);
+        if (query.From.HasValue) rows = rows.Where(report => report.CreatedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(report => report.CreatedAt <= query.To.Value);
+        var total = await rows.CountAsync(cancellationToken);
+        rows = query.Sort == "createdAtAsc"
+            ? rows.OrderBy(report => report.CreatedAt).ThenBy(report => report.Id)
+            : rows.OrderByDescending(report => report.CreatedAt).ThenByDescending(report => report.Id);
+        var items = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        return new PagedResult<AiAnalyticsReport>(items, query.Page, query.PageSize, total);
     }
 
     public async Task<AiAnalyticsReport> CreateReportAsync(AiAnalyticsReport report, CancellationToken cancellationToken = default)

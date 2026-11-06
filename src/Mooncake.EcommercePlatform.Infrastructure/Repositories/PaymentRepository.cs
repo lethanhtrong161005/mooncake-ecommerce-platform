@@ -3,7 +3,11 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Responses;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
@@ -11,6 +15,47 @@ using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 
 public sealed class PaymentRepository(ApplicationDbContext context, IDateTimeProvider clock) : IPaymentRepository
 {
+    public async Task<PagedResult<Payment>> GetPaymentsPageAsync(Guid userId, bool supplier,
+        PaymentPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        IQueryable<Payment> rows = context.Payments.AsNoTracking().Where(payment => !payment.IsDeleted);
+        if (supplier)
+        {
+            rows = rows.Where(payment =>
+                payment.OrderId.HasValue && context.Orders.Any(order => order.Id == payment.OrderId.Value
+                    && !order.IsDeleted && context.Shops.Any(shop => shop.Id == order.ShopId && !shop.IsDeleted
+                        && (shop.OwnerUserId == userId || context.SupplierProfiles.Any(profile =>
+                            profile.Id == shop.SupplierId && profile.UserId == userId && !profile.IsDeleted))))
+                || payment.ContractId.HasValue && context.Contracts.Any(contract => contract.Id == payment.ContractId.Value
+                    && !contract.IsDeleted && context.SupplierProfiles.Any(profile =>
+                        profile.Id == contract.SupplierId && profile.UserId == userId && !profile.IsDeleted)));
+        }
+        else rows = rows.Where(payment => payment.CustomerId == userId);
+
+        if (query.Status.HasValue) rows = rows.Where(payment => payment.Status == query.Status.Value);
+        if (query.Method.HasValue) rows = rows.Where(payment => payment.Method == query.Method.Value);
+        if (query.OrderId.HasValue) rows = rows.Where(payment => payment.OrderId == query.OrderId.Value);
+        if (query.From.HasValue) rows = rows.Where(payment => payment.CreatedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(payment => payment.CreatedAt <= query.To.Value);
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(payment => EF.Functions.ILike(payment.PaymentNumber, term)
+                || (payment.TransactionId != null && EF.Functions.ILike(payment.TransactionId, term)));
+        }
+
+        var totalCount = await rows.CountAsync(cancellationToken);
+        rows = query.Sort switch
+        {
+            "createdAtAsc" => rows.OrderBy(payment => payment.CreatedAt).ThenBy(payment => payment.Id),
+            "amountAsc" => rows.OrderBy(payment => payment.Amount).ThenBy(payment => payment.Id),
+            "amountDesc" => rows.OrderByDescending(payment => payment.Amount).ThenByDescending(payment => payment.Id),
+            _ => rows.OrderByDescending(payment => payment.CreatedAt).ThenByDescending(payment => payment.Id)
+        };
+        var items = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        return new PagedResult<Payment>(items, query.Page, query.PageSize, totalCount);
+    }
+
     public Task<Order?> GetOrderForPaymentAsync(Guid customerId, Guid orderId, CancellationToken cancellationToken = default) =>
         context.Orders.AsNoTracking().FirstOrDefaultAsync(order => order.Id == orderId && order.CustomerId == customerId && !order.IsDeleted, cancellationToken);
 
@@ -43,7 +88,9 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                  from contract in contracts.DefaultIfEmpty()
                  join contractProfile in context.SupplierProfiles.AsNoTracking() on contract!.SupplierId equals contractProfile.Id into contractProfiles
                  from contractProfile in contractProfiles.DefaultIfEmpty()
-                 where !payment.IsDeleted && ((profile != null && profile.UserId == userId) || (contractProfile != null && contractProfile.UserId == userId))
+                 where !payment.IsDeleted
+                       && ((shop != null && !shop.IsDeleted && (shop.OwnerUserId == userId || (profile != null && profile.UserId == userId && !profile.IsDeleted)))
+                           || (contractProfile != null && contractProfile.UserId == userId && !contractProfile.IsDeleted))
                  orderby payment.CreatedAt descending
                  select payment).Take(100).ToListAsync(cancellationToken)
         : await context.Payments.AsNoTracking().Where(payment => payment.CustomerId == userId && !payment.IsDeleted)
@@ -52,7 +99,11 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
     public async Task<bool> CreatePaymentAsync(Payment payment, CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        if (payment.OrderId.HasValue && await context.Payments.AnyAsync(existing => existing.OrderId == payment.OrderId
+        if (payment.PartId.HasValue && await context.Payments.AnyAsync(existing => existing.PartId == payment.PartId
+                && (existing.Status == PaymentStatus.Pending || existing.Status == PaymentStatus.Processing || existing.Status == PaymentStatus.Completed)
+                && !existing.IsDeleted, cancellationToken)) return false;
+        if (payment.OrderId.HasValue && !payment.PartId.HasValue && await context.Payments.AnyAsync(existing => existing.OrderId == payment.OrderId
+                && existing.PartId == null
                 && (existing.Status == PaymentStatus.Pending || existing.Status == PaymentStatus.Processing || existing.Status == PaymentStatus.Completed)
                 && !existing.IsDeleted, cancellationToken)) return false;
         if (payment.MilestoneId.HasValue && await context.Payments.AnyAsync(existing => existing.MilestoneId == payment.MilestoneId
@@ -82,7 +133,11 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         exception.InnerException is PostgresException
         {
             SqlState: PostgresErrorCodes.UniqueViolation,
-            ConstraintName: "payments_idempotency_key_key" or "payments_one_open_payment_per_order_key" or "payments_one_open_payment_per_milestone_key"
+            ConstraintName: "payments_idempotency_key_key"
+                or "payments_one_open_payment_per_order_key"
+                or "payments_one_open_payment_per_part_key"
+                or "payments_one_open_payment_per_order_legacy_key"
+                or "payments_one_open_payment_per_milestone_key"
         };
 
     public async Task<int> ExpirePendingPaymentsAsync(CancellationToken cancellationToken = default)
@@ -96,6 +151,16 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
             var previousStatus = payment.Status;
             payment.Status = PaymentStatus.Failed;
             payment.UpdatedAt = now;
+            if (payment.PartId is Guid partId)
+            {
+                var part = await context.OrderPaymentParts
+                    .FirstOrDefaultAsync(item => item.Id == partId && item.Status == "Processing" && !item.IsDeleted, cancellationToken);
+                if (part is not null)
+                {
+                    part.Status = "Pending";
+                    part.UpdatedAt = now;
+                }
+            }
             context.WorkflowEvents.Add(new WorkflowEvent
             {
                 AggregateType = "Payment", AggregateId = payment.Id, EventType = "PaymentStatusChanged",
@@ -143,6 +208,12 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                 await NotifyContractPartiesAsync(contract, "contract.active", "Contract is active", "The required deposit was confirmed and the contract is now active.", cancellationToken);
             }
         }
+
+        if (payment.OrderId is not null)
+        {
+            await SettleOrderPartPaymentCoreAsync(payment, now, cancellationToken);
+        }
+
         context.WorkflowEvents.Add(new WorkflowEvent
         {
             AggregateType = "Payment", AggregateId = payment.Id, EventType = "PaymentStatusChanged",
@@ -189,6 +260,7 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                 });
             }
         }
+
         context.WorkflowEvents.Add(new WorkflowEvent
         {
             AggregateType = "Payment", AggregateId = payment.Id, EventType = "PaymentStatusChanged",
@@ -266,13 +338,90 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                 $"SELECT * FROM orders WHERE id = {orderId} FOR UPDATE")
             .SingleOrDefaultAsync(cancellationToken);
         if (order is null || order.CustomerId != customerId || order.IsDeleted ||
-            order.Status == OrderStatus.Cancelled || order.TotalAmount <= 0)
+            order.Status is OrderStatus.Pending or OrderStatus.Cancelled or OrderStatus.Expired
+                or OrderStatus.AwaitingCustomerDeliveryApproval || order.TotalAmount <= 0)
             return null;
 
-        var payment = await context.Payments.FromSqlInterpolated(
-                $"SELECT * FROM payments WHERE order_id = {orderId} AND is_deleted = FALSE FOR UPDATE")
-            .OrderByDescending(item => item.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         var now = clock.UtcNow;
+        var scheduledPartIds = await (from part in context.OrderPaymentParts.AsNoTracking()
+                                      join obligation in context.OrderPaymentObligations.AsNoTracking()
+                                          on part.ObligationId equals obligation.Id
+                                      where part.OrderId == orderId && !part.IsDeleted && !obligation.IsDeleted
+                                            && obligation.Status != "Cancelled"
+                                      orderby obligation.SequenceNo, part.PartIndex
+                                      select new { part.Id, part.Status }).ToListAsync(cancellationToken);
+
+        if (scheduledPartIds.Count > 0)
+        {
+            var nextOpen = scheduledPartIds.FirstOrDefault(item => item.Status is "Pending" or "Processing");
+            if (nextOpen is null)
+            {
+                var latestCompleted = await context.Payments.AsNoTracking()
+                    .Where(item => item.OrderId == orderId && item.Status == PaymentStatus.Completed && !item.IsDeleted)
+                    .OrderByDescending(item => item.CreatedAt)
+                    .FirstOrDefaultAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return latestCompleted;
+            }
+
+            var lockedPart = await context.OrderPaymentParts.FromSqlInterpolated(
+                    $"SELECT * FROM payment_parts WHERE id = {nextOpen.Id} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken);
+            if (lockedPart is null || lockedPart.IsDeleted || lockedPart.Status is "Cancelled" or "Refunded")
+                return null;
+
+            var partPayment = await context.Payments.FromSqlInterpolated(
+                    $"SELECT * FROM payments WHERE part_id = {lockedPart.Id} AND is_deleted = FALSE FOR UPDATE")
+                .OrderByDescending(item => item.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (lockedPart.Status == "Paid" || partPayment?.Status == PaymentStatus.Completed)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return partPayment;
+            }
+
+            if (partPayment is null || partPayment.Status == PaymentStatus.Failed)
+            {
+                partPayment = new Payment
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = orderId,
+                    PartId = lockedPart.Id,
+                    CustomerId = customerId,
+                    PaymentNumber = $"PAY-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..22].ToUpperInvariant(),
+                    Amount = lockedPart.Amount,
+                    Currency = "VND",
+                    Method = PaymentMethod.VNPay,
+                    Provider = "VNPay",
+                    Status = PaymentStatus.Pending,
+                    ExpiresAt = now.AddHours(OrderPolicyDefaults.DepositPaymentSlaHours),
+                    CreatedBy = customerId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                context.Payments.Add(partPayment);
+            }
+            else
+            {
+                partPayment.Method = PaymentMethod.VNPay;
+                partPayment.Provider = "VNPay";
+                partPayment.Status = PaymentStatus.Pending;
+                partPayment.ExpiresAt = now.AddHours(OrderPolicyDefaults.DepositPaymentSlaHours);
+                partPayment.UpdatedAt = now;
+                partPayment.UpdatedBy = customerId;
+            }
+
+            lockedPart.Status = "Processing";
+            lockedPart.UpdatedAt = now;
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return partPayment;
+        }
+
+        var payment = await context.Payments.FromSqlInterpolated(
+                $"SELECT * FROM payments WHERE order_id = {orderId} AND part_id IS NULL AND is_deleted = FALSE FOR UPDATE")
+            .OrderByDescending(item => item.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         if (payment is null)
         {
             payment = new Payment
@@ -286,6 +435,7 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         }
         else if (payment.Status == PaymentStatus.Completed)
         {
+            await transaction.CommitAsync(cancellationToken);
             return payment;
         }
         else if (payment.Status is not (PaymentStatus.Pending or PaymentStatus.Failed))
@@ -324,11 +474,14 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
             await transaction.CommitAsync(cancellationToken);
             return payment;
         }
-        if (payment.Status is not (PaymentStatus.Pending or PaymentStatus.Processing)) return null;
+        if (payment.Status is not (PaymentStatus.Pending or PaymentStatus.Processing or PaymentStatus.Failed))
+            return null;
+
         var now = clock.UtcNow;
         payment.Status = PaymentStatus.Completed;
         payment.PaidAt = now;
         payment.UpdatedAt = now;
+
         if (payment.ContractId is Guid contractId && payment.MilestoneId is Guid milestoneId)
         {
             var contract = await context.Contracts.FirstOrDefaultAsync(item => item.Id == contractId && !item.IsDeleted,
@@ -368,33 +521,12 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                     });
             }
         }
-        if (payment.OrderId is Guid orderId)
+
+        if (payment.OrderId is not null)
         {
-            var order = await context.Orders.FirstOrDefaultAsync(item => item.Id == orderId && !item.IsDeleted, cancellationToken);
-            if (order is not null)
-            {
-                order.Status = OrderStatus.Processing;
-                order.UpdatedAt = now;
-                context.Notifications.Add(new Notification
-                {
-                    UserId = order.CustomerId, Type = "order.paid", Title = "Order payment confirmed",
-                    Content = $"Payment for order {order.OrderNumber} was confirmed via VNPay.",
-                    ReferenceType = "order", ReferenceId = order.Id
-                });
-                var supplierUserId = await (from o in context.Orders
-                                            join shop in context.Shops on o.ShopId equals shop.Id
-                                            join profile in context.SupplierProfiles on shop.SupplierId equals profile.Id
-                                            where o.Id == orderId
-                                            select profile.UserId).FirstOrDefaultAsync(cancellationToken);
-                if (supplierUserId != Guid.Empty)
-                    context.Notifications.Add(new Notification
-                    {
-                        UserId = supplierUserId, Type = "order.paid", Title = "New paid order",
-                        Content = $"Payment for order {order.OrderNumber} has been received. Please process for shipment.",
-                        ReferenceType = "order", ReferenceId = order.Id
-                    });
-            }
+            await SettleOrderPartPaymentCoreAsync(payment, now, cancellationToken);
         }
+
         context.WorkflowEvents.Add(new WorkflowEvent
         {
             AggregateType = "Payment", AggregateId = payment.Id, EventType = "VnPayPaymentConfirmed",
@@ -403,6 +535,210 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return payment;
+    }
+
+    private async Task SettleOrderPartPaymentCoreAsync(Payment payment, DateTime now, CancellationToken cancellationToken)
+    {
+        if (payment.OrderId is not Guid orderId) return;
+
+        var order = await context.Orders.FromSqlInterpolated(
+                $"SELECT * FROM orders WHERE id = {orderId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
+        if (order is null || order.IsDeleted) return;
+
+        if (payment.PartId is Guid partId)
+        {
+            var lockedPart = await context.OrderPaymentParts.FromSqlInterpolated(
+                    $"SELECT * FROM payment_parts WHERE id = {partId} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken);
+            if (lockedPart is not null && !lockedPart.IsDeleted)
+            {
+                lockedPart.Status = "Paid";
+                lockedPart.PaidAt = now;
+                lockedPart.UpdatedAt = now;
+
+                var lockedObligation = await context.OrderPaymentObligations.FromSqlInterpolated(
+                        $"SELECT * FROM order_payment_schedule WHERE id = {lockedPart.ObligationId} FOR UPDATE")
+                    .SingleOrDefaultAsync(cancellationToken);
+                if (lockedObligation is not null && !lockedObligation.IsDeleted)
+                {
+                    var siblingParts = await context.OrderPaymentParts.AsNoTracking()
+                        .Where(item => item.ObligationId == lockedObligation.Id && item.Id != lockedPart.Id && !item.IsDeleted)
+                        .ToListAsync(cancellationToken);
+                    var totalPaidParts = lockedPart.Amount + siblingParts.Where(item => item.Status == "Paid").Sum(item => item.Amount);
+                    lockedObligation.PaidAmount = Math.Min(lockedObligation.TotalAmount, totalPaidParts);
+                    if (order.Status is not (OrderStatus.Cancelled or OrderStatus.Expired))
+                    {
+                        lockedObligation.Status = lockedObligation.PaidAmount >= lockedObligation.TotalAmount
+                            ? "Paid"
+                            : "PartiallyPaid";
+                        if (lockedObligation.Status == "Paid")
+                            lockedObligation.PaidAt ??= now;
+                    }
+                    lockedObligation.UpdatedAt = now;
+                }
+            }
+        }
+
+        var capturedKey = $"payment-captured:{payment.Id}";
+        if (!await context.OrderFinancialLedgerEntries.AnyAsync(item => item.IdempotencyKey == capturedKey, cancellationToken))
+        {
+            context.OrderFinancialLedgerEntries.Add(new OrderFinancialLedgerEntry
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                ShopId = order.ShopId,
+                CustomerId = order.CustomerId,
+                PaymentId = payment.Id,
+                EntryType = "Captured",
+                BalanceBucket = "Held",
+                Amount = payment.Amount,
+                Description = $"Payment captured {payment.Amount:N0} VND ({payment.PaymentNumber}) into platform Held balance.",
+                IdempotencyKey = capturedKey,
+                CreatedBy = payment.CustomerId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+
+        if (order.Status is OrderStatus.Cancelled or OrderStatus.Expired)
+        {
+            // Late IPN after cancellation or expiry: never revive the order; auto-open/increment a Pending refund case.
+            var openRefundCase = await context.OrderRefundCases
+                .FirstOrDefaultAsync(item => item.OrderId == order.Id && item.Status == "Pending" && !item.IsDeleted, cancellationToken);
+            if (openRefundCase is null)
+            {
+                openRefundCase = new OrderRefundCase
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = order.Id,
+                    CustomerId = order.CustomerId,
+                    ShopId = order.ShopId,
+                    CaseNumber = $"RFD-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
+                    RequestedAmount = payment.Amount,
+                    ApprovedAmount = 0m,
+                    Reason = $"Late payment ({payment.PaymentNumber}) arrived after order {order.Status}; automatic refund queued.",
+                    Status = "Pending",
+                    SandboxSimulated = true,
+                    CreatedBy = payment.CustomerId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                context.OrderRefundCases.Add(openRefundCase);
+            }
+            else
+            {
+                openRefundCase.RequestedAmount += payment.Amount;
+                openRefundCase.UpdatedAt = now;
+            }
+
+            var lateRefundKey = $"late-ipn-refund:{payment.Id}";
+            if (!await context.OrderFinancialLedgerEntries.AnyAsync(item => item.IdempotencyKey == lateRefundKey, cancellationToken))
+            {
+                context.OrderFinancialLedgerEntries.Add(new OrderFinancialLedgerEntry
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = order.Id,
+                    ShopId = order.ShopId,
+                    CustomerId = order.CustomerId,
+                    PaymentId = payment.Id,
+                    RefundCaseId = openRefundCase.Id,
+                    EntryType = "ReservedForRefund",
+                    BalanceBucket = "Held",
+                    Amount = 0m,
+                    Description = $"Late payment ({payment.PaymentNumber}) flagged for automatic refund ({payment.Amount:N0} VND) on {order.Status} order.",
+                    IdempotencyKey = lateRefundKey,
+                    CreatedBy = payment.CustomerId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+
+            order.Version += 1;
+            order.UpdatedAt = now;
+            context.Notifications.Add(new Notification
+            {
+                UserId = order.CustomerId,
+                Type = "order.late_payment_refund_queued",
+                Title = "Late payment queued for refund",
+                Content = $"Payment {payment.PaymentNumber} arrived after order {order.OrderNumber} was {order.Status.ToString().ToLowerInvariant()}. Refund case {openRefundCase.CaseNumber} has been opened automatically.",
+                ReferenceType = "order",
+                ReferenceId = order.Id
+            });
+        }
+        else
+        {
+            order.Version += 1;
+            order.UpdatedAt = now;
+
+            // Update inventory reservation deadline if all pre-production obligations are now satisfied.
+            var allObligations = await context.OrderPaymentObligations.AsNoTracking()
+                .Where(item => item.OrderId == order.Id && !item.IsDeleted && item.Status != "Cancelled")
+                .ToListAsync(cancellationToken);
+            var currentUpdatedPartObligationId = payment.PartId.HasValue
+                ? (await context.OrderPaymentParts.AsNoTracking()
+                    .Where(item => item.Id == payment.PartId.Value)
+                    .Select(item => (Guid?)item.ObligationId)
+                    .FirstOrDefaultAsync(cancellationToken))
+                : null;
+
+            var preProdSatisfied = allObligations.Count == 0 || allObligations
+                .Where(item => item.IsRequiredBeforeProduction)
+                .All(item => item.Status == "Paid" ||
+                    (currentUpdatedPartObligationId.HasValue && item.Id == currentUpdatedPartObligationId.Value &&
+                     context.ChangeTracker.Entries<OrderPaymentObligation>()
+                         .Any(e => e.Entity.Id == item.Id && e.Entity.Status == "Paid")));
+
+            if (preProdSatisfied)
+            {
+                var customPackaging = await context.CustomPackagings.AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.OrderId == order.Id && !item.IsDeleted, cancellationToken);
+                var awaitingMockup = customPackaging is not null &&
+                    customPackaging.Status is not (CustomPackagingStatus.Approved or CustomPackagingStatus.InProduction or CustomPackagingStatus.Completed);
+
+                if (awaitingMockup)
+                {
+                    var mockupExpiry = BusinessCalendarHelper.AddBusinessDays(now, OrderPolicyDefaults.MockupReservationBusinessDays);
+                    order.ReservationExpiresAt = mockupExpiry;
+                    await context.InventoryReservations
+                        .Where(item => item.OrderId == order.Id && item.Status == "Active")
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(item => item.ExpiresAt, mockupExpiry)
+                            .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+                }
+                else
+                {
+                    order.ReservationExpiresAt = null;
+                    await context.InventoryReservations
+                        .Where(item => item.OrderId == order.Id && item.Status == "Active")
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(item => item.Status, "Committed")
+                            .SetProperty(item => item.ExpiresAt, (DateTime?)null)
+                            .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+                }
+            }
+
+            context.Notifications.Add(new Notification
+            {
+                UserId = order.CustomerId, Type = "order.paid", Title = "Order payment confirmed",
+                Content = $"Payment {payment.PaymentNumber} ({payment.Amount:N0} VND) for order {order.OrderNumber} was confirmed.",
+                ReferenceType = "order", ReferenceId = order.Id
+            });
+            var supplierUserId = await (from o in context.Orders
+                                        join shop in context.Shops on o.ShopId equals shop.Id
+                                        join profile in context.SupplierProfiles on shop.SupplierId equals profile.Id
+                                        where o.Id == orderId
+                                        select profile.UserId).FirstOrDefaultAsync(cancellationToken);
+            if (supplierUserId != Guid.Empty)
+            {
+                context.Notifications.Add(new Notification
+                {
+                    UserId = supplierUserId, Type = "order.paid", Title = "Order payment received",
+                    Content = $"Payment {payment.PaymentNumber} ({payment.Amount:N0} VND) for order {order.OrderNumber} has been received into platform Held balance.",
+                    ReferenceType = "order", ReferenceId = order.Id
+                });
+            }
+        }
     }
 
     public async Task<bool> FailVnPayPaymentAsync(string paymentNumber, string reason,
@@ -421,9 +757,22 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         }
         if (payment.Status is not (PaymentStatus.Pending or PaymentStatus.Processing or PaymentStatus.Failed))
             return false;
+
+        var now = clock.UtcNow;
         var previousStatus = payment.Status;
         payment.Status = PaymentStatus.Failed;
-        payment.UpdatedAt = clock.UtcNow;
+        payment.UpdatedAt = now;
+        if (payment.PartId is Guid partId)
+        {
+            var lockedPart = await context.OrderPaymentParts
+                .FirstOrDefaultAsync(item => item.Id == partId && item.Status == "Processing" && !item.IsDeleted, cancellationToken);
+            if (lockedPart is not null)
+            {
+                lockedPart.Status = "Pending";
+                lockedPart.UpdatedAt = now;
+            }
+        }
+
         context.WorkflowEvents.Add(new WorkflowEvent
         {
             AggregateType = "Payment", AggregateId = payment.Id, EventType = "VnPayPaymentFailed",
@@ -503,8 +852,8 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                 disputedAmount += heldAmount;
             }
 
-            var customerName = (customers.TryGetValue(c.CustomerId, out var cName) && !string.IsNullOrWhiteSpace(cName)) ? cName : "Doanh nghiệp B2B";
-            var supplierName = (suppliers.TryGetValue(c.SupplierId, out var sName) && !string.IsNullOrWhiteSpace(sName)) ? sName : "Nhà cung cấp";
+            var customerName = (customers.TryGetValue(c.CustomerId, out var cName) && !string.IsNullOrWhiteSpace(cName)) ? cName : "Corporate Customer";
+            var supplierName = (suppliers.TryGetValue(c.SupplierId, out var sName) && !string.IsNullOrWhiteSpace(sName)) ? sName : "Verified Supplier";
 
             ledgerItems.Add(new EscrowLedgerItemDto(
                 c.Id,

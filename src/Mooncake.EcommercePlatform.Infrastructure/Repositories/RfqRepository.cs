@@ -2,13 +2,66 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.DTOs.Rfqs.Requests;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 
 public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
 {
+    public async Task<PagedResult<RequestForQuotation>> GetRfqsPageAsync(Guid userId, bool supplier,
+        RfqPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        IQueryable<RequestForQuotation> rows = context.RequestForQuotations.AsNoTracking()
+            .Where(rfq => !rfq.IsDeleted);
+        rows = supplier
+            ? rows.Where(rfq => context.RfqInvitations.Any(invitation => invitation.RfqId == rfq.Id
+                && !invitation.IsDeleted && context.SupplierProfiles.Any(profile => profile.Id == invitation.SupplierId
+                    && profile.UserId == userId && !profile.IsDeleted)))
+            : rows.Where(rfq => rfq.CustomerId == userId);
+        if (query.Status.HasValue) rows = rows.Where(rfq => rfq.Status == query.Status.Value);
+        if (query.From.HasValue) rows = rows.Where(rfq => rfq.CreatedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(rfq => rfq.CreatedAt <= query.To.Value);
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(rfq => EF.Functions.ILike(rfq.RfqNumber, term)
+                || rfq.Title != null && EF.Functions.ILike(rfq.Title, term));
+        }
+        var total = await rows.CountAsync(cancellationToken);
+        rows = query.Sort switch
+        {
+            "createdAtAsc" => rows.OrderBy(rfq => rfq.CreatedAt).ThenBy(rfq => rfq.Id),
+            "deadlineAsc" => rows.OrderBy(rfq => rfq.BidDeadline).ThenBy(rfq => rfq.Id),
+            "deadlineDesc" => rows.OrderByDescending(rfq => rfq.BidDeadline).ThenByDescending(rfq => rfq.Id),
+            _ => rows.OrderByDescending(rfq => rfq.CreatedAt).ThenByDescending(rfq => rfq.Id)
+        };
+        var items = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        return new PagedResult<RequestForQuotation>(items, query.Page, query.PageSize, total);
+    }
+
+    public async Task<(IReadOnlyList<RfqItem> Items, IReadOnlyDictionary<Guid, int> InvitationCounts,
+        IReadOnlyDictionary<Guid, int> BidCounts)> GetRfqPageDetailsAsync(Guid[] rfqIds,
+        CancellationToken cancellationToken = default)
+    {
+        var items = await context.RfqItems.AsNoTracking().Where(item => rfqIds.Contains(item.RfqId) && !item.IsDeleted)
+            .ToListAsync(cancellationToken);
+        var invitations = await context.RfqInvitations.AsNoTracking()
+            .Where(item => rfqIds.Contains(item.RfqId) && !item.IsDeleted)
+            .GroupBy(item => item.RfqId)
+            .Select(group => new { RfqId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.RfqId, item => item.Count, cancellationToken);
+        var bids = await context.Bids.AsNoTracking()
+            .Where(item => rfqIds.Contains(item.RfqId) && !item.IsDeleted)
+            .GroupBy(item => item.RfqId)
+            .Select(group => new { RfqId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.RfqId, item => item.Count, cancellationToken);
+        return (items, invitations, bids);
+    }
+
     public Task<RequestForQuotation?> GetRfqAsync(Guid rfqId, CancellationToken cancellationToken = default) =>
         context.RequestForQuotations.FirstOrDefaultAsync(rfq => rfq.Id == rfqId && !rfq.IsDeleted, cancellationToken);
 

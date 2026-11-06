@@ -31,14 +31,16 @@ public sealed class DeliveryManagementTests
         var request = new CreateDeliveryRequest
         {
             ContractId = contractId,
-            FromAddress = "Kho Xưởng Bát Tràng, Hà Nội",
-            ToAddress = "Tòa Keangnam, Mễ Trì, Hà Nội",
-            RecipientName = "Nguyễn Văn Hùng",
+            FromAddress = "Bat Trang Warehouse, Hanoi",
+            ToAddress = "Keangnam Tower, Hanoi",
+            RecipientName = "Nguyen Van Hung",
             RecipientPhone = "0912345678",
             ScheduledDate = DateOnly.FromDateTime(fixedNow.AddDays(2)),
             DeliveryType = DeliveryType.SelfArranged
         };
 
+        repository.Setup(r => r.CanManageContractAsync(contractId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
         repository.Setup(r => r.CreateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Delivery d, CancellationToken _) => d);
 
@@ -60,9 +62,9 @@ public sealed class DeliveryManagementTests
         {
             ContractId = null,
             OrderId = null,
-            FromAddress = "Kho",
-            ToAddress = "Kho",
-            RecipientName = "A",
+            FromAddress = "Warehouse",
+            ToAddress = "Destination",
+            RecipientName = "Recipient",
             RecipientPhone = "0912345678"
         };
 
@@ -77,9 +79,9 @@ public sealed class DeliveryManagementTests
         var request = new CreateDeliveryRequest
         {
             ContractId = contractId,
-            FromAddress = "Kho",
-            ToAddress = "Kho",
-            RecipientName = "A",
+            FromAddress = "Warehouse",
+            ToAddress = "Destination",
+            RecipientName = "Recipient",
             RecipientPhone = "12345"
         };
 
@@ -111,7 +113,7 @@ public sealed class DeliveryManagementTests
         var result = await service.UpdateStatusAsync(userId, deliveryId, new UpdateDeliveryStatusRequest
         {
             Status = DeliveryStatus.Confirmed,
-            Notes = "Đã xác nhận chuyến xe."
+            Notes = "Confirmed dispatch."
         });
 
         Assert.Equal(DeliveryStatus.Confirmed, result.Status);
@@ -170,7 +172,7 @@ public sealed class DeliveryManagementTests
     }
 
     [Fact]
-    public async Task SubmitProofAsync_DeliveryPoD_WithPhotoAndSignature_UpdatesStatusToDelivered()
+    public async Task SubmitProofAsync_DeliveryPoD_WithPhotoAndSignature_UpdatesContractDeliveryToDelivered()
     {
         var service = new DeliveryService(repository.Object, clock.Object);
         var delivery = new Delivery
@@ -197,8 +199,8 @@ public sealed class DeliveryManagementTests
             SignatureUrl = "https://storage.mooncake.vn/pod/signature1.png",
             LocationLat = 21.0168m,
             LocationLng = 105.7838m,
-            TakenBy = "Nguyễn Văn Hùng (Thủ kho)",
-            Notes = "Đã giao đủ 1.500 hộp."
+            TakenBy = "Nguyen Van Hung",
+            Notes = "Delivered 1,500 boxes."
         };
 
         var result = await service.SubmitProofAsync(userId, deliveryId, request);
@@ -214,7 +216,7 @@ public sealed class DeliveryManagementTests
     }
 
     [Fact]
-    public async Task SubmitProofAsync_DeliveryPoD_MissingSignature_ThrowsValidationException()
+    public async Task SubmitProofAsync_ContractDeliveryPoD_MissingSignature_ThrowsValidationException()
     {
         var service = new DeliveryService(repository.Object, clock.Object);
         var delivery = new Delivery
@@ -234,11 +236,44 @@ public sealed class DeliveryManagementTests
         {
             ProofType = ProofType.Delivery,
             PhotoUrl = "https://storage.mooncake.vn/pod/photo1.jpg",
-            SignatureUrl = null // Missing signature
+            SignatureUrl = null
         };
 
         var ex = await Assert.ThrowsAsync<HttpException>(() => service.SubmitProofAsync(userId, deliveryId, request));
         Assert.Equal(400, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task SubmitProofAsync_OrderDeliveryPoD_WithoutSignature_DoesNotAutoMarkDelivered()
+    {
+        var service = new DeliveryService(repository.Object, clock.Object);
+        var orderId = Guid.NewGuid();
+        var delivery = new Delivery
+        {
+            Id = deliveryId,
+            OrderId = orderId,
+            Status = DeliveryStatus.InTransit,
+            DeliveryNumber = "DEL-202610-ORD01"
+        };
+
+        repository.Setup(r => r.GetByIdAsync(deliveryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+        repository.Setup(r => r.CanManageDeliveryAsync(deliveryId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repository.Setup(r => r.CreateProofAsync(It.IsAny<DeliveryProof>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DeliveryProof p, CancellationToken _) => p);
+        repository.Setup(r => r.UpdateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Delivery d, CancellationToken _) => d);
+
+        var result = await service.SubmitProofAsync(userId, deliveryId, new CreateDeliveryProofRequest
+        {
+            ProofType = ProofType.Delivery,
+            PhotoUrl = "https://storage.mooncake.vn/pod/order-photo.jpg"
+        });
+
+        Assert.NotNull(result);
+        Assert.Equal(DeliveryStatus.AwaitingCustomerConfirmation, delivery.Status);
+        Assert.Null(delivery.ActualDeliveryDate);
     }
 
     [Fact]
@@ -266,7 +301,7 @@ public sealed class DeliveryManagementTests
         {
             ProofType = ProofType.Pickup,
             PhotoUrl = "https://storage.mooncake.vn/pod/pickup.jpg",
-            TakenBy = "Tài xế xưởng"
+            TakenBy = "Factory Driver"
         };
 
         var result = await service.SubmitProofAsync(userId, deliveryId, request);
@@ -295,4 +330,3 @@ public sealed class DeliveryManagementTests
         Assert.True(result);
     }
 }
-

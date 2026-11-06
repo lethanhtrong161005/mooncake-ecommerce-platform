@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
 using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
@@ -17,6 +18,18 @@ using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 public class UserService(IUserRepository userRepository, IUserHelper userHelper) : IUserService
 {
     private const string PhoneConflictMessage = "Phone number is already in use.";
+
+    public async Task<PagedResult<UserResponse>> GetUsersPageAsync(UserPageQueryRequest query,
+        CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "fullNameAsc", "fullNameDesc");
+        if (query.Role.HasValue && !Enum.IsDefined(query.Role.Value))
+            throw new HttpException(400, "Invalid user role filter.", "VALIDATION_ERROR");
+        var page = await userRepository.GetPageAsync(query, cancellationToken);
+        return new PagedResult<UserResponse>(page.Items.Select(userHelper.ToResponse).ToList(),
+            page.Page, page.PageSize, page.TotalCount);
+    }
 
     public async Task<IEnumerable<UserResponse>> GetAllUsersAsync(CancellationToken cancellationToken = default)
     {

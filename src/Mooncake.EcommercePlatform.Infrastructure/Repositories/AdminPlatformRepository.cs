@@ -1,7 +1,10 @@
 namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.DTOs.Admin;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
@@ -62,6 +65,29 @@ public sealed class AdminPlatformRepository(ApplicationDbContext context) : IAdm
     public async Task<IReadOnlyList<AuditLog>> GetAuditLogsAsync(int page, int pageSize, CancellationToken cancellationToken = default) =>
         await context.AuditLogs.AsNoTracking().Where(log => !log.IsDeleted)
             .OrderByDescending(log => log.CreatedAt).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+
+    public async Task<PagedResult<AuditLog>> GetAuditLogsPageAsync(AuditLogPageQueryRequest query,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<AuditLog> rows = context.AuditLogs.AsNoTracking().Where(log => !log.IsDeleted);
+        if (!string.IsNullOrWhiteSpace(query.Action)) rows = rows.Where(log => log.Action == query.Action);
+        if (query.ActorUserId.HasValue) rows = rows.Where(log => log.ActorUserId == query.ActorUserId.Value);
+        if (!string.IsNullOrWhiteSpace(query.EntityName)) rows = rows.Where(log => log.EntityName == query.EntityName);
+        if (query.From.HasValue) rows = rows.Where(log => log.CreatedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(log => log.CreatedAt <= query.To.Value);
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(log => EF.Functions.ILike(log.Action, term)
+                || EF.Functions.ILike(log.EntityName, term));
+        }
+        var total = await rows.CountAsync(cancellationToken);
+        rows = query.Sort == "createdAtAsc"
+            ? rows.OrderBy(log => log.CreatedAt).ThenBy(log => log.Id)
+            : rows.OrderByDescending(log => log.CreatedAt).ThenByDescending(log => log.Id);
+        var items = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        return new PagedResult<AuditLog>(items, query.Page, query.PageSize, total);
+    }
 
     public Task<User?> GetUserForUpdateAsync(Guid userId, CancellationToken cancellationToken = default) =>
         context.Users.FirstOrDefaultAsync(user => user.Id == userId && !user.IsDeleted, cancellationToken);

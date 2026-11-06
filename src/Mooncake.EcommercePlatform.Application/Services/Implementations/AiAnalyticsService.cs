@@ -2,7 +2,9 @@ namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Ai.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Ai.Responses;
@@ -174,6 +176,31 @@ public class AiAnalyticsService : IAiAnalyticsService
         }
 
         return resultList;
+    }
+
+    public async Task<PagedResult<AiAnalyticsReportResponse>> ListReportsPageAsync(Guid requestedBy, bool isAdmin,
+        AiReportPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc");
+        if (query.Type.HasValue && !Enum.IsDefined(query.Type.Value))
+            throw new HttpException(400, "Invalid analytics report type.", "VALIDATION_ERROR");
+        var page = await _reportRepository.ListReportsPageAsync(requestedBy, query, cancellationToken);
+        var items = page.Items.Select(report =>
+        {
+            AiReportResultDto? result = null;
+            if (!string.IsNullOrWhiteSpace(report.ResultData))
+            {
+                try { result = JsonSerializer.Deserialize<AiReportResultDto>(report.ResultData); }
+                catch (JsonException) { result = null; }
+            }
+            return new AiAnalyticsReportResponse
+            {
+                ReportId = report.Id, ReportType = report.ReportType, Status = report.Status,
+                CreatedAt = report.CreatedAt, CompletedAt = report.CompletedAt, Result = result
+            };
+        }).ToArray();
+        return new PagedResult<AiAnalyticsReportResponse>(items, page.Page, page.PageSize, page.TotalCount);
     }
 
     public async Task<AiAnalyticsReportResponse> GetReportDetailsAsync(Guid requestedBy, bool isAdmin, Guid reportId, CancellationToken cancellationToken = default)

@@ -184,7 +184,7 @@ public sealed class NotificationRepository(ApplicationDbContext dbContext) : INo
         if (refId == null) return "/#/";
 
         if (r.Contains("contract")) return $"/#/hop-dong-tien-do?id={refId}";
-        if (r.Contains("order")) return $"/#/dat-hang-thiet-ke?id={refId}";
+        if (r.Contains("order")) return "/#/don-hang-cua-toi";
         if (r.Contains("delivery")) return $"/#/giao-nhan-pod?id={refId}";
         if (r.Contains("rfq")) return $"/#/rfq-dau-thau?id={refId}";
         return "/#/";

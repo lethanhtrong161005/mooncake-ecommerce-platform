@@ -1,5 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Responses;
 
@@ -8,6 +10,8 @@ public interface IUserService
 {
     /// <summary>Retrieves all users.</summary>
     Task<IEnumerable<UserResponse>> GetAllUsersAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<UserResponse>> GetUsersPageAsync(UserPageQueryRequest query,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Retrieves a single user by ID; throws 404 if not found.</summary>
     Task<UserResponse> GetUserByIdAsync(Guid id, CancellationToken cancellationToken = default);

@@ -41,7 +41,7 @@ public static class WebApiServiceCollectionExtensions
         services.AddJwtAuthentication(configuration, environment);
         services.AddGoogleOAuth(configuration, environment);
         services.AddFrontendCors(configuration);
-        services.AddAuthenticationRateLimiting();
+        services.AddAuthenticationRateLimiting(environment);
         services.AddAuthorization();
         services.AddSupplierVerificationFeature(configuration);
         services.AddShopFeature();
@@ -76,6 +76,31 @@ public static class WebApiServiceCollectionExtensions
                     Message = Mooncake.EcommercePlatform.Application.Common.Constant.ShopConstants.Error,
                     ValidationErrors = fields, Errors = fields.Select(x => x.Message).ToList(),
                     Path = context.HttpContext.Request.Path, TraceId = context.HttpContext.TraceIdentifier });
+            }
+            if (context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<Mooncake.EcommercePlatform.WebApi.Filters.OrderApiAttribute>() != null
+                || context.HttpContext.Request.Path.StartsWithSegments("/api/v1/orders")
+                || context.HttpContext.Request.Path.StartsWithSegments("/api/v1/payments")
+                || context.HttpContext.Request.Path.StartsWithSegments("/api/v1/deliveries")
+                || context.HttpContext.Request.Path.StartsWithSegments("/api/v1/custom-packaging")
+                || context.HttpContext.Request.Path.StartsWithSegments("/api/v1/supplier"))
+            {
+                const string invalidField = "Invalid field value.";
+                const string invalidPayloadMessage = "The request payload failed validation.";
+                var resolvedTraceId = context.HttpContext.Items["TraceId"]?.ToString() ?? context.HttpContext.TraceIdentifier;
+                var fields = context.ModelState.Where(x => x.Value?.Errors.Count > 0).SelectMany(x => x.Value!.Errors.Select(e =>
+                    new Mooncake.EcommercePlatform.Application.Common.DTOs.ApiValidationError(x.Key,
+                        OrderErrorCodes.ValidationError,
+                        string.IsNullOrWhiteSpace(e.ErrorMessage) ? invalidField : e.ErrorMessage))).ToArray();
+                return new BadRequestObjectResult(new Mooncake.EcommercePlatform.Application.Common.DTOs.ApiResponse<object>
+                {
+                    Status = 400,
+                    ErrorCode = OrderErrorCodes.ValidationError,
+                    Message = fields.FirstOrDefault()?.Message ?? invalidPayloadMessage,
+                    ValidationErrors = fields,
+                    Errors = fields.Select(x => x.Message).ToList(),
+                    Path = context.HttpContext.Request.Path,
+                    TraceId = resolvedTraceId
+                });
             }
             if (!context.HttpContext.Request.Path.StartsWithSegments(AuthRoutePrefix))
             {
@@ -177,7 +202,7 @@ public static class WebApiServiceCollectionExtensions
             policy => policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
     }
 
-    private static void AddAuthenticationRateLimiting(this IServiceCollection services)
+    private static void AddAuthenticationRateLimiting(this IServiceCollection services, IHostEnvironment environment)
     {
         services.AddRateLimiter(options =>
         {
@@ -185,7 +210,7 @@ public static class WebApiServiceCollectionExtensions
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 10,
+                    PermitLimit = environment.IsDevelopment() ? 500 : 10,
                     Window = TimeSpan.FromMinutes(5),
                     QueueLimit = 0,
                     AutoReplenishment = true

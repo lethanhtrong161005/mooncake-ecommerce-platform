@@ -4,7 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Requests;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
@@ -25,6 +28,35 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                      select contract).Take(100).ToListAsync(cancellationToken)
             : await context.Contracts.AsNoTracking().Where(contract => contract.CustomerId == userId && !contract.IsDeleted)
                 .OrderByDescending(contract => contract.CreatedAt).Take(100).ToListAsync(cancellationToken);
+
+    public async Task<PagedResult<Contract>> GetContractsPageAsync(Guid userId, bool supplier,
+        ContractPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        IQueryable<Contract> rows = context.Contracts.AsNoTracking().Where(contract => !contract.IsDeleted);
+        rows = supplier
+            ? rows.Where(contract => context.SupplierProfiles.Any(profile => profile.Id == contract.SupplierId
+                && profile.UserId == userId && !profile.IsDeleted))
+            : rows.Where(contract => contract.CustomerId == userId);
+        if (query.Status.HasValue) rows = rows.Where(contract => contract.Status == query.Status.Value);
+        if (query.From.HasValue) rows = rows.Where(contract => contract.CreatedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(contract => contract.CreatedAt <= query.To.Value);
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(contract => EF.Functions.ILike(contract.ContractNumber, term)
+                || contract.Title != null && EF.Functions.ILike(contract.Title, term));
+        }
+        var total = await rows.CountAsync(cancellationToken);
+        rows = query.Sort switch
+        {
+            "createdAtAsc" => rows.OrderBy(contract => contract.CreatedAt).ThenBy(contract => contract.Id),
+            "totalAmountAsc" => rows.OrderBy(contract => contract.TotalValue).ThenBy(contract => contract.Id),
+            "totalAmountDesc" => rows.OrderByDescending(contract => contract.TotalValue).ThenByDescending(contract => contract.Id),
+            _ => rows.OrderByDescending(contract => contract.CreatedAt).ThenByDescending(contract => contract.Id)
+        };
+        var items = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        return new PagedResult<Contract>(items, query.Page, query.PageSize, total);
+    }
 
     public async Task<bool> IsPartyAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default) =>
         contract.CustomerId == userId || await context.SupplierProfiles.AsNoTracking()
@@ -643,6 +675,58 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
     private Task<Guid> GetSupplierUserIdAsync(Guid supplierProfileId, CancellationToken cancellationToken) =>
         context.SupplierProfiles.Where(profile => profile.Id == supplierProfileId && !profile.IsDeleted)
             .Select(profile => profile.UserId).FirstAsync(cancellationToken);
+
+    public async Task<PagedResult<Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses.ContractDisputeListItemResponse>>
+        ListDisputesPageAsync(ContractDisputePageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        var rows = from dispute in context.ContractDisputes.AsNoTracking()
+                   join contract in context.Contracts.AsNoTracking() on dispute.ContractId equals contract.Id
+                   where !dispute.IsDeleted && !contract.IsDeleted
+                   select new { dispute, contract };
+        if (!string.IsNullOrWhiteSpace(query.Status)) rows = rows.Where(row => row.dispute.Status == query.Status);
+        if (query.From.HasValue) rows = rows.Where(row => row.dispute.RaisedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(row => row.dispute.RaisedAt <= query.To.Value);
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(row => EF.Functions.ILike(row.contract.ContractNumber, term)
+                || EF.Functions.ILike(row.dispute.DisputeReason, term));
+        }
+        var total = await rows.CountAsync(cancellationToken);
+        rows = query.Sort == "createdAtAsc"
+            ? rows.OrderBy(row => row.dispute.RaisedAt).ThenBy(row => row.dispute.Id)
+            : rows.OrderByDescending(row => row.dispute.RaisedAt).ThenByDescending(row => row.dispute.Id);
+        var pageRows = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        var customerIds = pageRows.Select(row => row.contract.CustomerId).Distinct().ToArray();
+        var supplierIds = pageRows.Select(row => row.contract.SupplierId).Distinct().ToArray();
+        var customers = await context.Users.AsNoTracking().Where(user => customerIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.FullName, cancellationToken);
+        var suppliers = await context.SupplierProfiles.AsNoTracking().Where(profile => supplierIds.Contains(profile.Id))
+            .ToDictionaryAsync(profile => profile.Id, profile => profile.CompanyName, cancellationToken);
+        var shops = await context.Shops.AsNoTracking().Where(shop => supplierIds.Contains(shop.SupplierId) && !shop.IsDeleted)
+            .OrderBy(shop => shop.CreatedAt).ToListAsync(cancellationToken);
+        var shopNames = shops.GroupBy(shop => shop.SupplierId).ToDictionary(group => group.Key, group => group.First().Name);
+        var items = pageRows.Select(row =>
+        {
+            IReadOnlyList<string>? evidence = null;
+            if (!string.IsNullOrWhiteSpace(row.dispute.EvidenceUrls))
+            {
+                try { evidence = JsonSerializer.Deserialize<IReadOnlyList<string>>(row.dispute.EvidenceUrls); }
+                catch (JsonException) { evidence = null; }
+            }
+            return new Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses.ContractDisputeListItemResponse(
+                row.dispute.Id, row.contract.Id, row.contract.ContractNumber,
+                customers.GetValueOrDefault(row.contract.CustomerId) ?? string.Empty,
+                shopNames.GetValueOrDefault(row.contract.SupplierId)
+                    ?? suppliers.GetValueOrDefault(row.contract.SupplierId) ?? string.Empty,
+                row.dispute.DisputeReason, evidence, row.dispute.Status, row.dispute.ResolutionType,
+                row.dispute.AdminVerdict, row.dispute.RefundAmount,
+                row.contract.DepositAmount ?? (row.contract.TotalValue * DefaultDepositPercentage / 100m) ?? 0m,
+                row.dispute.RaisedAt, row.dispute.ResolvedAt);
+        }).ToList();
+        return new PagedResult<Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses.ContractDisputeListItemResponse>(
+            items, query.Page, query.PageSize, total);
+    }
 
     public async Task<IReadOnlyList<Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses.ContractDisputeListItemResponse>> ListDisputesAsync(string? status = null, CancellationToken cancellationToken = default)
     {

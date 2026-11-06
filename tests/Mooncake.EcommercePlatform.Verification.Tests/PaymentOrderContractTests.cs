@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.Verification.Tests;
 
 using Moq;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
@@ -104,7 +105,7 @@ public sealed class PaymentOrderContractTests
     }
 
     [Fact]
-    public async Task CreateBankTransferAsync_ForOrder_GeneratesVietQrWithOrderMemo()
+    public async Task CreateBankTransferAsync_ForOrder_BlocksByDefault_AndAllowsWhenFeatureFlagEnabled()
     {
         var order = new Order
         {
@@ -125,11 +126,16 @@ public sealed class PaymentOrderContractTests
             OrderId = orderId
         };
 
-        var response = await service.CreateBankTransferAsync(customerId, request);
+        var blocked = await Assert.ThrowsAsync<HttpException>(() => service.CreateBankTransferAsync(customerId, request));
+        Assert.Equal(422, blocked.StatusCode);
+        Assert.Equal(OrderErrorCodes.PaymentMethodNotSupported, blocked.ErrorCode);
+        repository.Verify(r => r.CreatePaymentAsync(It.IsAny<Payment>(), default), Times.Never);
 
+        adminRepository.Setup(a => a.GetSystemConfigAsync(OrderPolicyDefaults.DirectOrderBankTransferEnabledKey, default))
+            .ReturnsAsync(new SystemConfig { Key = OrderPolicyDefaults.DirectOrderBankTransferEnabledKey, ValueJson = "true" });
+
+        var response = await service.CreateBankTransferAsync(customerId, request);
         Assert.NotEqual(Guid.Empty, response.PaymentId);
-        Assert.StartsWith("PAY-", response.PaymentNumber);
-        Assert.Equal($"PAY {response.PaymentNumber}", response.TransferMemo);
         Assert.Equal(8500000m, response.Amount);
         repository.Verify(r => r.CreatePaymentAsync(It.Is<Payment>(p => p.Method == PaymentMethod.BankTransfer && p.OrderId == orderId), default), Times.Once);
     }
@@ -145,7 +151,7 @@ public sealed class PaymentOrderContractTests
     }
 
     [Fact]
-    public async Task VerifyReturnCallbackAsync_ReturnsSuccess_WhenSignatureValidAndResponseCode00()
+    public async Task VerifyReturnCallbackAsync_IsReadOnly_DoesNotConfirmPaymentBeforeIpn()
     {
         const string paymentNumber = "PAY-20261029-999";
         var queryParams = new Dictionary<string, string>
@@ -171,8 +177,6 @@ public sealed class PaymentOrderContractTests
 
         repository.Setup(r => r.GetPaymentByNumberAsync(paymentNumber, default))
             .ReturnsAsync(payment);
-        repository.Setup(r => r.ConfirmVnPayPaymentAsync(paymentNumber, default))
-            .ReturnsAsync(payment);
         vnPayGateway.Setup(g => g.IsValidSignature(queryParams)).Returns(true);
 
         var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
@@ -184,7 +188,9 @@ public sealed class PaymentOrderContractTests
         Assert.Equal("00", response.ResponseCode);
         Assert.Equal("NCB", response.BankCode);
         Assert.Equal("14088899", response.TransactionNo);
-        repository.Verify(r => r.ConfirmVnPayPaymentAsync(paymentNumber, default), Times.Once);
+        Assert.Equal(PaymentStatus.Pending, response.PaymentStatus);
+        Assert.Null(response.PaidAt);
+        repository.Verify(r => r.ConfirmVnPayPaymentAsync(It.IsAny<string>(), default), Times.Never);
     }
 
     [Fact]
@@ -234,17 +240,17 @@ public sealed class PaymentOrderContractTests
             Method = PaymentMethod.BankTransfer,
             Status = PaymentStatus.Processing,
             EvidenceUrl = "https://storage.mooncake.vn/evidence/unc-123.jpg",
-            EvidenceNotes = "Ủy nhiệm chi Vietcombank chuyển khoản đợt 1"
+            EvidenceNotes = "Bank transfer receipt"
         };
 
-        repository.Setup(r => r.AttachEvidenceAsync(paymentId, customerId, "https://storage.mooncake.vn/evidence/unc-123.jpg", "Ủy nhiệm chi Vietcombank chuyển khoản đợt 1", default))
+        repository.Setup(r => r.AttachEvidenceAsync(paymentId, customerId, "https://storage.mooncake.vn/evidence/unc-123.jpg", "Bank transfer receipt", default))
             .ReturnsAsync(payment);
 
         var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
         var request = new UploadPaymentEvidenceRequest
         {
             EvidenceUrl = "https://storage.mooncake.vn/evidence/unc-123.jpg",
-            Notes = "Ủy nhiệm chi Vietcombank chuyển khoản đợt 1"
+            Notes = "Bank transfer receipt"
         };
 
         var response = await service.UploadEvidenceAsync(paymentId, customerId, request);
@@ -255,9 +261,8 @@ public sealed class PaymentOrderContractTests
     }
 
     [Fact]
-    public async Task CreateOrderAsync_ValidatesCodMaxLimit_AndCustomPackaging()
+    public async Task CreateOrderAsync_ValidatesCodFeatureFlag_MaxLimit_AndCustomPackaging()
     {
-        // COD max 10,000,000 VND
         var highValueOrder = new Order
         {
             Id = orderId,
@@ -275,11 +280,17 @@ public sealed class PaymentOrderContractTests
             Method = PaymentMethod.Cash
         };
 
+        var disabledEx = await Assert.ThrowsAsync<HttpException>(() => service.CreateAsync(customerId, "idempotency-key-order-cod-00", request));
+        Assert.Equal(422, disabledEx.StatusCode);
+        Assert.Equal(OrderErrorCodes.PaymentMethodNotSupported, disabledEx.ErrorCode);
+
+        adminRepository.Setup(a => a.GetSystemConfigAsync(OrderPolicyDefaults.DirectOrderCodEnabledKey, default))
+            .ReturnsAsync(new SystemConfig { Key = OrderPolicyDefaults.DirectOrderCodEnabledKey, ValueJson = "true" });
+
         var ex = await Assert.ThrowsAsync<HttpException>(() => service.CreateAsync(customerId, "idempotency-key-order-cod-01", request));
         Assert.Equal(422, ex.StatusCode);
         Assert.Contains("Cash on delivery is not enabled for this amount", ex.Message);
 
-        // Custom packaging order with COD
         var customPackagingOrder = new Order
         {
             Id = orderId,

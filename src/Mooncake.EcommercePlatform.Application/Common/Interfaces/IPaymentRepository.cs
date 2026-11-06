@@ -1,5 +1,8 @@
 namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
+
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Responses;
 using Mooncake.EcommercePlatform.Domain.Entities;
 
@@ -10,6 +13,8 @@ public interface IPaymentRepository
     Task<Payment?> GetPaymentAsync(Guid paymentId, CancellationToken cancellationToken = default);
     Task<Payment?> GetPaymentByIdempotencyKeyAsync(Guid customerId, string idempotencyKey, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Payment>> GetPaymentsAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default);
+    Task<PagedResult<Payment>> GetPaymentsPageAsync(Guid userId, bool supplier, PaymentPageQueryRequest query,
+        CancellationToken cancellationToken = default);
     Task<bool> CreatePaymentAsync(Payment payment, CancellationToken cancellationToken = default);
     Task<Payment?> PrepareVnPayPaymentAsync(Guid customerId, Guid contractId, Guid milestoneId,
         CancellationToken cancellationToken = default);

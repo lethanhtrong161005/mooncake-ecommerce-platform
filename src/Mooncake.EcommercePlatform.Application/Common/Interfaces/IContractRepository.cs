@@ -1,11 +1,18 @@
 namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Requests;
+
 using Mooncake.EcommercePlatform.Domain.Entities;
 
 public interface IContractRepository
 {
     Task<Contract?> GetContractAsync(Guid contractId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Contract>> GetContractsForUserAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default);
+    Task<PagedResult<Contract>> GetContractsPageAsync(Guid userId, bool supplier, ContractPageQueryRequest query,
+        CancellationToken cancellationToken = default);
+    Task<PagedResult<Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses.ContractDisputeListItemResponse>>
+        ListDisputesPageAsync(ContractDisputePageQueryRequest query, CancellationToken cancellationToken = default);
     Task<bool> IsPartyAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> HasSignedAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> BeginSignatureAsync(Guid contractId, Guid actorUserId, CancellationToken cancellationToken = default);

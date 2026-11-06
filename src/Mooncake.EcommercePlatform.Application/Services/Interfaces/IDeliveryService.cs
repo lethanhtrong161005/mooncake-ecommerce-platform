@@ -1,11 +1,15 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
 
 public interface IDeliveryService
 {
     Task<IReadOnlyList<DeliveryResponse>> GetMineAsync(Guid userId, bool isSupplier, CancellationToken cancellationToken = default);
+    Task<PagedResult<DeliveryResponse>> GetMinePageAsync(Guid userId, bool isSupplier,
+        DeliveryPageQueryRequest query, CancellationToken cancellationToken = default);
 
     Task<DeliveryDetailResponse> GetAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default);
 

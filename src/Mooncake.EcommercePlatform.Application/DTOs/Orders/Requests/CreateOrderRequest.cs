@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.Application.DTOs.Orders.Requests;
 
 using System.ComponentModel.DataAnnotations;
+using Mooncake.EcommercePlatform.Application.DTOs.Packaging.Requests;
 
 /// <summary>Customer request to place a multi-quantity order with one shop.</summary>
 public sealed record CreateOrderRequest
@@ -25,6 +26,17 @@ public sealed record CreateOrderRequest
     public string? Notes { get; init; }
 
     public DateOnly? DeliveryDateExpected { get; init; }
+
+    [MaxLength(40)]
+    public string? ShippingZoneCode { get; init; }
+
+    [MaxLength(64)]
+    public string? AcceptedPriceVersion { get; init; }
+
+    public bool? AcceptedTerms { get; init; }
+
+    /// <summary>Optional custom branding and packaging brief attached to this order.</summary>
+    public CreateCustomPackagingRequest? CustomPackaging { get; init; }
 }
 
 /// <summary>Product variant and requested bulk quantity.</summary>

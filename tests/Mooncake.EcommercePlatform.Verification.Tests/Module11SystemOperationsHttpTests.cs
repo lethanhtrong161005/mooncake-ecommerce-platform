@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.DTOs.Admin;
 using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses;
@@ -424,14 +425,14 @@ public sealed class Module11SystemOperationsHttpTests
         new(Guid.NewGuid(), AdminUserId, "DisputeResolved", "ContractDispute", DisputeId.ToString(), null, "127.0.0.1", DateTime.UtcNow)
     };
 
-    adminPlatformService.Setup(s => s.GetAuditLogsAsync(1, 50, It.IsAny<CancellationToken>()))
-        .ReturnsAsync(logs);
+    adminPlatformService.Setup(s => s.GetAuditLogsPageAsync(It.IsAny<AuditLogPageQueryRequest>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new PagedResult<AuditLogResponse>(logs, 1, 50, 1));
 
     var response = await client.GetAsync("/api/v1/admin/audit-logs?page=1&pageSize=50");
 
     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-    Assert.Equal("DisputeResolved", json.GetProperty("data")[0].GetProperty("action").GetString());
+    Assert.Equal("DisputeResolved", json.GetProperty("data").GetProperty("items")[0].GetProperty("action").GetString());
   }
 
   [Fact]

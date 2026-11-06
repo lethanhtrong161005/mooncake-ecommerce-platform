@@ -2,12 +2,14 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 
-/// <summary>EF Core persistence for the custom packaging revision workflow.</summary>
+/// <summary>EF Core persistence for the custom packaging revision and fee-change-request workflow.</summary>
 public sealed class CustomPackagingRepository(ApplicationDbContext context) : ICustomPackagingRepository
 {
     private const string AggregateType = "CustomPackaging";
@@ -36,8 +38,10 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
     public Task<bool> IsShopOwnedByUserAsync(Guid shopId, Guid userId,
         CancellationToken cancellationToken = default) =>
         (from shop in context.Shops.AsNoTracking()
-         join profile in context.SupplierProfiles.AsNoTracking() on shop.SupplierId equals profile.Id
-         where shop.Id == shopId && profile.UserId == userId && !shop.IsDeleted && !profile.IsDeleted
+         join profile in context.SupplierProfiles.AsNoTracking() on shop.SupplierId equals profile.Id into profiles
+         from profile in profiles.DefaultIfEmpty()
+         where shop.Id == shopId && !shop.IsDeleted
+               && (shop.OwnerUserId == userId || (profile != null && profile.UserId == userId && !profile.IsDeleted))
          select shop.Id).AnyAsync(cancellationToken);
 
     public async Task<bool> CreateAsync(CustomPackaging packaging, Guid customerId,
@@ -83,6 +87,7 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
     public async Task<CustomPackagingRevision?> SubmitRevisionAsync(CustomPackaging packaging,
         CustomPackagingRevision revision, Guid customerId, CancellationToken cancellationToken = default)
     {
+        context.ChangeTracker.Clear();
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var current = await context.CustomPackagings.FromSqlInterpolated(
                 $"SELECT * FROM custom_packagings WHERE id = {packaging.Id} FOR UPDATE")
@@ -91,6 +96,12 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
             CustomPackagingStatus.DesignReview or CustomPackagingStatus.RevisionRequested))
             return null;
 
+        var order = await context.Orders.FromSqlInterpolated(
+                $"SELECT * FROM orders WHERE id = {current.OrderId} FOR UPDATE")
+            .SingleAsync(cancellationToken);
+
+        if (revision.Id == Guid.Empty)
+            revision.Id = Guid.NewGuid();
         revision.RevisionNumber = await context.CustomPackagingRevisions
             .Where(item => item.CustomPackagingId == current.Id)
             .Select(item => (int?)item.RevisionNumber).MaxAsync(cancellationToken) ?? 0;
@@ -99,6 +110,34 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
         current.UpdatedAt = revision.SubmittedAt;
         current.UpdatedBy = revision.SubmittedByUserId;
         context.CustomPackagingRevisions.Add(revision);
+
+        await context.PackagingFeeChangeRequests
+            .Where(item => item.OrderId == order.Id && item.Status == "PendingCustomerApproval")
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Status, "Superseded")
+                .SetProperty(item => item.UpdatedAt, revision.SubmittedAt), cancellationToken);
+
+        if (revision.DesignFee > 0m)
+        {
+            context.PackagingFeeChangeRequests.Add(new PackagingFeeChangeRequest
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                CustomPackagingId = current.Id,
+                RevisionId = revision.Id,
+                OldPackagingFee = order.PackagingFee,
+                DeltaAmount = revision.DesignFee,
+                NewPackagingFee = order.PackagingFee + revision.DesignFee,
+                OldOrderTotal = order.TotalAmount,
+                NewOrderTotal = order.TotalAmount + revision.DesignFee,
+                OrderVersionSnapshot = order.Version,
+                Status = "PendingCustomerApproval",
+                CreatedBy = revision.SubmittedByUserId,
+                CreatedAt = revision.SubmittedAt,
+                UpdatedAt = revision.SubmittedAt
+            });
+        }
+
         context.WorkflowEvents.Add(new WorkflowEvent
         {
             AggregateType = AggregateType,
@@ -113,7 +152,9 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
             UserId = customerId,
             Type = "packaging.revision_submitted",
             Title = "Packaging mockup ready",
-            Content = $"Packaging mockup revision {revision.RevisionNumber} is ready for review.",
+            Content = revision.DesignFee > 0m
+                ? $"Packaging mockup revision {revision.RevisionNumber} is ready with a design fee change request (+{revision.DesignFee:N0} VND)."
+                : $"Packaging mockup revision {revision.RevisionNumber} is ready for review.",
             ReferenceType = ReferenceType,
             ReferenceId = current.Id
         });
@@ -129,6 +170,7 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
         CustomPackagingRevision revision, bool approve, string? customerNotes, Guid actorUserId,
         DateTime reviewedAtUtc, CancellationToken cancellationToken = default)
     {
+        context.ChangeTracker.Clear();
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var currentRevision = await context.CustomPackagingRevisions.FromSqlInterpolated(
                 $"SELECT * FROM custom_packaging_revisions WHERE \"Id\" = {revision.Id} FOR UPDATE")
@@ -154,6 +196,9 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
         currentPackaging.UpdatedAt = reviewedAtUtc;
         currentPackaging.UpdatedBy = actorUserId;
 
+        var feeChange = await context.PackagingFeeChangeRequests
+            .FirstOrDefaultAsync(item => item.RevisionId == currentRevision.Id && !item.IsDeleted, cancellationToken);
+
         if (approve)
         {
             currentPackaging.BoxDesignUrl = currentRevision.MockupUrl;
@@ -162,8 +207,78 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
                 .SingleAsync(cancellationToken);
             order.PackagingFee += currentRevision.DesignFee;
             order.TotalAmount += currentRevision.DesignFee;
+            order.Version += 1;
             order.UpdatedAt = reviewedAtUtc;
             order.UpdatedBy = actorUserId;
+
+            Guid? generatedObligationId = null;
+            if (currentRevision.DesignFee > 0m)
+            {
+                var existingObligations = await context.OrderPaymentObligations
+                    .Where(item => item.OrderId == order.Id && !item.IsDeleted)
+                    .ToListAsync(cancellationToken);
+                if (existingObligations.Count > 0)
+                {
+                    var nextSeq = existingObligations.Max(item => item.SequenceNo) + 1;
+                    var supplemental = new OrderPaymentObligation
+                    {
+                        Id = Guid.NewGuid(),
+                        OrderId = order.Id,
+                        SequenceNo = nextSeq,
+                        ObligationType = "PackagingFeeAdjustment",
+                        Title = $"Custom packaging fee adjustment (Revision #{currentRevision.RevisionNumber})",
+                        TotalAmount = currentRevision.DesignFee,
+                        PaidAmount = 0m,
+                        Status = "Pending",
+                        IsRequiredBeforeProduction = true,
+                        IsRequiredBeforeShipping = true,
+                        DueAt = reviewedAtUtc.AddHours(OrderPolicyDefaults.DepositPaymentSlaHours),
+                        SourceReferenceId = feeChange?.Id,
+                        CreatedBy = actorUserId,
+                        CreatedAt = reviewedAtUtc,
+                        UpdatedAt = reviewedAtUtc
+                    };
+                    context.OrderPaymentObligations.Add(supplemental);
+                    generatedObligationId = supplemental.Id;
+
+                    var partAmounts = PriceQuoteVersionHelper.SplitIntoParts(
+                        currentRevision.DesignFee, OrderPolicyDefaults.VnPayMaxAmountPerPartVnd);
+                    for (var i = 0; i < partAmounts.Count; i++)
+                    {
+                        context.OrderPaymentParts.Add(new OrderPaymentPart
+                        {
+                            Id = Guid.NewGuid(),
+                            OrderId = order.Id,
+                            ObligationId = supplemental.Id,
+                            PartIndex = i + 1,
+                            TotalParts = partAmounts.Count,
+                            Amount = partAmounts[i],
+                            Status = "Pending",
+                            CreatedBy = actorUserId,
+                            CreatedAt = reviewedAtUtc,
+                            UpdatedAt = reviewedAtUtc
+                        });
+                    }
+                }
+            }
+
+            if (feeChange is not null)
+            {
+                feeChange.Status = "Approved";
+                feeChange.CustomerNotes = customerNotes;
+                feeChange.ApprovedByUserId = actorUserId;
+                feeChange.ApprovedAt = reviewedAtUtc;
+                feeChange.GeneratedObligationId = generatedObligationId;
+                feeChange.UpdatedBy = actorUserId;
+                feeChange.UpdatedAt = reviewedAtUtc;
+            }
+        }
+        else if (feeChange is not null)
+        {
+            feeChange.Status = "Rejected";
+            feeChange.CustomerNotes = customerNotes;
+            feeChange.UpdatedBy = actorUserId;
+            feeChange.UpdatedAt = reviewedAtUtc;
         }
 
         context.WorkflowEvents.Add(new WorkflowEvent

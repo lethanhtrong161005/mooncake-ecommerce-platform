@@ -13,8 +13,12 @@ public sealed class SupplierPromotionsController(IPromotionService promotionServ
 {
     /// <summary>Lists active and inactive promotions owned by the authenticated supplier.</summary>
     [HttpGet]
-    public async Task<IActionResult> GetMineAsync(CancellationToken cancellationToken) =>
-        Success(await promotionService.GetMineAsync(GetCurrentUserId(), cancellationToken), "Promotions retrieved successfully.");
+    public async Task<IActionResult> GetMineAsync([FromQuery] PromotionPageQueryRequest query,
+        CancellationToken cancellationToken) =>
+        Success<object>(Request.Query.ContainsKey("page")
+            ? await promotionService.GetMinePageAsync(GetCurrentUserId(), query, cancellationToken)
+            : await promotionService.GetMineAsync(GetCurrentUserId(), cancellationToken),
+            "Promotions retrieved successfully.");
 
     /// <summary>Creates a quantity-tier promotion for the supplier's shop.</summary>
     [HttpPost]

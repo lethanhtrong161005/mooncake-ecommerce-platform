@@ -1,7 +1,10 @@
 namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.DTOs.Promotions.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Promotions.Models;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
@@ -20,6 +23,32 @@ public sealed class PromotionRepository(ApplicationDbContext context) : IPromoti
     public async Task<IReadOnlyList<PromotionData>> GetForShopAsync(Guid shopId, CancellationToken cancellationToken = default) =>
         (await context.PromotionRules.AsNoTracking().Where(promotion => promotion.ShopId == shopId && !promotion.IsDeleted)
             .OrderByDescending(promotion => promotion.CreatedAt).ToListAsync(cancellationToken)).Select(ToData).ToList();
+
+    public async Task<PagedResult<PromotionData>> GetForShopPageAsync(Guid shopId,
+        PromotionPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        IQueryable<PromotionRule> rows = context.PromotionRules.AsNoTracking()
+            .Where(promotion => promotion.ShopId == shopId && !promotion.IsDeleted);
+        if (query.IsActive.HasValue) rows = rows.Where(promotion => promotion.IsActive == query.IsActive.Value);
+        if (query.ProductId.HasValue) rows = rows.Where(promotion => promotion.ProductId == query.ProductId.Value);
+        if (query.From.HasValue) rows = rows.Where(promotion => promotion.CreatedAt >= query.From.Value);
+        if (query.To.HasValue) rows = rows.Where(promotion => promotion.CreatedAt <= query.To.Value);
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(promotion => EF.Functions.ILike(promotion.Name, term));
+        }
+        var total = await rows.CountAsync(cancellationToken);
+        rows = query.Sort switch
+        {
+            "createdAtAsc" => rows.OrderBy(promotion => promotion.CreatedAt).ThenBy(promotion => promotion.Id),
+            "startAtAsc" => rows.OrderBy(promotion => promotion.StartDate).ThenBy(promotion => promotion.Id),
+            "startAtDesc" => rows.OrderByDescending(promotion => promotion.StartDate).ThenByDescending(promotion => promotion.Id),
+            _ => rows.OrderByDescending(promotion => promotion.CreatedAt).ThenByDescending(promotion => promotion.Id)
+        };
+        var items = await PagedQueryHelper.ApplyPaging(rows, query).ToListAsync(cancellationToken);
+        return new PagedResult<PromotionData>(items.Select(ToData).ToList(), query.Page, query.PageSize, total);
+    }
 
     public async Task<PromotionData?> GetAsync(Guid promotionId, CancellationToken cancellationToken = default) =>
         ToDataOrNull(await context.PromotionRules.AsNoTracking().FirstOrDefaultAsync(promotion => promotion.Id == promotionId && !promotion.IsDeleted, cancellationToken));

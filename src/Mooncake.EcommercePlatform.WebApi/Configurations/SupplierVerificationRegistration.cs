@@ -27,7 +27,7 @@ public static class SupplierVerificationRegistration
         services.AddHostedService<VerificationOutboxWorker>();
         services.AddAuthorization(options => options.AddPolicy("SupplierExistingFulfillment",
             policy => policy.RequireAuthenticatedUser().RequireAssertion(context =>
-                context.User.IsInRole("Supplier") || context.User.HasClaim("supplier_fulfillment", "true"))));
+                context.User.IsInRole("Supplier") || context.User.IsInRole("Admin") || context.User.HasClaim("supplier_fulfillment", "true"))));
         var protection = services.AddDataProtection().SetApplicationName("Mooncake.SupplierVerification");
         var keyRing = configuration["SupplierVerification:DataProtectionKeyDirectory"];
         if (!string.IsNullOrWhiteSpace(keyRing)) protection.PersistKeysToFileSystem(new DirectoryInfo(keyRing));

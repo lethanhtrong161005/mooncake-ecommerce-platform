@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.Verification.Tests;
 
 using Moq;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
@@ -121,7 +122,7 @@ public sealed class PaymentWorkflowTests
         {
             ["vnp_TxnRef"] = paymentNumber,
             ["vnp_Amount"] = "1500000000",
-            ["vnp_ResponseCode"] = "24", // Customer cancelled payment
+            ["vnp_ResponseCode"] = "24",
             ["vnp_SecureHash"] = "valid-hash"
         };
         var payment = new Payment
@@ -137,7 +138,7 @@ public sealed class PaymentWorkflowTests
         repository.Setup(r => r.GetPaymentByNumberAsync(paymentNumber, default)).ReturnsAsync(payment);
 
         var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
-        var (code, message) = await service.ProcessVnPayIpnAsync(parameters);
+        var (code, _) = await service.ProcessVnPayIpnAsync(parameters);
 
         Assert.Equal("00", code);
         repository.Verify(r => r.FailVnPayPaymentAsync(paymentNumber, It.Is<string>(s => s.Contains("24")), default), Times.Once);
@@ -145,7 +146,7 @@ public sealed class PaymentWorkflowTests
     }
 
     [Fact]
-    public async Task CreateAsync_CreatesPendingPaymentWithConfiguredDefaultDeadline_ForConfirmedOrder()
+    public async Task CreateAsync_CreatesPendingVnPayPaymentWithConfiguredDefaultDeadline_ForConfirmedOrder()
     {
         var orderId = Guid.NewGuid();
         var order = new Order { Id = orderId, CustomerId = customerId, TotalAmount = 275000m, Status = OrderStatus.Confirmed };
@@ -157,7 +158,7 @@ public sealed class PaymentWorkflowTests
         var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
         var response = await service.CreateAsync(customerId, "order-payment-001", new CreatePaymentRequest
         {
-            OrderId = orderId, Method = PaymentMethod.BankTransfer
+            OrderId = orderId, Method = PaymentMethod.VNPay
         });
 
         Assert.NotNull(persisted);
@@ -166,6 +167,11 @@ public sealed class PaymentWorkflowTests
         Assert.Equal(275000m, persisted.Amount);
         Assert.Equal(PaymentStatus.Pending, persisted.Status);
         Assert.Equal(fixedNow.AddHours(48), persisted.ExpiresAt);
+
+        var blockedBankTransfer = await Assert.ThrowsAsync<HttpException>(() => service.CreateAsync(
+            customerId, "order-payment-bank-01", new CreatePaymentRequest { OrderId = orderId, Method = PaymentMethod.BankTransfer }));
+        Assert.Equal(422, blockedBankTransfer.StatusCode);
+        Assert.Equal(OrderErrorCodes.PaymentMethodNotSupported, blockedBankTransfer.ErrorCode);
     }
 
     [Fact]
@@ -176,7 +182,7 @@ public sealed class PaymentWorkflowTests
         {
             Id = Guid.NewGuid(), CustomerId = customerId, OrderId = orderId,
             IdempotencyKey = "payment-replay-01", PaymentNumber = "PAY-REPLAY-01",
-            Amount = 125000m, Method = PaymentMethod.BankTransfer, Status = PaymentStatus.Pending
+            Amount = 125000m, Method = PaymentMethod.VNPay, Status = PaymentStatus.Pending
         };
         repository.Setup(r => r.GetPaymentByIdempotencyKeyAsync(customerId, "payment-replay-01", default))
             .ReturnsAsync(payment);
@@ -184,7 +190,7 @@ public sealed class PaymentWorkflowTests
         var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
         var response = await service.CreateAsync(customerId, " payment-replay-01 ", new CreatePaymentRequest
         {
-            OrderId = orderId, Method = PaymentMethod.BankTransfer
+            OrderId = orderId, Method = PaymentMethod.VNPay
         });
 
         Assert.Equal(payment.Id, response.Id);
@@ -215,7 +221,7 @@ public sealed class PaymentWorkflowTests
     {
         var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
         var error = await Assert.ThrowsAsync<HttpException>(() => service.CreateAsync(
-            customerId, key, new CreatePaymentRequest { OrderId = Guid.NewGuid(), Method = PaymentMethod.BankTransfer }));
+            customerId, key, new CreatePaymentRequest { OrderId = Guid.NewGuid(), Method = PaymentMethod.VNPay }));
         Assert.Equal(400, error.StatusCode);
         repository.Verify(r => r.GetPaymentByIdempotencyKeyAsync(It.IsAny<Guid>(), It.IsAny<string>(), default), Times.Never);
     }
@@ -229,7 +235,7 @@ public sealed class PaymentWorkflowTests
 
         var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
         var error = await Assert.ThrowsAsync<HttpException>(() => service.CreateAsync(
-            customerId, "pending-order-payment", new CreatePaymentRequest { OrderId = orderId, Method = PaymentMethod.BankTransfer }));
+            customerId, "pending-order-payment", new CreatePaymentRequest { OrderId = orderId, Method = PaymentMethod.VNPay }));
 
         Assert.Equal(409, error.StatusCode);
         repository.Verify(r => r.CreatePaymentAsync(It.IsAny<Payment>(), default), Times.Never);
@@ -284,4 +290,3 @@ public sealed class PaymentWorkflowTests
         repository.Verify(r => r.ConfirmVnPayPaymentAsync(It.IsAny<string>(), default), Times.Never);
     }
 }
-

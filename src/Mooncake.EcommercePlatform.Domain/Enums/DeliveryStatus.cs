@@ -9,5 +9,7 @@ public enum DeliveryStatus
     InTransit,
     Delivered,
     Failed,
-    Returned
+    Returned,
+    AwaitingCustomerConfirmation,
+    Disputed
 }

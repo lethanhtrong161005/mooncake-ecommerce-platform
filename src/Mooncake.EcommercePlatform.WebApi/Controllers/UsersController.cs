@@ -13,9 +13,11 @@ public class UsersController(IUserService userService) : BaseApiController
     /// <summary>Returns all registered users.</summary>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAllAsync([FromQuery] UserPageQueryRequest query, CancellationToken cancellationToken)
     {
-        var users = await userService.GetAllUsersAsync(cancellationToken);
+        object users = Request.Query.ContainsKey("page")
+            ? await userService.GetUsersPageAsync(query, cancellationToken)
+            : await userService.GetAllUsersAsync(cancellationToken);
         return Success(users, "Users retrieved successfully.");
     }
 

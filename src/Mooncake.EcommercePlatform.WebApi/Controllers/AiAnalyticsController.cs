@@ -20,9 +20,11 @@ public sealed class AiAnalyticsController(IAiAnalyticsService aiAnalyticsService
 
     [HttpGet("reports")]
     [Authorize(Roles = "Admin,Supplier")]
-    public async Task<IActionResult> ListReportsAsync(CancellationToken ct)
+    public async Task<IActionResult> ListReportsAsync([FromQuery] AiReportPageQueryRequest query, CancellationToken ct)
     {
-        var result = await aiAnalyticsService.ListReportsAsync(CurrentUserId, IsAdmin, ct);
+        object result = Request.Query.ContainsKey("page")
+            ? await aiAnalyticsService.ListReportsPageAsync(CurrentUserId, IsAdmin, query, ct)
+            : await aiAnalyticsService.ListReportsAsync(CurrentUserId, IsAdmin, ct);
         return Success(result, "Lấy danh sách báo cáo phân tích AI thành công.");
     }
 

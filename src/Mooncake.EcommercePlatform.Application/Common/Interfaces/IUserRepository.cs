@@ -1,11 +1,16 @@
 namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
+using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
+
 using Mooncake.EcommercePlatform.Application.DTOs.Auth.Models;
 
 /// <summary>Data-access contract for the User aggregate.</summary>
 public interface IUserRepository
 {
     Task<IEnumerable<AuthUserData>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<AuthUserData>> GetPageAsync(UserPageQueryRequest query,
+        CancellationToken cancellationToken = default);
     Task<AuthUserData?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<AuthUserData?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
     Task<AuthUserData?> GetByPhoneAsync(string phone, CancellationToken cancellationToken = default);

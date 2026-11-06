@@ -34,6 +34,12 @@ public sealed record ShopReviewSummaryResponse
     public string ShopSlug { get; init; } = string.Empty;
     public decimal AverageRating { get; init; }
     public int TotalReviews { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 10;
+    public int TotalCount => TotalReviews;
+    public int TotalPages => TotalReviews == 0 ? 0 : (int)Math.Ceiling((double)TotalReviews / PageSize);
+    public bool HasNext => Page < TotalPages;
+    public bool HasPrevious => Page > 1 && TotalPages > 0;
     public decimal QualityAverage { get; init; }
     public decimal DeliveryAverage { get; init; }
     public decimal ServiceAverage { get; init; }
@@ -48,10 +54,13 @@ public sealed record ProductReviewFeedResponse
     public ProductReviewSummaryDto Summary { get; init; } = new();
     public List<ProductReviewItemDto> Items { get; init; } = new();
     public int PageNumber { get; init; }
+    public int Page => PageNumber;
     public int PageSize { get; init; }
     public int TotalPages { get; init; }
     public int TotalCount { get; init; }
     public bool HasMore { get; init; }
+    public bool HasNext => HasMore;
+    public bool HasPrevious => PageNumber > 1 && TotalPages > 0;
 }
 
 /// <summary>Summary statistics of product reviews.</summary>

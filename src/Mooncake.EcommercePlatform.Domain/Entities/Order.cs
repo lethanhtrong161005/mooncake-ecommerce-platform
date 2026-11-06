@@ -45,4 +45,36 @@ public class Order : BaseEntity
     public string? CancellationReason { get; set; }
 
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
+
+    public long Version { get; set; } = 1L;
+
+    public DateTime? ResponseDeadlineAt { get; set; }
+
+    public DateTime? ReservationExpiresAt { get; set; }
+
+    public DateTime? ConfirmedAt { get; set; }
+
+    public DateOnly? ConfirmedDeliveryDate { get; set; }
+
+    public DateOnly? ProposedDeliveryDate { get; set; }
+
+    public string? DeliveryProposalReason { get; set; }
+
+    public DateTime? DeliveryApprovalDeadlineAt { get; set; }
+
+    public string? PriceSnapshotVersion { get; set; }
+
+    public string? ShippingZoneCode { get; set; }
+
+    public string? ShippingZoneNameSnapshot { get; set; }
+
+    public bool TaxIncludedSnapshot { get; set; } = true;
+
+    public decimal TaxRateSnapshot { get; set; }
+
+    public bool DepositRequiredSnapshot { get; set; }
+
+    public decimal DepositPercentSnapshot { get; set; }
+
+    public string? TermsSnapshotJson { get; set; }
 }

@@ -1,7 +1,9 @@
 namespace Mooncake.EcommercePlatform.Application.Services.Implementations;
 
 using System.Text.Json;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses;
@@ -15,6 +17,25 @@ public sealed class ContractService(
     ISupplierRepository suppliers,
     IDateTimeProvider clock) : IContractService
 {
+    public async Task<PagedResult<ContractResponse>> GetMinePageAsync(Guid userId, bool supplier,
+        ContractPageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "totalAmountAsc", "totalAmountDesc");
+        if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value))
+            throw new HttpException(400, "Invalid contract status filter.", "VALIDATION_ERROR");
+        var page = await repository.GetContractsPageAsync(userId, supplier, query, cancellationToken);
+        return new PagedResult<ContractResponse>(page.Items.Select(contract => ToResponse(contract)).ToArray(),
+            page.Page, page.PageSize, page.TotalCount);
+    }
+
+    public Task<PagedResult<ContractDisputeListItemResponse>> ListDisputesPageAsync(
+        ContractDisputePageQueryRequest query, CancellationToken cancellationToken = default)
+    {
+        PagedQueryHelper.Validate(query);
+        PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc");
+        return repository.ListDisputesPageAsync(query, cancellationToken);
+    }
     public async Task<IReadOnlyList<ContractResponse>> GetMineAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default)
     {
         var contracts = await repository.GetContractsForUserAsync(userId, supplier, cancellationToken);

@@ -5,9 +5,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
+using Mooncake.EcommercePlatform.WebApi.Filters;
 
+/// <summary>Payment creation, VNPay redirection/IPN, and reconciliation endpoints.</summary>
 [Route("api/v1/payments")]
 [Authorize]
+[OrderApi]
 public sealed class PaymentsController(IPaymentService paymentService) : BaseApiController
 {
     [Authorize(Roles = "Customer")]
@@ -18,8 +21,11 @@ public sealed class PaymentsController(IPaymentService paymentService) : BaseApi
 
     [Authorize(Roles = "Customer,Supplier")]
     [HttpGet("mine")]
-    public async Task<IActionResult> GetMineAsync(CancellationToken cancellationToken) =>
-        Success(await paymentService.GetMineAsync(CurrentUserId, User.IsInRole("Supplier"), cancellationToken), "Payments retrieved successfully.");
+    public async Task<IActionResult> GetMineAsync([FromQuery] PaymentPageQueryRequest query, CancellationToken cancellationToken) =>
+        Success<object>(Request.Query.ContainsKey("page")
+            ? await paymentService.GetMinePageAsync(CurrentUserId, User.IsInRole("Supplier"), query, cancellationToken)
+            : await paymentService.GetMineAsync(CurrentUserId, User.IsInRole("Supplier"), cancellationToken),
+            "Payments retrieved successfully.");
 
     [Authorize(Roles = "Customer")]
     [HttpPost("vnpay/create-url")]

@@ -483,6 +483,39 @@ public sealed class Module3ProductsControllerHttpTests
     }
 
     [Fact]
+    public async Task Search_DefaultsToPageSize9_AndAcceptsPageNumberQuery()
+    {
+        var client = CreateClient(authenticated: false);
+        ProductSearchQuery? capturedQuery = null;
+
+        var facets = new ProductSearchFacetsResponse([], [], 85000m, 120000m, 0, 0);
+        var searchResponse = new ProductSearchResponse([], 2, 9, 0, facets, "relevance", DateTime.UtcNow);
+
+        productService.Setup(s => s.SearchAsync(It.IsAny<ProductSearchQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<ProductSearchQuery, CancellationToken>((q, _) => capturedQuery = q)
+            .ReturnsAsync(searchResponse);
+
+        var response = await client.GetAsync("/api/v1/products?pageNumber=2");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(capturedQuery);
+        Assert.Equal(2, capturedQuery!.PageNumber);
+        Assert.Equal(9, capturedQuery.PageSize);
+    }
+
+    [Fact]
+    public async Task Search_Returns400BadRequest_WhenPageSizeExceeds100OrSortInvalid()
+    {
+        var client = CreateClient(authenticated: false);
+
+        var badSizeResponse = await client.GetAsync("/api/v1/products?pageSize=101");
+        Assert.Equal(HttpStatusCode.BadRequest, badSizeResponse.StatusCode);
+
+        var badSortResponse = await client.GetAsync("/api/v1/products?sort=invalidSortField");
+        Assert.Equal(HttpStatusCode.BadRequest, badSortResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Autocomplete_Returns200OK_WithSuggestions()
     {
         var client = CreateClient(authenticated: false);

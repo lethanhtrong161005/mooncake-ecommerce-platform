@@ -108,7 +108,8 @@ public sealed record OwnerProductQuery
 public sealed record ProductSearchQuery
 {
     [Range(1, 1000)] public int Page { get; init; } = 1;
-    [Range(1, 50)] public int PageSize { get; init; } = 24;
+    [Range(1, 1000)] public int? PageNumber { get; init; }
+    [Range(1, 100)] public int PageSize { get; init; } = 9;
     [MaxLength(100)] public string? Q { get; init; }
     [MaxLength(20)] public Guid[] CategoryIds { get; init; } = [];
     [Range(typeof(decimal), "0", "9999999999")] public decimal? MinPrice { get; init; }

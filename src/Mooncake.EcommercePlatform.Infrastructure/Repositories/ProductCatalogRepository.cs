@@ -367,7 +367,8 @@ public sealed class ProductCatalogRepository(ApplicationDbContext db, IDateTimeP
         if (query.SupportsCustomPackaging.HasValue) rows = rows.Where(x => x.Product.SupportsCustomPackaging == query.SupportsCustomPackaging);
         if (query.MinReputation.HasValue) rows = rows.Where(x => x.Profile.ReputationScore >= query.MinReputation);
         if (query.RegionCodes.Length > 0) rows = rows.Where(x => x.Shop.RegionCode != null && query.RegionCodes.Contains(x.Shop.RegionCode));
-        if (query.InStockOnly) rows = rows.Where(x => db.ProductVariants.Any(v => v.ProductId == x.Product.Id && !v.IsDeleted && v.StockQty > 0));
+        if (query.InStockOnly) rows = rows.Where(x => x.Document.EffectiveStatus == ProductStatus.Active &&
+            db.ProductVariants.Any(v => v.ProductId == x.Product.Id && !v.IsDeleted && v.StockQty > 0));
 
         // Materialise the bounded result set once. This avoids EF trying to translate
         // grouping over the aggregate record projection and keeps facet/sort behaviour

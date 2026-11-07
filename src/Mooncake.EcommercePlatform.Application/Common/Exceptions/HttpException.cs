@@ -12,7 +12,6 @@ public sealed class HttpException(
 {
     public string? ErrorCode { get; } = errorCode;
 
-    /// <summary>HTTP status code to return to the caller.</summary>
     public int StatusCode { get; } = statusCode;
 
     /// <summary>Optional structured payload returned in ApiResponse.Data for conflict recovery.</summary>

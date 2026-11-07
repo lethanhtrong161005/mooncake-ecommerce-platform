@@ -10,6 +10,9 @@
 bin/
 obj/
 TestResults/
+**/bin/
+**/obj/
+**/TestResults/
 
 # IDEs
 .vscode/
@@ -20,10 +23,16 @@ TestResults/
 docker/
 .env*
 docker-compose*.yml
+**/.env
+**/.env.*
+**/appsettings.json
+**/appsettings.*.json
+!**/appsettings.sample.json
 
 # Logs
 logs/
 *.log
+**/logs/
 
 # Markdown & Docs
 *.md
@@ -36,3 +45,5 @@ Thumbs.db
 
 # Misc scripts
 setup-solution.sh
+tests/
+.tools/

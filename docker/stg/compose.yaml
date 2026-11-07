@@ -1,0 +1,4 @@
+# Compose discovers this file when running `docker compose` from docker/stg.
+name: mooncake-stg
+include:
+  - docker-compose.stg.yml

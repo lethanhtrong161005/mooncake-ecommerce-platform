@@ -1,0 +1,84 @@
+name: Mooncake Backend - Staging CI
+
+on:
+  push:
+    branches:
+      - stg
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: mooncake-backend-stg
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: mooncake-be
+
+jobs:
+  build-and-push:
+    name: Build and Push Backend to ECR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore Mooncake.EcommercePlatform.sln
+
+      - name: Build solution
+        run: |
+          dotnet build Mooncake.EcommercePlatform.sln \
+            --configuration Release \
+            --no-restore
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "065636180854"
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set Docker image tag
+        id: image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "uri=$REGISTRY/$ECR_REPOSITORY:$SHA" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t "$IMAGE_URI" \
+            .
+
+      - name: Push Docker image to ECR
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: docker push "$IMAGE_URI"
+
+      - name: Deployment summary
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          echo "### Backend Image Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`$IMAGE_URI\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Branch: \`stg\`" >> "$GITHUB_STEP_SUMMARY"

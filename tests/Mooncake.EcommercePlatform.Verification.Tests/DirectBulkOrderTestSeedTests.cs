@@ -164,6 +164,275 @@ public sealed class DirectBulkOrderTestSeedTests(ITestOutputHelper output)
         Assert.Empty(pending);
     }
 
+    [Fact]
+    public async Task SeedSearchPageTestCatalogAsync()
+    {
+        var factory = new ApplicationDbContextFactory();
+        await using var db = factory.CreateDbContext([]);
+
+        var now = DateTime.UtcNow;
+        var passwordHash = PasswordHashUtils.Hash(DefaultPassword);
+
+        var admin = await EnsureUserAsync(db, "admin@test.mooncake.local", "0988000106",
+            "TEST Platform Administrator", UserRole.Admin, passwordHash, now);
+        var supA = await EnsureUserAsync(db, "sup.a@test.mooncake.local", "0988000103",
+            "TEST Supplier Workshop Alpha", UserRole.Supplier, passwordHash, now);
+        var supB = await EnsureUserAsync(db, "sup.b@test.mooncake.local", "0988000104",
+            "TEST Supplier Workshop Beta", UserRole.Supplier, passwordHash, now);
+        var supC = await EnsureUserAsync(db, "sup.c@test.mooncake.local", "0988000107",
+            "TEST Supplier Workshop Gamma Da Nang", UserRole.Supplier, passwordHash, now);
+
+        await db.SaveChangesAsync();
+
+        var supProfileA = await EnsureSupplierProfileAsync(db, supA.Id, "TEST Workshop Alpha Bakery Co.",
+            "0309880103", "12 Artisan Street, District 7, Ho Chi Minh City", admin.Id, now);
+        supProfileA.ReputationScore = 98m;
+
+        var supProfileB = await EnsureSupplierProfileAsync(db, supB.Id, "TEST Workshop Beta Confectionery Co.",
+            "0309880104", "88 Heritage Road, Ba Dinh, Ha Noi", admin.Id, now);
+        supProfileB.ReputationScore = 91m;
+
+        var supProfileC = await EnsureSupplierProfileAsync(db, supC.Id, "TEST Workshop Gamma Central Heritage",
+            "0309880107", "36 Bach Dang Street, Hai Chau, Da Nang", admin.Id, now);
+        supProfileC.ReputationScore = 84m;
+
+        await db.SaveChangesAsync();
+
+        var (templateId, revisionId) = await EnsureTemplateAsync(db, now);
+
+        var catNuong = await EnsureNamedCategoryAsync(db, "Bánh nướng truyền thống", "Bánh nướng vỏ vàng óng nhân thập cẩm, hạt sen", 1, now);
+        var catDeo = await EnsureNamedCategoryAsync(db, "Bánh dẻo cao cấp", "Bánh dẻo tuyết lạnh và dẻo truyền thống hương hoa bưởi", 2, now);
+        var catVip = await EnsureNamedCategoryAsync(db, "Hộp quà doanh nghiệp VIP", "Bộ sưu tập sơn mài, gỗ khắc laser cao cấp cho đối tác", 3, now);
+        var catChay = await EnsureNamedCategoryAsync(db, "Bánh chay thực dưỡng", "Bánh ít đường, hạt dinh dưỡng hữu cơ tốt cho sức khỏe", 4, now);
+
+        var shopA = await EnsureShopAsync(db, supA.Id, supProfileA.Id, templateId, revisionId,
+            "TEST-NguyetPho-ShopA", "test-nguyet-pho-shop-a", "HCM",
+            "12 Artisan Street, District 7, Ho Chi Minh City", "0988000103", now);
+        var shopB = await EnsureShopAsync(db, supB.Id, supProfileB.Id, templateId, revisionId,
+            "TEST-NguyetPho-ShopB", "test-nguyet-pho-shop-b", "HN",
+            "88 Heritage Road, Ba Dinh, Ha Noi", "0988000104", now);
+        var shopC = await EnsureShopAsync(db, supC.Id, supProfileC.Id, templateId, revisionId,
+            "TEST-NguyetPho-ShopC-DaNang", "test-nguyet-pho-shop-c-dn", "DN",
+            "36 Bach Dang Street, Hai Chau, Da Nang", "0988000107", now);
+
+        await db.SaveChangesAsync();
+
+        var categories = new[] { catNuong, catDeo, catVip, catChay };
+        var shops = new[]
+        {
+            (Shop: shopA, Profile: supProfileA),
+            (Shop: shopB, Profile: supProfileB),
+            (Shop: shopC, Profile: supProfileC)
+        };
+
+        var prices = new decimal[]
+        {
+            85000m, 120000m, 150000m, 180000m, 220000m, 260000m,
+            320000m, 380000m, 450000m, 520000m, 580000m, 650000m,
+            720000m, 790000m, 850000m, 920000m, 960000m, 990000m,
+            1150000m, 1280000m, 1450000m, 1650000m, 1850000m, 2100000m,
+            2450000m, 2800000m, 3200000m, 3600000m,
+            195000m, 240000m, 310000m, 410000m, 540000m, 680000m, 880000m, 1550000m
+        };
+
+        var images = new[]
+        {
+            "https://images.unsplash.com/photo-1631206753348-db44968fd440?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=800&q=80"
+        };
+
+        for (var i = 0; i < 36; i++)
+        {
+            var cat = categories[i % categories.Length];
+            var (shop, profile) = shops[i % shops.Length];
+            var basePrice = prices[i];
+            var minOrderQty = (i % 5) switch { 0 => 5, 1 => 10, 2 => 20, 3 => 50, _ => 100 };
+            var supportsPackaging = i % 2 == 0;
+            var inStock = i < 32; // Last 4 products out of stock
+            var rating = (i % 6) == 5 ? (decimal?)null : decimal.Round(4.1m + (i % 9) * 0.1m, 1);
+            var reviewCount = rating.HasValue ? 8 + (i * 3) : 0;
+            var soldCount = 50L + (i * 25L);
+            var imgUrl = images[i % images.Length];
+            var code = $"P{i + 1:D2}";
+            var flavorTag = (i % 4) switch
+            {
+                0 => "Hoàng Kim Bào Ngư",
+                1 => "Tuyết Liên Hạt Sen",
+                2 => "Sơn Mài Long Phụng VIP",
+                _ => "Hạt Dinh Dưỡng Thực Dưỡng"
+            };
+            var name = $"TEST-SEARCH-{code} Hộp Bánh {flavorTag} ({shop.RegionCode})";
+            var desc = $"Dòng bánh trung thu doanh nghiệp {flavorTag} từ {shop.Name}, giá gốc {basePrice:N0}đ.";
+
+            var product = await EnsureRichSearchProductAsync(
+                db, shop, profile, cat, name, desc, basePrice, minOrderQty, 5000,
+                supportsPackaging, inStock, rating, reviewCount, soldCount, imgUrl,
+                now.AddHours(-i));
+
+            await EnsureVariantAsync(
+                db, product.Id, shop.Id,
+                $"Phiên bản tiêu chuẩn {code}",
+                $"TEST-SRCH-{shop.RegionCode}-{code}",
+                0m,
+                inStock ? 500 : 0,
+                680,
+                now.AddHours(-i));
+        }
+
+        await db.SaveChangesAsync();
+        output.WriteLine("Seeded 36 TEST-SEARCH products across 4 categories and 3 shops.");
+    }
+
+    private static async Task<Category> EnsureNamedCategoryAsync(
+        ApplicationDbContext db, string name, string description, int sortOrder, DateTime now)
+    {
+        var category = await db.Categories.FirstOrDefaultAsync(c => c.Name == name && !c.IsDeleted);
+        if (category is null)
+        {
+            category = new Category
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                Description = description,
+                SortOrder = sortOrder,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.Categories.Add(category);
+            await db.SaveChangesAsync();
+        }
+        return category;
+    }
+
+    private static async Task<Product> EnsureRichSearchProductAsync(
+        ApplicationDbContext db, Shop shop, SupplierProfile profile, Category category,
+        string name, string description, decimal basePrice, int minQty, int maxQty,
+        bool supportsPackaging, bool inStock, decimal? avgRating, int reviewCount, long soldCount,
+        string imageUrl, DateTime publishedAt)
+    {
+        var normalized = name.Trim().ToLowerInvariant();
+        var product = await db.Products.FirstOrDefaultAsync(p => p.ShopId == shop.Id && p.Name == name);
+        var effectiveStatus = inStock ? ProductStatus.Active : ProductStatus.OutOfStock;
+
+        if (product is null)
+        {
+            product = new Product
+            {
+                Id = Guid.NewGuid(),
+                Version = 1,
+                ShopId = shop.Id,
+                CategoryId = category.Id,
+                Name = name,
+                NormalizedName = normalized,
+                Description = description,
+                Ingredients = "Hạt sen Huế, trứng muối thượng hạng, bào ngư, hạt mắc ca, vỏ nướng truyền thống",
+                BasePrice = basePrice,
+                MinOrderQty = minQty,
+                MaxOrderQty = maxQty,
+                Unit = "Hộp",
+                SupportsCustomPackaging = supportsPackaging,
+                Status = effectiveStatus,
+                IsPublished = true,
+                PublishedAtUtc = publishedAt,
+                CreatedAt = publishedAt,
+                UpdatedAt = publishedAt
+            };
+            db.Products.Add(product);
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            product.CategoryId = category.Id;
+            product.BasePrice = basePrice;
+            product.MinOrderQty = minQty;
+            product.MaxOrderQty = maxQty;
+            product.Unit = "Hộp";
+            product.SupportsCustomPackaging = supportsPackaging;
+            product.Status = effectiveStatus;
+            product.IsPublished = true;
+            product.PublishedAtUtc = publishedAt;
+            product.IsDeleted = false;
+            product.UpdatedAt = publishedAt;
+        }
+
+        var hasPrimaryImage = await db.ProductImages.AnyAsync(i => i.ProductId == product.Id && i.IsPrimary && !i.IsDeleted);
+        if (!hasPrimaryImage)
+        {
+            db.ProductImages.Add(new ProductImage
+            {
+                Id = Guid.NewGuid(),
+                ProductId = product.Id,
+                ImageUrl = imageUrl,
+                IsPrimary = true,
+                SortOrder = 0,
+                CreatedAt = publishedAt,
+                UpdatedAt = publishedAt
+            });
+        }
+
+        var searchDoc = await db.ProductSearchDocuments.FirstOrDefaultAsync(d => d.ProductId == product.Id);
+        if (searchDoc is null)
+        {
+            db.ProductSearchDocuments.Add(new ProductSearchDocument
+            {
+                ProductId = product.Id,
+                ShopId = shop.Id,
+                SupplierProfileId = profile.Id,
+                CategoryId = category.Id,
+                SourceVersion = product.Version,
+                Name = product.Name,
+                Description = product.Description,
+                ShopName = shop.Name ?? shop.Slug,
+                ShopSlug = shop.Slug,
+                CategoryName = category.Name,
+                SearchText = $"{product.Name} {description} {shop.Name} {category.Name} {shop.RegionCode}",
+                PrimaryImageUrl = imageUrl,
+                MinPrice = basePrice,
+                MaxPrice = basePrice,
+                MinOrderQty = minQty,
+                Unit = "Hộp",
+                SupportsCustomPackaging = supportsPackaging,
+                EffectiveStatus = effectiveStatus,
+                ReputationScore = profile.ReputationScore,
+                AverageRating = avgRating,
+                ReviewCount = reviewCount,
+                SoldCount = soldCount,
+                RegionCode = shop.RegionCode,
+                CreatedAtUtc = publishedAt,
+                UpdatedAtUtc = publishedAt,
+                ProjectedAtUtc = publishedAt
+            });
+        }
+        else
+        {
+            searchDoc.CategoryId = category.Id;
+            searchDoc.CategoryName = category.Name;
+            searchDoc.Name = product.Name;
+            searchDoc.Description = product.Description;
+            searchDoc.ShopName = shop.Name ?? shop.Slug;
+            searchDoc.ShopSlug = shop.Slug;
+            searchDoc.SearchText = $"{product.Name} {description} {shop.Name} {category.Name} {shop.RegionCode}";
+            searchDoc.PrimaryImageUrl = imageUrl;
+            searchDoc.MinPrice = basePrice;
+            searchDoc.MaxPrice = basePrice;
+            searchDoc.MinOrderQty = minQty;
+            searchDoc.Unit = "Hộp";
+            searchDoc.SupportsCustomPackaging = supportsPackaging;
+            searchDoc.EffectiveStatus = effectiveStatus;
+            searchDoc.ReputationScore = profile.ReputationScore;
+            searchDoc.AverageRating = avgRating;
+            searchDoc.ReviewCount = reviewCount;
+            searchDoc.SoldCount = soldCount;
+            searchDoc.RegionCode = shop.RegionCode;
+            searchDoc.UpdatedAtUtc = publishedAt;
+            searchDoc.ProjectedAtUtc = publishedAt;
+        }
+
+        return product;
+    }
+
     private static async Task<User> EnsureUserAsync(ApplicationDbContext db, string email, string phone,
         string fullName, UserRole role, string passwordHash, DateTime now)
     {

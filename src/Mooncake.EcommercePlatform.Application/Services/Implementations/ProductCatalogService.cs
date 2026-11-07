@@ -255,11 +255,13 @@ public sealed class ProductCatalogService(IProductCatalogRepository repository, 
 
     public Task<ProductSearchResponse> SearchAsync(ProductSearchQuery query, CancellationToken ct)
     {
-        H.Require(query.Page > 0 && query.PageSize is > 0 and <= 50 && query.CategoryIds.Distinct().Count() <= 20 &&
+        var effectivePage = query.PageNumber ?? query.Page;
+        H.Require(effectivePage > 0 && query.PageSize is > 0 and <= 100 && query.CategoryIds.Distinct().Count() <= 20 &&
             query.RegionCodes.Distinct(StringComparer.OrdinalIgnoreCase).Count() <= 20 &&
             (!query.MinPrice.HasValue || !query.MaxPrice.HasValue || query.MinPrice <= query.MaxPrice));
         return repository.SearchAsync(query with
         {
+            Page = effectivePage,
             Q = H.OptionalText(query.Q, 100),
             RegionCodes = query.RegionCodes.Select(x => H.Text(x, 2, 20).ToUpperInvariant()).Distinct().ToArray()
         }, ct);

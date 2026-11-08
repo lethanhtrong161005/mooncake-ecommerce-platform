@@ -69,14 +69,26 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         await context.RequestForQuotations.AsNoTracking().Where(rfq => rfq.CustomerId == customerUserId && !rfq.IsDeleted)
             .OrderByDescending(rfq => rfq.CreatedAt).Take(100).ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<RequestForQuotation>> GetSupplierInvitedRfqsAsync(Guid supplierUserId,
+    public async Task<IReadOnlyList<RequestForQuotation>> GetSupplierRfqsAsync(Guid supplierUserId,
         CancellationToken cancellationToken = default) =>
-        await (from invitation in context.RfqInvitations.AsNoTracking()
-               join profile in context.SupplierProfiles.AsNoTracking() on invitation.SupplierId equals profile.Id
-               join rfq in context.RequestForQuotations.AsNoTracking() on invitation.RfqId equals rfq.Id
-               where profile.UserId == supplierUserId && !profile.IsDeleted && !invitation.IsDeleted && !rfq.IsDeleted
+        await (from rfq in context.RequestForQuotations.AsNoTracking()
+               where !rfq.IsDeleted &&
+                     ((rfq.Status == RfqStatus.Open && rfq.BidDeadline > DateTime.UtcNow) ||
+                      (rfq.Status == RfqStatus.InNegotiation && rfq.AwardedBidId.HasValue &&
+                       (from bid in context.Bids.AsNoTracking()
+                        join profile in context.SupplierProfiles.AsNoTracking() on bid.SupplierId equals profile.Id
+                        where bid.Id == rfq.AwardedBidId.Value && profile.UserId == supplierUserId && !profile.IsDeleted
+                        select bid.Id).Any()) ||
+                      (from invitation in context.RfqInvitations.AsNoTracking()
+                       join profile in context.SupplierProfiles.AsNoTracking() on invitation.SupplierId equals profile.Id
+                       where invitation.RfqId == rfq.Id && !invitation.IsDeleted && profile.UserId == supplierUserId && !profile.IsDeleted
+                       select invitation.Id).Any())
                orderby rfq.BidDeadline ascending
                select rfq).Take(100).ToListAsync(cancellationToken);
+
+    public Task<string?> GetCustomerNameAsync(Guid customerUserId, CancellationToken cancellationToken = default) =>
+        context.Users.AsNoTracking().Where(user => user.Id == customerUserId && !user.IsDeleted)
+            .Select(user => user.FullName).FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<SupplierProfile>> GetSuggestedSuppliersAsync(Guid rfqId,
         CancellationToken cancellationToken = default) =>
@@ -237,6 +249,7 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
             existingBid.TotalPrice = bid.TotalPrice;
             existingBid.EstimatedDeliveryDays = bid.EstimatedDeliveryDays;
             existingBid.ValidityDays = bid.ValidityDays;
+            existingBid.SubmittedAt = bid.SubmittedAt;
             existingBid.Notes = bid.Notes;
             existingBid.UpdatedAt = DateTime.UtcNow;
             existingBid.UpdatedBy = bid.CreatedBy;
@@ -247,10 +260,12 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         context.BidItems.AddRange(items);
         var invitation = await context.RfqInvitations.FirstOrDefaultAsync(item => item.RfqId == bid.RfqId
             && item.SupplierId == bid.SupplierId && !item.IsDeleted, cancellationToken);
-        if (invitation is null) return false;
-        invitation.Status = RfqInvitationStatus.BidSubmitted;
-        invitation.RespondedAt = bid.SubmittedAt;
-        invitation.UpdatedAt = bid.SubmittedAt;
+        if (invitation is not null)
+        {
+            invitation.Status = RfqInvitationStatus.BidSubmitted;
+            invitation.RespondedAt = bid.SubmittedAt;
+            invitation.UpdatedAt = bid.SubmittedAt;
+        }
         var customerId = await context.RequestForQuotations.Where(rfq => rfq.Id == bid.RfqId).Select(rfq => rfq.CustomerId).FirstAsync(cancellationToken);
         context.Notifications.Add(new Notification
         {
@@ -283,10 +298,7 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
             await transaction.CommitAsync(cancellationToken);
             return existingContract;
         }
-        if (rfq.Status is not (RfqStatus.Open or RfqStatus.Closed)) return null;
-        if (rfq.Status == RfqStatus.Open && rfq.BidDeadline > DateTime.UtcNow
-            && await context.RfqInvitations.AnyAsync(invitation => invitation.RfqId == rfqId && !invitation.IsDeleted
-                && (invitation.Status == RfqInvitationStatus.Invited || invitation.Status == RfqInvitationStatus.Viewed), cancellationToken)) return null;
+        if (rfq.Status != RfqStatus.InNegotiation || rfq.AwardedBidId != bidId) return null;
         var bid = await context.Bids.FirstOrDefaultAsync(item => item.Id == bidId && item.RfqId == rfqId && !item.IsDeleted, cancellationToken);
         if (bid is null || bid.Status != BidStatus.Submitted || bid.SubmittedAt.AddDays(bid.ValidityDays) <= DateTime.UtcNow) return null;
         var supplier = await context.SupplierProfiles.FirstOrDefaultAsync(profile => profile.Id == bid.SupplierId && !profile.IsDeleted, cancellationToken);
@@ -354,6 +366,66 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         return contract;
     }
 
+    public async Task<bool> RequestBidSelectionAsync(Guid rfqId, Guid bidId, string? selectionNote, Guid customerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var rfq = await context.RequestForQuotations.FromSqlInterpolated($"SELECT * FROM request_for_quotations WHERE id = {rfqId} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+        var bid = await context.Bids.FirstOrDefaultAsync(item => item.Id == bidId && item.RfqId == rfqId && !item.IsDeleted, cancellationToken);
+        if (rfq is null || rfq.IsDeleted || rfq.CustomerId != customerUserId || rfq.Status is not (RfqStatus.Open or RfqStatus.Closed)
+            || bid is null || bid.Status != BidStatus.Submitted || bid.SubmittedAt.AddDays(bid.ValidityDays) <= DateTime.UtcNow)
+            return false;
+        if (!await IsActiveSupplierAsync(bid.SupplierId, cancellationToken)) return false;
+        var supplier = await context.SupplierProfiles.AsNoTracking().FirstOrDefaultAsync(profile => profile.Id == bid.SupplierId && !profile.IsDeleted, cancellationToken);
+        if (supplier is null) return false;
+        rfq.Status = RfqStatus.InNegotiation;
+        rfq.AwardedBidId = bid.Id;
+        rfq.SelectionNote = selectionNote;
+        rfq.UpdatedAt = DateTime.UtcNow;
+        rfq.UpdatedBy = customerUserId;
+        context.Notifications.Add(new Notification
+        {
+            UserId = supplier.UserId, Type = "bid.selection_requested", Title = "Customer selected your quotation",
+            Content = $"The customer selected your quotation for RFQ {rfq.RfqNumber}. Confirm or decline to continue.",
+            ReferenceType = "rfq", ReferenceId = rfq.Id
+        });
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> DeclineBidSelectionAsync(Guid rfqId, Guid bidId, Guid supplierUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var rfq = await context.RequestForQuotations.FromSqlInterpolated($"SELECT * FROM request_for_quotations WHERE id = {rfqId} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+        var bid = await context.Bids.FirstOrDefaultAsync(item => item.Id == bidId && item.RfqId == rfqId && !item.IsDeleted, cancellationToken);
+        var supplier = bid is null ? null : await context.SupplierProfiles.AsNoTracking()
+            .FirstOrDefaultAsync(profile => profile.Id == bid.SupplierId && profile.UserId == supplierUserId && !profile.IsDeleted, cancellationToken);
+        if (rfq is null || rfq.Status != RfqStatus.InNegotiation || rfq.AwardedBidId != bidId
+            || bid is null || bid.Status != BidStatus.Submitted || supplier is null) return false;
+        var customerId = rfq.CustomerId;
+        rfq.Status = RfqStatus.Open;
+        rfq.AwardedBidId = null;
+        rfq.SelectionNote = null;
+        rfq.UpdatedAt = DateTime.UtcNow;
+        rfq.UpdatedBy = supplierUserId;
+        bid.Status = BidStatus.Cancelled;
+        bid.CancelReason = "Supplier declined the customer's selection request.";
+        bid.UpdatedAt = DateTime.UtcNow;
+        context.Notifications.Add(new Notification
+        {
+            UserId = customerId, Type = "bid.selection_declined", Title = "Supplier declined selection",
+            Content = $"The selected supplier declined your request for RFQ {rfq.RfqNumber}. You can select another quotation.",
+            ReferenceType = "rfq", ReferenceId = rfq.Id
+        });
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> CancelBidAsync(Guid rfqId, Guid bidId, Guid customerUserId, CancellationToken cancellationToken = default)
     {
         var bid = await context.Bids.FirstOrDefaultAsync(item => item.Id == bidId && item.RfqId == rfqId && !item.IsDeleted, cancellationToken);
@@ -370,7 +442,7 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var rfq = await context.RequestForQuotations.FromSqlInterpolated($"SELECT * FROM request_for_quotations WHERE id = {rfqId} FOR UPDATE")
             .FirstOrDefaultAsync(cancellationToken);
-        if (rfq is null || rfq.IsDeleted || rfq.CustomerId != customerUserId || rfq.Status is RfqStatus.Awarded or RfqStatus.Cancelled)
+        if (rfq is null || rfq.IsDeleted || rfq.CustomerId != customerUserId || rfq.Status is RfqStatus.Awarded or RfqStatus.Cancelled or RfqStatus.InNegotiation)
             return false;
 
         var previousStatus = rfq.Status;

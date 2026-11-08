@@ -22,5 +22,6 @@ public interface IRfqService
     Task<BidResponse> SubmitBidAsync(Guid supplierUserId, Guid rfqId, SubmitBidRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BidResponse>> CompareBidsAsync(Guid customerUserId, Guid rfqId, CancellationToken cancellationToken = default);
     Task<BidResponse> CancelBidAsync(Guid customerUserId, Guid rfqId, Guid bidId, CancellationToken cancellationToken = default);
-    Task<ContractResponse> AwardBidAsync(Guid customerUserId, Guid rfqId, Guid bidId, AwardBidRequest request, CancellationToken cancellationToken = default);
+    Task<BidSelectionResponse> AwardBidAsync(Guid customerUserId, Guid rfqId, Guid bidId, AwardBidRequest request, CancellationToken cancellationToken = default);
+    Task<BidSelectionResponse> RespondToBidSelectionAsync(Guid supplierUserId, Guid rfqId, Guid bidId, bool accept, CancellationToken cancellationToken = default);
 }

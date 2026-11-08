@@ -516,7 +516,7 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                     context.Notifications.Add(new Notification
                     {
                         UserId = supplierUserId, Type = "contract.active", Title = "Contract is active",
-                        Content = "The VNPay deposit was confirmed and production can begin.",
+                        Content = $"The VNPay deposit for contract {contract.ContractNumber} was confirmed. Please begin production and prepare the shipment according to the contract delivery schedule.",
                         ReferenceType = "contract", ReferenceId = contract.Id
                     });
             }

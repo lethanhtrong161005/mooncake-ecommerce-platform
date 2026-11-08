@@ -97,6 +97,31 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         return true;
     }
 
+    public async Task<bool> FinalizeAcceptedBidContractAsync(Guid contractId, Guid customerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var contract = await context.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == contractId && item.CustomerId == customerUserId
+                && !item.IsDeleted && item.Status == ContractStatus.PendingSignature && item.BidId != null,
+                cancellationToken);
+        if (contract?.BidId is not Guid bidId) return false;
+
+        // Accepted is only set after the supplier accepts the customer's bid selection.
+        // Use this persisted proof to safely complete contracts created by the prior flow.
+        var acceptedBySupplier = await context.Bids.AsNoTracking().AnyAsync(bid => bid.Id == bidId
+            && bid.SupplierId == contract.SupplierId && bid.Status == BidStatus.Accepted && !bid.IsDeleted,
+            cancellationToken);
+        if (!acceptedBySupplier) return false;
+
+        var supplierUserId = await context.SupplierProfiles.AsNoTracking()
+            .Where(profile => profile.Id == contract.SupplierId && !profile.IsDeleted)
+            .Select(profile => (Guid?)profile.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (supplierUserId is null) return false;
+
+        return await SignAsync(contractId, supplierUserId.Value, null, null, cancellationToken) is not null;
+    }
+
     public async Task<Contract?> SignAsync(Guid contractId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -106,31 +131,26 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         var isCustomer = contract.CustomerId == actorUserId;
         var isSupplier = !isCustomer && await context.SupplierProfiles.AsNoTracking().AnyAsync(profile => profile.Id == contract.SupplierId
             && profile.UserId == actorUserId && !profile.IsDeleted, cancellationToken);
-        if (!isCustomer && !isSupplier) return null;
+        if (!isSupplier) return null;
         var now = clock.UtcNow;
-        if (isCustomer)
-        {
-            if (contract.SignedByCustomerAt.HasValue) return contract;
-            contract.SignedByCustomerAt = now;
-            contract.CustomerSignatureIp = ipAddress;
-            contract.CustomerSignatureUserAgent = userAgent;
-        }
-        else
-        {
-            if (contract.SignedBySupplierAt.HasValue) return contract;
-            contract.SignedBySupplierAt = now;
-            contract.SupplierSignatureIp = ipAddress;
-            contract.SupplierSignatureUserAgent = userAgent;
-        }
+        if (contract.SignedBySupplierAt.HasValue) return contract;
+        contract.SignedBySupplierAt = now;
+        contract.SupplierSignatureIp = ipAddress;
+        contract.SupplierSignatureUserAgent = userAgent;
         contract.UpdatedAt = now;
         contract.UpdatedBy = actorUserId;
         context.WorkflowEvents.Add(new WorkflowEvent
         {
             AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractPartySigned",
             FromStatus = ContractStatus.PendingSignature.ToString(), ToStatus = ContractStatus.PendingSignature.ToString(),
-            ActorUserId = actorUserId, Metadata = $"ip:{ipAddress ?? "unknown"}; user_agent:{userAgent ?? "unknown"}"
+            ActorUserId = actorUserId,
+            Metadata = JsonSerializer.Serialize(new
+            {
+                ipAddress = ipAddress ?? "unknown",
+                userAgent = userAgent ?? "unknown"
+            })
         });
-        if (contract.SignedByCustomerAt.HasValue && contract.SignedBySupplierAt.HasValue)
+        if (contract.SignedBySupplierAt.HasValue)
         {
             var snapshot = $"{contract.ContractNumber}\n{contract.Title}\n{contract.TotalValue:0.00}\n{contract.DeliveryDeadline:yyyy-MM-dd}\n{contract.TermsAndConditions}";
             contract.SignedDocumentSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot)));
@@ -211,18 +231,21 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             {
                 AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractStatusChanged",
                 FromStatus = ContractStatus.PendingSignature.ToString(), ToStatus = ContractStatus.Signed.ToString(), ActorUserId = actorUserId,
-                Metadata = $"signed_document_sha256:{contract.SignedDocumentSha256}"
+                Metadata = JsonSerializer.Serialize(new { signedDocumentSha256 = contract.SignedDocumentSha256 })
             });
             context.WorkflowEvents.Add(new WorkflowEvent
             {
                 AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractStatusChanged",
                 FromStatus = fromStatus.ToString(), ToStatus = contract.Status.ToString(), ActorUserId = actorUserId,
-                Metadata = $"signed_document_sha256:{contract.SignedDocumentSha256}"
+                Metadata = JsonSerializer.Serialize(new { signedDocumentSha256 = contract.SignedDocumentSha256 })
             });
         }
-        context.Notifications.AddRange(
-            new Notification { UserId = contract.CustomerId, Type = "contract.signature_received", Title = "Contract signature recorded", Content = contract.Status == ContractStatus.Signed ? "Both parties signed the contract." : "The other party still needs to sign the contract.", ReferenceType = "contract", ReferenceId = contract.Id },
-            new Notification { UserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken), Type = "contract.signature_received", Title = "Contract signature recorded", Content = contract.Status == ContractStatus.Signed ? "Both parties signed the contract." : "The other party still needs to sign the contract.", ReferenceType = "contract", ReferenceId = contract.Id });
+        context.Notifications.Add(new Notification
+        {
+            UserId = contract.CustomerId, Type = "contract.supplier_confirmed", Title = "Supplier confirmed the contract",
+            Content = $"Supplier confirmed contract {contract.ContractNumber}. Review the contract terms and pay the M1 deposit to activate it.",
+            ReferenceType = "contract", ReferenceId = contract.Id
+        });
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return contract;
@@ -309,7 +332,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             {
                 AggregateType = "ContractMilestone", AggregateId = milestone.Id, EventType = "MilestoneProgressSubmitted",
                 FromStatus = MilestoneStatus.InProgress.ToString(), ToStatus = MilestoneStatus.PendingReview.ToString(), ActorUserId = actorUserId,
-                Metadata = $"notes:{notes}"
+                Metadata = JsonSerializer.Serialize(new { notes })
             });
             context.Notifications.Add(new Notification
             {
@@ -362,7 +385,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             {
                 AggregateType = "ContractMilestone", AggregateId = milestone.Id, EventType = "MilestoneVerified",
                 FromStatus = fromStatus.ToString(), ToStatus = milestone.Status.ToString(), ActorUserId = actorUserId,
-                Metadata = $"approved:{isApproved}; reason:{rejectionReason}"
+                Metadata = JsonSerializer.Serialize(new { approved = isApproved, reason = rejectionReason })
             });
             var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
             context.Notifications.Add(new Notification
@@ -404,7 +427,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             {
                 AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractExtensionRequested",
                 FromStatus = contract.Status.ToString(), ToStatus = contract.Status.ToString(), ActorUserId = actorUserId,
-                Metadata = $"proposed_date:{proposedDueDate:yyyy-MM-dd}; reason:{reason}"
+                Metadata = JsonSerializer.Serialize(new { proposedDate = proposedDueDate, reason })
             });
             context.Notifications.Add(new Notification
             {
@@ -462,7 +485,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             {
                 AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractExtensionResponded",
                 FromStatus = contract.Status.ToString(), ToStatus = contract.Status.ToString(), ActorUserId = actorUserId,
-                Metadata = $"approved:{isApproved}; note:{responseNote}"
+                Metadata = JsonSerializer.Serialize(new { approved = isApproved, note = responseNote })
             });
 
             var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
@@ -514,7 +537,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             {
                 AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractDisputeRaised",
                 FromStatus = fromStatus.ToString(), ToStatus = ContractStatus.Disputed.ToString(), ActorUserId = actorUserId,
-                Metadata = $"reason:{reason}"
+                Metadata = JsonSerializer.Serialize(new { reason })
             });
 
             var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
@@ -595,7 +618,12 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         {
             AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractCompleted",
             FromStatus = ContractStatus.Active.ToString(), ToStatus = contract.Status.ToString(), ActorUserId = actorUserId,
-            Metadata = $"confirmed:{confirmedQualityAndQuantity}; on_time:{isOnTime}; score_delta:{delta}"
+            Metadata = JsonSerializer.Serialize(new
+            {
+                confirmed = confirmedQualityAndQuantity,
+                onTime = isOnTime,
+                scoreDelta = delta
+            })
         });
 
         var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
@@ -659,7 +687,12 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         {
             AggregateType = "Contract", AggregateId = contract.Id, EventType = "ContractDisputeResolved",
             FromStatus = ContractStatus.Disputed.ToString(), ToStatus = contract.Status.ToString(), ActorUserId = adminUserId,
-            Metadata = $"resolution:{resolutionType}; refund:{refundAmount:0.00}; verdict:{adminVerdict}"
+            Metadata = JsonSerializer.Serialize(new
+            {
+                resolution = resolutionType,
+                refundAmount,
+                verdict = adminVerdict
+            })
         });
 
         var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);

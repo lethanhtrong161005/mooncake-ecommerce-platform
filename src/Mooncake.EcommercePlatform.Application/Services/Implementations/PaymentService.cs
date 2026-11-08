@@ -15,7 +15,7 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 
 /// <summary>Implements order and contract payment orchestration, VNPay verification, and reconciliation.</summary>
 public sealed class PaymentService(IPaymentRepository repository, IAdminPlatformRepository adminRepository,
-    IVnPayGateway vnPayGateway, IDateTimeProvider clock) : IPaymentService
+    IVnPayGateway vnPayGateway, IDateTimeProvider clock, INotificationService notificationService) : IPaymentService
 {
     private const string CodLimitConfigKey = "payments.cod_limit_vnd";
     private const string PaymentDeadlineConfigKey = "payments.payment_deadline_hours";
@@ -259,6 +259,16 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
 
         var isSuccess = isValid && responseCode == "00";
 
+<<<<<<< Updated upstream
+=======
+        if (isValid && !isSuccess && payment.Status is PaymentStatus.Pending or PaymentStatus.Processing)
+        {
+            await repository.FailVnPayPaymentAsync(paymentNumber, $"VNPay returned response code {responseCode ?? "missing"}.", cancellationToken);
+            await NotifyPaymentResultAsync(payment, false, cancellationToken);
+        }
+        payment = await repository.GetPaymentByNumberAsync(paymentNumber, cancellationToken) ?? payment;
+
+>>>>>>> Stashed changes
         return new VnPayReturnCallbackResponse(
             payment.PaymentNumber,
             payment.OrderId,
@@ -299,13 +309,33 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
             return ("04", "Invalid Amount");
         if (!parameters.TryGetValue("vnp_ResponseCode", out var responseCode) || responseCode != "00")
         {
-            await repository.FailVnPayPaymentAsync(paymentNumber,
-                $"VNPay returned response code {responseCode ?? "missing"}.", cancellationToken);
+            if (payment.Status is PaymentStatus.Pending or PaymentStatus.Processing)
+            {
+                await repository.FailVnPayPaymentAsync(paymentNumber,
+                    $"VNPay returned response code {responseCode ?? "missing"}.", cancellationToken);
+                await NotifyPaymentResultAsync(payment, false, cancellationToken);
+            }
             return ("00", "Confirm Success");
         }
         var confirmed = await repository.ConfirmVnPayPaymentAsync(paymentNumber, cancellationToken);
+        if (payment.Status != PaymentStatus.Completed && confirmed?.Status == PaymentStatus.Completed)
+            await NotifyPaymentResultAsync(confirmed, true, cancellationToken);
         return confirmed is null ? ("99", "Unknown error") : ("00", "Confirm Success");
     }
+
+    private Task NotifyPaymentResultAsync(Payment payment, bool succeeded, CancellationToken ct) =>
+        notificationService.DispatchNotificationAsync(
+            payment.CustomerId,
+            succeeded ? "payment.completed" : "payment.failed",
+            succeeded ? "Thanh toán thành công" : "Thanh toán chưa thành công",
+            succeeded
+                ? $"Giao dịch {payment.PaymentNumber} đã được VNPay xác nhận thành công với số tiền {payment.Amount:N0} VND."
+                : $"Giao dịch {payment.PaymentNumber} chưa thành công. Bạn có thể kiểm tra lịch sử và thử thanh toán lại.",
+            "payment",
+            payment.Id,
+            payment.ContractId.HasValue ? "/#/hop-dong-tien-do" : "/#/don-hang-cua-toi",
+            succeeded ? "high" : "medium",
+            ct);
 
     public async Task<PaymentResponse> ConfirmAsync(Guid paymentId, Guid adminUserId, string reason, string? ipAddress, CancellationToken cancellationToken = default)
     {
@@ -364,5 +394,5 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
 
     private static PaymentResponse ToResponse(Payment payment) => new(payment.Id, payment.PaymentNumber, payment.OrderId,
         payment.ContractId, payment.MilestoneId, payment.Amount, payment.Currency, payment.Method, payment.Status, payment.PaidAt, payment.ExpiresAt,
-        payment.EvidenceUrl, payment.RefundedAmount, payment.RefundReason);
+        payment.EvidenceUrl, payment.RefundedAmount, payment.RefundReason, payment.CreatedAt);
 }

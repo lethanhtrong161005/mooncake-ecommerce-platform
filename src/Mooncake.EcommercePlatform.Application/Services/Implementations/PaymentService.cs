@@ -243,13 +243,16 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
         );
     }
 
-    public async Task<VnPayReturnCallbackResponse> VerifyReturnCallbackAsync(IReadOnlyDictionary<string, string> queryParams, CancellationToken cancellationToken = default)
+    public async Task<VnPayReturnCallbackResponse> VerifyReturnCallbackAsync(
+        IReadOnlyDictionary<string, string> queryParams, CancellationToken cancellationToken = default,
+        bool confirmPaymentFromReturn = false)
     {
         var isValid = vnPayGateway.IsValidSignature(queryParams);
         queryParams.TryGetValue("vnp_TxnRef", out var paymentNumber);
         queryParams.TryGetValue("vnp_ResponseCode", out var responseCode);
         queryParams.TryGetValue("vnp_BankCode", out var bankCode);
         queryParams.TryGetValue("vnp_TransactionNo", out var transactionNo);
+        queryParams.TryGetValue("vnp_Amount", out var amountText);
 
         if (string.IsNullOrWhiteSpace(paymentNumber))
             throw new HttpException(400, "Missing payment transaction reference.", OrderErrorCodes.ValidationError);
@@ -257,18 +260,35 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
         var payment = await repository.GetPaymentByNumberAsync(paymentNumber, cancellationToken)
             ?? throw new HttpException(404, "Payment record was not found.");
 
-        var isSuccess = isValid && responseCode == "00";
+        var amountMatches = long.TryParse(amountText, NumberStyles.None, CultureInfo.InvariantCulture,
+                out var receivedAmount) &&
+            receivedAmount == decimal.Round(payment.Amount * 100m, 0, MidpointRounding.AwayFromZero);
+        var isSuccess = isValid && responseCode == "00" && amountMatches && payment.Method == PaymentMethod.VNPay;
 
-<<<<<<< Updated upstream
-=======
         if (isValid && !isSuccess && payment.Status is PaymentStatus.Pending or PaymentStatus.Processing)
         {
-            await repository.FailVnPayPaymentAsync(paymentNumber, $"VNPay returned response code {responseCode ?? "missing"}.", cancellationToken);
-            await NotifyPaymentResultAsync(payment, false, cancellationToken);
+            // A valid, signed cancellation/failure may close the pending attempt. Do not mutate it
+            // when the amount or payment method does not match the stored transaction.
+            if (responseCode != "00" && amountMatches && payment.Method == PaymentMethod.VNPay)
+            {
+                await repository.FailVnPayPaymentAsync(paymentNumber, $"VNPay returned response code {responseCode ?? "missing"}.", cancellationToken);
+                await NotifyPaymentResultAsync(payment, false, cancellationToken);
+            }
+        }
+        else if (isSuccess && confirmPaymentFromReturn && payment.Status != PaymentStatus.Completed)
+        {
+            // For local development the browser can reach the Return URL while VNPay cannot reach
+            // a localhost IPN endpoint. The return payload is signed by VNPay; verify its amount
+            // above, then use the same idempotent settlement path as IPN.
+            var confirmed = await repository.ConfirmVnPayPaymentAsync(paymentNumber, cancellationToken);
+            if (confirmed?.Status == PaymentStatus.Completed)
+            {
+                payment = confirmed;
+                await NotifyPaymentResultAsync(confirmed, true, cancellationToken);
+            }
         }
         payment = await repository.GetPaymentByNumberAsync(paymentNumber, cancellationToken) ?? payment;
 
->>>>>>> Stashed changes
         return new VnPayReturnCallbackResponse(
             payment.PaymentNumber,
             payment.OrderId,
@@ -276,7 +296,7 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
             payment.MilestoneId,
             payment.Amount,
             isSuccess,
-            !isValid ? "97" : (responseCode ?? "00"),
+            !isValid ? "97" : !amountMatches || payment.Method != PaymentMethod.VNPay ? "04" : (responseCode ?? "00"),
             bankCode,
             transactionNo,
             payment.PaidAt,

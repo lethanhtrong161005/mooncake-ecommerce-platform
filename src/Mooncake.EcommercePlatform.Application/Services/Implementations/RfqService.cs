@@ -23,21 +23,24 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
         PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "deadlineAsc", "deadlineDesc");
         if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value))
             throw new HttpException(400, "Invalid RFQ status filter.", "VALIDATION_ERROR");
-        if (supplier) _ = await GetVerifiedSupplierIdAsync(userId, cancellationToken);
+        var supplierProfileId = supplier ? await GetVerifiedSupplierIdAsync(userId, cancellationToken) : (Guid?)null;
+        if (supplierProfileId.HasValue && !await repository.IsActiveSupplierAsync(supplierProfileId.Value, cancellationToken))
+            throw new HttpException(403, "An active supplier shop is required to view RFQs.");
         var page = await repository.GetRfqsPageAsync(userId, supplier, query, cancellationToken);
         if (page.Items.Count == 0)
             return new PagedResult<RfqResponse>([], page.Page, page.PageSize, page.TotalCount);
-        var (items, invitations, bids) = await repository.GetRfqPageDetailsAsync(
-            page.Items.Select(rfq => rfq.Id).ToArray(), cancellationToken);
-        var byRfq = items.GroupBy(item => item.RfqId).ToDictionary(group => group.Key, group => group.ToList());
-        var responses = page.Items.Select(rfq => new RfqResponse(rfq.Id, rfq.RfqNumber, rfq.Title,
-            rfq.Description, rfq.DeliveryAddress, rfq.DeliveryDateRequired, rfq.BudgetRangeMin,
-            rfq.BudgetRangeMax, rfq.BidDeadline, rfq.Status,
-            byRfq.GetValueOrDefault(rfq.Id, []).Select(item => new RfqItemResponse(item.Id,
-                item.ProductName, item.Description, item.Quantity, item.Unit,
-                supplier ? null : item.TargetPrice, item.Specifications, item.PackagingRequirements,
-                item.NeedsCustomPackaging)).ToArray(),
-            invitations.GetValueOrDefault(rfq.Id), bids.GetValueOrDefault(rfq.Id))).ToArray();
+        var responses = new List<RfqResponse>(page.Items.Count);
+        foreach (var rfq in page.Items)
+        {
+            var invitation = supplierProfileId.HasValue
+                ? await repository.GetInvitationAsync(rfq.Id, supplierProfileId.Value, cancellationToken)
+                : null;
+            if (invitation?.Status == RfqInvitationStatus.Declined) continue;
+            responses.Add(await ToResponseAsync(rfq, supplier, cancellationToken,
+                invitation is not null,
+                invitation?.Status is RfqInvitationStatus.Invited or RfqInvitationStatus.Viewed,
+                supplierProfileId));
+        }
         return new PagedResult<RfqResponse>(responses, page.Page, page.PageSize, page.TotalCount);
     }
 
@@ -212,6 +215,10 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
         var rfq = await repository.GetRfqAsync(rfqId, cancellationToken);
         if (rfq is null || rfq.IsDeleted) throw new HttpException(404, "RFQ was not found.");
         EnsureOpen(rfq);
+        var bidDeadline = rfq.BidDeadline ?? throw new HttpException(400, "The RFQ deadline is required.", "VALIDATION_ERROR");
+        var maximumValidityDays = Math.Max(1, (int)Math.Ceiling((bidDeadline - clock.UtcNow).TotalDays));
+        if (request.ValidityDays > maximumValidityDays)
+            throw new HttpException(400, "Bid validity cannot exceed the time remaining until the RFQ deadline.", "VALIDATION_ERROR");
         var invitation = await repository.GetInvitationAsync(rfqId, supplierId, cancellationToken);
         if (invitation?.Status == RfqInvitationStatus.Declined)
             throw new HttpException(409, "This RFQ invitation has already been answered.");
@@ -290,10 +297,17 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
         var selected = await repository.GetBidAsync(bidId, cancellationToken);
         if (selected is null || selected.RfqId != rfqId || selected.Status != BidStatus.Submitted)
             throw new HttpException(404, "A submitted bid for this RFQ was not found.");
-        if (selected.SubmittedAt.AddDays(selected.ValidityDays) <= clock.UtcNow)
+        if (selected.SubmittedAt.AddDays(selected.ValidityDays) <= clock.UtcNow || rfq.BidDeadline <= clock.UtcNow)
             throw new HttpException(409, "This bid has expired.");
         if (!await repository.RequestBidSelectionAsync(rfqId, bidId, request.SelectionNote?.Trim(), customerUserId, cancellationToken))
             throw new HttpException(409, "Không thể gửi yêu cầu chọn supplier. Vui lòng tải lại RFQ.");
+        if (realtimePublisher is not null)
+        {
+            var supplierUserId = await repository.GetSupplierUserIdAsync(selected.SupplierId, cancellationToken);
+            if (supplierUserId.HasValue)
+                await realtimePublisher.PublishToUserAsync(supplierUserId.Value, "MarketplaceChanged",
+                    new { category = "rfq", referenceId = rfqId, type = "bid.selection_requested" }, cancellationToken);
+        }
         return new(true, null, "Đã gửi yêu cầu chọn supplier. RFQ tạm đóng trong khi chờ supplier xác nhận.");
     }
 
@@ -359,14 +373,19 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
 
     private async Task<BidResponse> ToBidResponseAsync(Bid bid, CancellationToken cancellationToken)
     {
+        var rfq = await repository.GetRfqAsync(bid.RfqId, cancellationToken);
         var rfqItems = await repository.GetRfqItemsAsync(bid.RfqId, cancellationToken);
         var byId = rfqItems.ToDictionary(item => item.Id);
         var items = await repository.GetBidItemsAsync(bid.Id, cancellationToken);
+        var nominalExpiry = bid.SubmittedAt.AddDays(bid.ValidityDays);
+        var effectiveExpiry = rfq?.BidDeadline is DateTime bidDeadlineAt ? Min(nominalExpiry, bidDeadlineAt) : nominalExpiry;
         return new BidResponse(bid.Id, bid.BidNumber, bid.SupplierId, bid.TotalPrice, bid.EstimatedDeliveryDays, bid.ValidityDays,
-            bid.SubmittedAt, bid.SubmittedAt.AddDays(bid.ValidityDays) <= clock.UtcNow, bid.Status,
+            bid.SubmittedAt, effectiveExpiry <= clock.UtcNow, bid.Status,
             items.Select(item => new BidItemResponse(item.RfqItemId, byId.GetValueOrDefault(item.RfqItemId)?.ProductName,
                 item.Quantity, byId.GetValueOrDefault(item.RfqItemId)?.Unit, item.UnitPrice, item.Subtotal, item.Notes)).ToArray());
     }
+
+    private static DateTime Min(DateTime left, DateTime right) => left < right ? left : right;
 
     private async Task<RequestForQuotation> GetOwnedRfqAsync(Guid customerUserId, Guid rfqId, CancellationToken cancellationToken)
     {

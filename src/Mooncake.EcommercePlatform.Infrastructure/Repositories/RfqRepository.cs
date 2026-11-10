@@ -18,9 +18,15 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         IQueryable<RequestForQuotation> rows = context.RequestForQuotations.AsNoTracking()
             .Where(rfq => !rfq.IsDeleted);
         rows = supplier
-            ? rows.Where(rfq => context.RfqInvitations.Any(invitation => invitation.RfqId == rfq.Id
-                && !invitation.IsDeleted && context.SupplierProfiles.Any(profile => profile.Id == invitation.SupplierId
-                    && profile.UserId == userId && !profile.IsDeleted)))
+            ? rows.Where(rfq =>
+                (rfq.Status == RfqStatus.Open && rfq.BidDeadline > DateTime.UtcNow)
+                || context.RfqInvitations.Any(invitation => invitation.RfqId == rfq.Id
+                    && !invitation.IsDeleted && context.SupplierProfiles.Any(profile => profile.Id == invitation.SupplierId
+                        && profile.UserId == userId && !profile.IsDeleted))
+                || (rfq.Status == RfqStatus.InNegotiation && rfq.AwardedBidId.HasValue
+                    && context.Bids.Any(bid => bid.Id == rfq.AwardedBidId.Value && bid.RfqId == rfq.Id
+                        && context.SupplierProfiles.Any(profile => profile.Id == bid.SupplierId
+                            && profile.UserId == userId && !profile.IsDeleted))))
             : rows.Where(rfq => rfq.CustomerId == userId);
         if (query.Status.HasValue) rows = rows.Where(rfq => rfq.Status == query.Status.Value);
         if (query.From.HasValue) rows = rows.Where(rfq => rfq.CreatedAt >= query.From.Value);
@@ -107,6 +113,10 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         context.SupplierProfiles.AsNoTracking().Where(profile => profile.UserId == supplierUserId && !profile.IsDeleted
                 && profile.VerificationStatus == SupplierVerificationStatus.Verified)
             .Select(profile => (Guid?)profile.Id).FirstOrDefaultAsync(cancellationToken);
+
+    public Task<Guid?> GetSupplierUserIdAsync(Guid supplierProfileId, CancellationToken cancellationToken = default) =>
+        context.SupplierProfiles.AsNoTracking().Where(profile => profile.Id == supplierProfileId && !profile.IsDeleted)
+            .Select(profile => (Guid?)profile.UserId).FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<RfqItem>> GetRfqItemsAsync(Guid rfqId, CancellationToken cancellationToken = default) =>
         await context.RfqItems.AsNoTracking().Where(item => item.RfqId == rfqId && !item.IsDeleted)
@@ -300,7 +310,8 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         }
         if (rfq.Status != RfqStatus.InNegotiation || rfq.AwardedBidId != bidId) return null;
         var bid = await context.Bids.FirstOrDefaultAsync(item => item.Id == bidId && item.RfqId == rfqId && !item.IsDeleted, cancellationToken);
-        if (bid is null || bid.Status != BidStatus.Submitted || bid.SubmittedAt.AddDays(bid.ValidityDays) <= DateTime.UtcNow) return null;
+        if (bid is null || bid.Status != BidStatus.Submitted || bid.SubmittedAt.AddDays(bid.ValidityDays) <= DateTime.UtcNow
+            || rfq.BidDeadline <= DateTime.UtcNow) return null;
         var supplier = await context.SupplierProfiles.FirstOrDefaultAsync(profile => profile.Id == bid.SupplierId && !profile.IsDeleted, cancellationToken);
         if (supplier is null) return null;
         var bidLines = await (from bidItem in context.BidItems.AsNoTracking()
@@ -374,7 +385,8 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
             .FirstOrDefaultAsync(cancellationToken);
         var bid = await context.Bids.FirstOrDefaultAsync(item => item.Id == bidId && item.RfqId == rfqId && !item.IsDeleted, cancellationToken);
         if (rfq is null || rfq.IsDeleted || rfq.CustomerId != customerUserId || rfq.Status is not (RfqStatus.Open or RfqStatus.Closed)
-            || bid is null || bid.Status != BidStatus.Submitted || bid.SubmittedAt.AddDays(bid.ValidityDays) <= DateTime.UtcNow)
+            || bid is null || bid.Status != BidStatus.Submitted || bid.SubmittedAt.AddDays(bid.ValidityDays) <= DateTime.UtcNow
+            || rfq.BidDeadline <= DateTime.UtcNow)
             return false;
         if (!await IsActiveSupplierAsync(bid.SupplierId, cancellationToken)) return false;
         var supplier = await context.SupplierProfiles.AsNoTracking().FirstOrDefaultAsync(profile => profile.Id == bid.SupplierId && !profile.IsDeleted, cancellationToken);

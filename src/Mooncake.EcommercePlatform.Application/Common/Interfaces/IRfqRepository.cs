@@ -9,19 +9,16 @@ public interface IRfqRepository
 {
     Task<RequestForQuotation?> GetRfqAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RequestForQuotation>> GetCustomerRfqsAsync(Guid customerUserId, CancellationToken cancellationToken = default);
-<<<<<<< Updated upstream
-    Task<IReadOnlyList<RequestForQuotation>> GetSupplierInvitedRfqsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<PagedResult<RequestForQuotation>> GetRfqsPageAsync(Guid userId, bool supplier,
         RfqPageQueryRequest query, CancellationToken cancellationToken = default);
     Task<(IReadOnlyList<RfqItem> Items, IReadOnlyDictionary<Guid, int> InvitationCounts,
         IReadOnlyDictionary<Guid, int> BidCounts)> GetRfqPageDetailsAsync(Guid[] rfqIds,
         CancellationToken cancellationToken = default);
-=======
     Task<IReadOnlyList<RequestForQuotation>> GetSupplierRfqsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<string?> GetCustomerNameAsync(Guid customerUserId, CancellationToken cancellationToken = default);
->>>>>>> Stashed changes
     Task<IReadOnlyList<SupplierProfile>> GetSuggestedSuppliersAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<Guid?> GetVerifiedSupplierProfileIdAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
+    Task<Guid?> GetSupplierUserIdAsync(Guid supplierProfileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqItem>> GetRfqItemsAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqInvitation>> GetInvitationsAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<RfqInvitation?> GetInvitationAsync(Guid rfqId, Guid supplierProfileId, CancellationToken cancellationToken = default);

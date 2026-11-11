@@ -1,6 +1,7 @@
 namespace Mooncake.EcommercePlatform.WebApi.Controllers;
 
 using System.Security.Claims;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
@@ -11,7 +12,7 @@ using Mooncake.EcommercePlatform.WebApi.Filters;
 [Route("api/v1/payments")]
 [Authorize]
 [OrderApi]
-public sealed class PaymentsController(IPaymentService paymentService) : BaseApiController
+public sealed class PaymentsController(IPaymentService paymentService, IWebHostEnvironment environment) : BaseApiController
 {
     [Authorize(Roles = "Customer")]
     [HttpPost]
@@ -71,7 +72,8 @@ public sealed class PaymentsController(IPaymentService paymentService) : BaseApi
     {
         var parameters = Request.Query.ToDictionary(item => item.Key, item => item.Value.ToString(),
             StringComparer.Ordinal);
-        var result = await paymentService.VerifyReturnCallbackAsync(parameters, cancellationToken);
+        var result = await paymentService.VerifyReturnCallbackAsync(parameters, cancellationToken,
+            confirmPaymentFromReturn: environment.IsDevelopment());
         return Success(result, "VNPay return callback verified successfully.");
     }
 

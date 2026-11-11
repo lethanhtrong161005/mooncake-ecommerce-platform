@@ -526,21 +526,17 @@ public sealed class Module5RfqsControllerHttpTests
     public async Task AwardBid_Customer_Returns200OK()
     {
         var client = CreateClient("Customer");
-        var contractId = Guid.NewGuid();
-
-        var contract = new ContractResponse(
-            contractId, "HD-2026-TEST01", RfqId, null, null, null, null,
-            ContractStatus.Draft, null, null, null);
+        var selection = new BidSelectionResponse(true, null, "Supplier confirmation requested.");
 
         rfqService.Setup(s => s.AwardBidAsync(CustomerId, RfqId, BidId, It.IsAny<AwardBidRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(contract);
+            .ReturnsAsync(selection);
 
         var request = new AwardBidRequest { SelectionNote = "Giá tốt và thời gian giao hàng hợp lý" };
         var response = await client.PostAsJsonAsync($"/api/v1/rfqs/{RfqId}/bids/{BidId}/accept", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(contractId, json.GetProperty("data").GetProperty("id").GetGuid());
+        Assert.True(json.GetProperty("data").GetProperty("awaitingSupplierConfirmation").GetBoolean());
     }
 
     [Fact]

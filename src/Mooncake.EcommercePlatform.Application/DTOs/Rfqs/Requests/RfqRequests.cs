@@ -55,3 +55,8 @@ public sealed record AwardBidRequest
 {
     [MaxLength(2000)] public string? SelectionNote { get; init; }
 }
+
+public sealed record RespondToBidSelectionRequest
+{
+    public bool Accept { get; init; }
+}

@@ -13,7 +13,8 @@ public interface IPaymentService
     Task<VnPayUrlResponse> CreateOrderVnPayUrlAsync(Guid customerId, CreateOrderVnPayUrlRequest request,
         string? clientIpAddress, CancellationToken cancellationToken = default);
     Task<VietQrPaymentResponse> CreateBankTransferAsync(Guid customerId, CreateBankTransferRequest request, CancellationToken cancellationToken = default);
-    Task<VnPayReturnCallbackResponse> VerifyReturnCallbackAsync(IReadOnlyDictionary<string, string> queryParams, CancellationToken cancellationToken = default);
+    Task<VnPayReturnCallbackResponse> VerifyReturnCallbackAsync(IReadOnlyDictionary<string, string> queryParams,
+        CancellationToken cancellationToken = default, bool confirmPaymentFromReturn = false);
     Task<PaymentResponse> UploadEvidenceAsync(Guid paymentId, Guid customerId, UploadPaymentEvidenceRequest request, CancellationToken cancellationToken = default);
     Task<EscrowSummaryResponse> GetEscrowSummaryAsync(CancellationToken cancellationToken = default);
     Task<(string Code, string Message)> ProcessVnPayIpnAsync(IReadOnlyDictionary<string, string> parameters,

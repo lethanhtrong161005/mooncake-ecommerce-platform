@@ -142,7 +142,8 @@ public static class WebApiServiceCollectionExtensions
                 OnMessageReceived = context =>
                 {
                     if (context.Request.Path.StartsWithSegments(
-                        Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.HubPath))
+                            Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.HubPath)
+                        || context.Request.Path.StartsWithSegments("/api/v1/hubs/notifications"))
                         context.Token = context.Request.Query["access_token"];
                     return Task.CompletedTask;
                 }

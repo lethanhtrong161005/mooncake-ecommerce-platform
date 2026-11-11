@@ -9,14 +9,16 @@ public interface IRfqRepository
 {
     Task<RequestForQuotation?> GetRfqAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RequestForQuotation>> GetCustomerRfqsAsync(Guid customerUserId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RequestForQuotation>> GetSupplierInvitedRfqsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<PagedResult<RequestForQuotation>> GetRfqsPageAsync(Guid userId, bool supplier,
         RfqPageQueryRequest query, CancellationToken cancellationToken = default);
     Task<(IReadOnlyList<RfqItem> Items, IReadOnlyDictionary<Guid, int> InvitationCounts,
         IReadOnlyDictionary<Guid, int> BidCounts)> GetRfqPageDetailsAsync(Guid[] rfqIds,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RequestForQuotation>> GetSupplierRfqsAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
+    Task<string?> GetCustomerNameAsync(Guid customerUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SupplierProfile>> GetSuggestedSuppliersAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<Guid?> GetVerifiedSupplierProfileIdAsync(Guid supplierUserId, CancellationToken cancellationToken = default);
+    Task<Guid?> GetSupplierUserIdAsync(Guid supplierProfileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqItem>> GetRfqItemsAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqInvitation>> GetInvitationsAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<RfqInvitation?> GetInvitationAsync(Guid rfqId, Guid supplierProfileId, CancellationToken cancellationToken = default);
@@ -31,6 +33,8 @@ public interface IRfqRepository
     Task SaveInvitationAsync(RfqInvitation invitation, CancellationToken cancellationToken = default);
     Task<bool> CreateBidAsync(Bid bid, IReadOnlyList<BidItem> items, CancellationToken cancellationToken = default);
     Task<Contract?> AwardBidAsync(Guid rfqId, Guid bidId, string? selectionNote, Guid customerUserId, CancellationToken cancellationToken = default);
+    Task<bool> RequestBidSelectionAsync(Guid rfqId, Guid bidId, string? selectionNote, Guid customerUserId, CancellationToken cancellationToken = default);
+    Task<bool> DeclineBidSelectionAsync(Guid rfqId, Guid bidId, Guid supplierUserId, CancellationToken cancellationToken = default);
     Task<bool> CancelBidAsync(Guid rfqId, Guid bidId, Guid customerUserId, CancellationToken cancellationToken = default);
     Task<bool> CancelRfqAsync(Guid rfqId, Guid customerUserId, string reason, CancellationToken cancellationToken = default);
     Task<int> CloseExpiredRfqsAsync(CancellationToken cancellationToken = default);

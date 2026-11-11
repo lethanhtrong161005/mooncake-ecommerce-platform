@@ -275,7 +275,8 @@ public sealed class PaymentsControllerHttpTests
     [Fact]
     public async Task VerifyReturnCallback_Anonymous_Returns200()
     {
-        paymentService.Setup(s => s.VerifyReturnCallbackAsync(It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+        paymentService.Setup(s => s.VerifyReturnCallbackAsync(It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>(), It.IsAny<bool>()))
             .ReturnsAsync(new VnPayReturnCallbackResponse(
                 "PAY-202610-001",
                 OrderId,

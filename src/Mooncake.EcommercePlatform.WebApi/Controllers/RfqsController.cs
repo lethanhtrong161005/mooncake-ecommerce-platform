@@ -86,7 +86,14 @@ public sealed class RfqsController(IRfqService rfqService) : BaseApiController
     [HttpPost("{rfqId:guid}/bids/{bidId:guid}/accept")]
     public async Task<IActionResult> AwardBidAsync(Guid rfqId, Guid bidId, [FromBody] AwardBidRequest request,
         CancellationToken cancellationToken) =>
-        Success(await rfqService.AwardBidAsync(CurrentUserId, rfqId, bidId, request, cancellationToken), "Bid accepted and draft contract created.");
+        Success(await rfqService.AwardBidAsync(CurrentUserId, rfqId, bidId, request, cancellationToken), "Supplier confirmation requested.");
+
+    [Authorize(Roles = "Supplier")]
+    [HttpPost("{rfqId:guid}/bids/{bidId:guid}/respond")]
+    public async Task<IActionResult> RespondToBidSelectionAsync(Guid rfqId, Guid bidId,
+        [FromBody] RespondToBidSelectionRequest request, CancellationToken cancellationToken) =>
+        Success(await rfqService.RespondToBidSelectionAsync(CurrentUserId, rfqId, bidId, request.Accept, cancellationToken),
+            "Supplier selection response recorded.");
 
     private Guid CurrentUserId => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
         ? userId : throw new UnauthorizedAccessException("A valid user identity is required.");

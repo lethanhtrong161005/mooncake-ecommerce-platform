@@ -39,6 +39,14 @@ public sealed class ContractService(
     public async Task<IReadOnlyList<ContractResponse>> GetMineAsync(Guid userId, bool supplier, CancellationToken cancellationToken = default)
     {
         var contracts = await repository.GetContractsForUserAsync(userId, supplier, cancellationToken);
+        if (!supplier)
+        {
+            var finalizedAny = false;
+            foreach (var contract in contracts.Where(item => item.Status == ContractStatus.PendingSignature))
+                finalizedAny |= await repository.FinalizeAcceptedBidContractAsync(contract.Id, userId, cancellationToken);
+            if (finalizedAny)
+                contracts = await repository.GetContractsForUserAsync(userId, supplier, cancellationToken);
+        }
         return contracts.Select(c => ToResponse(c)).ToArray();
     }
 
@@ -82,15 +90,16 @@ public sealed class ContractService(
     public async Task<ContractResponse> SignAsync(Guid userId, Guid contractId, string code, bool confirmTerms, string? ipAddress,
         string? userAgent, CancellationToken cancellationToken = default)
     {
-        if (!confirmTerms) throw new HttpException(400, "Confirming the contract terms is required.");
+        if (!confirmTerms) throw new HttpException(400, "Supplier confirmation of the contract terms is required.");
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.Status != ContractStatus.PendingSignature)
-            throw new HttpException(409, "The contract is not awaiting signatures.");
+            throw new HttpException(409, "The contract is not awaiting supplier confirmation.");
+        if (contract.CustomerId == userId)
+            throw new HttpException(403, "Only the supplier can confirm this contract. The customer reviews the terms before payment.");
         if (await repository.HasSignedAsync(contract, userId, cancellationToken))
             return ToResponse(contract);
-        await authService.VerifyContractSignatureOtpAsync(userId, contractId, code, cancellationToken);
         var signed = await repository.SignAsync(contractId, userId, ipAddress, userAgent, cancellationToken)
-                     ?? throw new HttpException(409, "The contract state changed while signing. Refresh and try again.");
+                     ?? throw new HttpException(409, "The contract state changed while supplier confirmation was being recorded. Refresh and try again.");
         return ToResponse(signed);
     }
 

@@ -16,6 +16,7 @@ public interface IContractRepository
     Task<bool> IsPartyAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> HasSignedAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> BeginSignatureAsync(Guid contractId, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<bool> FinalizeAcceptedBidContractAsync(Guid contractId, Guid customerUserId, CancellationToken cancellationToken = default);
     Task<Contract?> SignAsync(Guid contractId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ContractMilestone>> GetMilestonesAsync(Guid contractId, CancellationToken cancellationToken = default);
     Task<ContractMilestone?> GetMilestoneAsync(Guid contractId, Guid milestoneId, CancellationToken cancellationToken = default);

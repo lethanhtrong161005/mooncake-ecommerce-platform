@@ -6,6 +6,7 @@ using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Implementations;
+using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Xunit;
@@ -16,6 +17,7 @@ public sealed class PaymentOrderContractTests
     private readonly Mock<IAdminPlatformRepository> adminRepository = new();
     private readonly Mock<IVnPayGateway> vnPayGateway = new();
     private readonly Mock<IDateTimeProvider> clock = new();
+    private readonly Mock<INotificationService> notificationService = new();
     private readonly Guid customerId = Guid.NewGuid();
     private readonly Guid orderId = Guid.NewGuid();
     private readonly Guid contractId = Guid.NewGuid();
@@ -47,7 +49,7 @@ public sealed class PaymentOrderContractTests
         vnPayGateway.Setup(g => g.CreatePaymentUrl(payment, "http://localhost:5173/#/thanh-toan/ket-qua", "127.0.0.1", fixedNow))
             .Returns("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=450000000&vnp_TxnRef=PAY-ORD-20261029-001");
 
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var request = new CreateOrderVnPayUrlRequest
         {
             OrderId = orderId,
@@ -84,7 +86,7 @@ public sealed class PaymentOrderContractTests
         repository.Setup(r => r.CreatePaymentAsync(It.IsAny<Payment>(), default))
             .ReturnsAsync(true);
 
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var request = new CreateBankTransferRequest
         {
             ContractId = contractId,
@@ -120,7 +122,7 @@ public sealed class PaymentOrderContractTests
         repository.Setup(r => r.CreatePaymentAsync(It.IsAny<Payment>(), default))
             .ReturnsAsync(true);
 
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var request = new CreateBankTransferRequest
         {
             OrderId = orderId
@@ -143,7 +145,7 @@ public sealed class PaymentOrderContractTests
     [Fact]
     public async Task CreateBankTransferAsync_ThrowsHttpException400_WhenNeitherContractNorOrderProvided()
     {
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var request = new CreateBankTransferRequest();
 
         var ex = await Assert.ThrowsAsync<HttpException>(() => service.CreateBankTransferAsync(customerId, request));
@@ -179,7 +181,7 @@ public sealed class PaymentOrderContractTests
             .ReturnsAsync(payment);
         vnPayGateway.Setup(g => g.IsValidSignature(queryParams)).Returns(true);
 
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var response = await service.VerifyReturnCallbackAsync(queryParams);
 
         Assert.True(response.IsSuccess);
@@ -219,7 +221,7 @@ public sealed class PaymentOrderContractTests
             .ReturnsAsync(payment);
         vnPayGateway.Setup(g => g.IsValidSignature(queryParams)).Returns(false);
 
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var response = await service.VerifyReturnCallbackAsync(queryParams);
 
         Assert.False(response.IsSuccess);
@@ -246,7 +248,7 @@ public sealed class PaymentOrderContractTests
         repository.Setup(r => r.AttachEvidenceAsync(paymentId, customerId, "https://storage.mooncake.vn/evidence/unc-123.jpg", "Bank transfer receipt", default))
             .ReturnsAsync(payment);
 
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var request = new UploadPaymentEvidenceRequest
         {
             EvidenceUrl = "https://storage.mooncake.vn/evidence/unc-123.jpg",
@@ -273,7 +275,7 @@ public sealed class PaymentOrderContractTests
         repository.Setup(r => r.GetOrderForPaymentAsync(customerId, orderId, default))
             .ReturnsAsync(highValueOrder);
 
-        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object);
+        var service = new PaymentService(repository.Object, adminRepository.Object, vnPayGateway.Object, clock.Object, notificationService.Object);
         var request = new CreatePaymentRequest
         {
             OrderId = orderId,

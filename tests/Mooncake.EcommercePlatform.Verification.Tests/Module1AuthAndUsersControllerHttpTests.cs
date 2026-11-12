@@ -1,8 +1,10 @@
 namespace Mooncake.EcommercePlatform.Verification.Tests;
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
@@ -10,10 +12,13 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using SkiaSharp;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Auth.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Authen.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Authen.Responses;
+using Mooncake.EcommercePlatform.Application.DTOs.Files.Responses;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Users.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
@@ -31,8 +36,9 @@ public sealed class Module1AuthAndUsersControllerHttpTests
     private static readonly Guid UserId = Guid.NewGuid();
     private readonly Mock<IAuthService> authService = new();
     private readonly Mock<IUserService> userService = new();
+    private readonly Mock<ICloudinaryStorageService> cloudinaryStorage = new();
 
-    private HttpClient CreateClient(string role = "Customer", bool authenticated = true)
+    private HttpClient CreateClient(string role = "Customer", bool authenticated = true, bool registerCloudinary = false)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.Logging.ClearProviders();
@@ -48,6 +54,10 @@ public sealed class Module1AuthAndUsersControllerHttpTests
 
         builder.Services.AddSingleton(authService.Object);
         builder.Services.AddSingleton(userService.Object);
+        if (registerCloudinary)
+        {
+            builder.Services.AddSingleton(cloudinaryStorage.Object);
+        }
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.AddProblemDetails();
 
@@ -326,7 +336,8 @@ public sealed class Module1AuthAndUsersControllerHttpTests
     {
         var client = CreateClient(role: "Customer", authenticated: true);
 
-        var authenUser = new AuthenUserResponse(UserId, "0987654321", "Nguyen Van A", UserRole.Customer);
+        var authenUser = new AuthenUserResponse(UserId, "0987654321", "Nguyen Van A", UserRole.Customer,
+            AvatarUrl: "https://example.com/avatar.jpg");
         authService.Setup(s => s.GetCurrentUserAsync(UserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(authenUser);
 
@@ -336,6 +347,136 @@ public sealed class Module1AuthAndUsersControllerHttpTests
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(UserId.ToString(), json.GetProperty("data").GetProperty("id").GetString());
         Assert.Equal("Nguyen Van A", json.GetProperty("data").GetProperty("fullName").GetString());
+        Assert.Equal("https://example.com/avatar.jpg", json.GetProperty("data").GetProperty("avatar_url").GetString());
+    }
+
+    [Fact]
+    public async Task MyProfile_Get_ReturnsOnlyAuthenticatedUsersProfile()
+    {
+        var client = CreateClient(role: "Customer");
+        userService.Setup(s => s.GetOwnProfileAsync(UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserResponse(UserId, "buyer@example.com", "Trong An", null, null,
+                UserRole.Customer, DateTime.UtcNow, DateTime.UtcNow));
+
+        var response = await client.GetAsync("/api/v1/users/me");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(UserId.ToString(), json.GetProperty("data").GetProperty("id").GetString());
+        Assert.Equal("buyer@example.com", json.GetProperty("data").GetProperty("email").GetString());
+        userService.Verify(s => s.GetOwnProfileAsync(UserId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MyProfile_Update_UsesAuthenticatedIdAndEditableFields()
+    {
+        var client = CreateClient(role: "Customer");
+        var request = new UpdateOwnProfileRequest
+        {
+            FullName = "Trong An",
+            Phone = "0901234567",
+            AvatarUrl = "https://example.com/avatar.jpg"
+        };
+        userService.Setup(s => s.UpdateOwnProfileAsync(UserId, It.IsAny<UpdateOwnProfileRequest>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserResponse(UserId, "buyer@example.com", request.FullName,
+                request.Phone, request.AvatarUrl, UserRole.Customer, DateTime.UtcNow, DateTime.UtcNow));
+
+        var response = await client.PutAsJsonAsync("/api/v1/users/me", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        userService.Verify(s => s.UpdateOwnProfileAsync(UserId,
+            It.Is<UpdateOwnProfileRequest>(value => value.FullName == request.FullName &&
+                value.Phone == request.Phone && value.AvatarUrl == request.AvatarUrl),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MyProfile_RequiresAuthentication()
+    {
+        var client = CreateClient(authenticated: false);
+
+        var response = await client.GetAsync("/api/v1/users/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MyProfile_UploadAvatar_UploadsSanitizedImageAndPersistsUrl()
+    {
+        const string uploadedUrl = "https://res.cloudinary.com/demo/image/upload/v1/avatar.png";
+        cloudinaryStorage.Setup(s => s.UploadImageAsync(
+                It.IsAny<Stream>(), "avatar.png", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CloudinaryUploadResponse(
+                uploadedUrl, "mooncake/images/public/avatar", "image", "upload", 128));
+        userService.Setup(s => s.UpdateOwnAvatarAsync(UserId, uploadedUrl, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserResponse(UserId, "buyer@example.com", "Trong An", null,
+                uploadedUrl, UserRole.Customer, DateTime.UtcNow, DateTime.UtcNow));
+
+        using var bitmap = new SKBitmap(24, 24);
+        bitmap.Erase(SKColors.Crimson);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 90);
+        using var form = new MultipartFormDataContent();
+        using var fileContent = new ByteArrayContent(encoded.ToArray());
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(fileContent, "file", "portrait.png");
+
+        var client = CreateClient(role: "Customer", registerCloudinary: true);
+        var response = await client.PostAsync("/api/v1/users/me/avatar", form);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(uploadedUrl, json.GetProperty("data").GetProperty("avatarUrl").GetString());
+        cloudinaryStorage.Verify(s => s.UploadImageAsync(
+            It.IsAny<Stream>(), "avatar.png", false, It.IsAny<CancellationToken>()), Times.Once);
+        userService.Verify(s => s.UpdateOwnAvatarAsync(
+            UserId, uploadedUrl, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MyProfile_UploadAvatar_RejectsInvalidImageBytes()
+    {
+        using var form = new MultipartFormDataContent();
+        using var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("not-a-valid-image"));
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(fileContent, "file", "fake.png");
+
+        var client = CreateClient(role: "Customer", registerCloudinary: true);
+        var response = await client.PostAsync("/api/v1/users/me/avatar", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        cloudinaryStorage.Verify(s => s.UploadImageAsync(
+            It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task MyProfile_UploadAvatar_Returns503_WhenStorageUnavailable()
+    {
+        using var form = new MultipartFormDataContent();
+        using var fileContent = new ByteArrayContent([1, 2, 3]);
+        form.Add(fileContent, "file", "avatar.png");
+
+        var client = CreateClient(role: "Customer", registerCloudinary: false);
+        var response = await client.PostAsync("/api/v1/users/me/avatar", form);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MyProfile_RemoveAvatar_ClearsAuthenticatedUsersAvatar()
+    {
+        userService.Setup(s => s.UpdateOwnAvatarAsync(UserId, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserResponse(UserId, "buyer@example.com", "Trong An", null,
+                null, UserRole.Customer, DateTime.UtcNow, DateTime.UtcNow));
+
+        var client = CreateClient(role: "Customer");
+        var response = await client.DeleteAsync("/api/v1/users/me/avatar");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("data").GetProperty("avatarUrl").ValueKind);
+        userService.Verify(s => s.UpdateOwnAvatarAsync(UserId, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // =========================================================================

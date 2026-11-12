@@ -44,6 +44,24 @@ public sealed class VerificationPolicyTests
         Assert.Equal("NotSubmitted", response.SupplierVerification!.OnboardingState);
     }
 
+    [Fact]
+    public void AuthResponseIncludesStoredAvatarForBothUserModels()
+    {
+        const string avatarUrl = "https://example.com/avatar.jpg";
+        var entity = Applicant();
+        entity.AvatarUrl = avatarUrl;
+        var authData = new Mooncake.EcommercePlatform.Application.DTOs.Auth.Models.AuthUserData
+        {
+            Id = entity.Id,
+            IsActive = true,
+            Role = UserRole.Customer,
+            AvatarUrl = avatarUrl
+        };
+
+        Assert.Equal(avatarUrl, H.AuthUser(entity, null).AvatarUrl);
+        Assert.Equal(avatarUrl, H.AuthUser(authData, null).AvatarUrl);
+    }
+
     [Theory]
     [InlineData(false, false, false)]
     [InlineData(true, false, false)]

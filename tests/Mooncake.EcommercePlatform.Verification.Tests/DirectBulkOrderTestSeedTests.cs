@@ -15,7 +15,7 @@ public sealed class DirectBulkOrderTestSeedTests(ITestOutputHelper output)
     private const string DefaultPassword = "Password123!";
     private const string SampleImageUrl = "https://images.unsplash.com/photo-1631206753348-db44968fd440?auto=format&fit=crop&w=800&q=80";
 
-    [Fact]
+    [Fact(Skip = "Disabled to prevent polluting the live database with mock test data")]
     public async Task SeedDirectBulkOrderTestEnvironmentAsync()
     {
         var factory = new ApplicationDbContextFactory();
@@ -164,7 +164,7 @@ public sealed class DirectBulkOrderTestSeedTests(ITestOutputHelper output)
         Assert.Empty(pending);
     }
 
-    [Fact]
+    [Fact(Skip = "Disabled to prevent polluting the live database with mock test data")]
     public async Task SeedSearchPageTestCatalogAsync()
     {
         var factory = new ApplicationDbContextFactory();

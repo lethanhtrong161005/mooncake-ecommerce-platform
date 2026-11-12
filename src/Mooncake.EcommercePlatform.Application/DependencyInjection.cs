@@ -31,6 +31,8 @@ public static class DependencyInjection
         services.AddScoped<IAiChatService, AiChatService>();
         services.AddScoped<IAiAnalyticsService, AiAnalyticsService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IWishlistService, WishlistService>();
+        services.AddScoped<IChatService, ChatService>();
         return services;
     }
 }

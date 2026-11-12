@@ -1,11 +1,13 @@
 namespace Mooncake.EcommercePlatform.Application.DTOs.Authen.Responses;
 
+using System.Text.Json.Serialization;
 using Mooncake.EcommercePlatform.Domain.Enums;
 
 /// <summary>Public user fields returned with a new token pair.</summary>
 public record AuthenUserResponse(Guid Id, string? Phone, string? FullName, UserRole Role,
     UserRole RequestedRole = UserRole.Customer, SupplierAccessResponse? Capabilities = null,
-    SupplierVerificationSummary? SupplierVerification = null);
+    SupplierVerificationSummary? SupplierVerification = null,
+    [property: JsonPropertyName("avatar_url")] string? AvatarUrl = null);
 
 /// <summary>Capabilities derived from current account and verification state.</summary>
 public sealed record SupplierAccessResponse(bool CanReadSupplierVerification, bool CanSubmitSupplierVerification,

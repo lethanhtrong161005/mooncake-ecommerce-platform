@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0.428 AS build
 WORKDIR /src
 
 COPY src/Mooncake.EcommercePlatform.Domain/Mooncake.EcommercePlatform.Domain.csproj src/Mooncake.EcommercePlatform.Domain/
@@ -13,7 +13,7 @@ RUN dotnet publish src/Mooncake.EcommercePlatform.WebApi/Mooncake.EcommercePlatf
     --configuration Release --no-restore --output /publish \
     /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0.34 AS runtime
 WORKDIR /app
 ENV ASPNETCORE_ENVIRONMENT=Staging \
     Server__Port=8089 \

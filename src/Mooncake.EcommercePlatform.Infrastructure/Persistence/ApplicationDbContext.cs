@@ -52,6 +52,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ProductSearchDocument> ProductSearchDocuments => Set<ProductSearchDocument>();
     public DbSet<ProductViewEvent> ProductViewEvents => Set<ProductViewEvent>();
     public DbSet<ProductWishlist> ProductWishlists => Set<ProductWishlist>();
+    public DbSet<ChatThread> ChatThreads => Set<ChatThread>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ChatAttachment> ChatAttachments => Set<ChatAttachment>();
+    public DbSet<ChatParticipantState> ChatParticipantStates => Set<ChatParticipantState>();
+    public DbSet<UserPresence> UserPresences => Set<UserPresence>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<ReputationLog> ReputationLogs => Set<ReputationLog>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();

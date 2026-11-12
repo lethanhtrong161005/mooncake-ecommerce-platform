@@ -18,6 +18,7 @@ builder.WebHost.UseUrls($"http://{host}:{port}");
 
 SerilogSetup.ConfigureSerilog(builder);
 builder.Services.AddWebApiServices(builder.Configuration, builder.Environment);
+builder.Services.AddChatFeature();
 
 builder.Services.AddSingleton<IRecurringJob, AuthMaintenanceJob>();
 builder.Services.AddSingleton<IRecurringJob, RfqDeadlineJob>();
@@ -72,5 +73,6 @@ app.MapHub<Mooncake.EcommercePlatform.WebApi.Realtime.SupplierVerificationHub>(
 app.MapHub<Mooncake.EcommercePlatform.WebApi.Realtime.NotificationHub>(
     "/api/v1/hubs/notifications",
     options => options.CloseOnAuthenticationExpiration = true);
+app.MapChatHub();
 
 app.Run();

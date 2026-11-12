@@ -309,6 +309,15 @@ public sealed class ProductCatalogRepository(ApplicationDbContext db, IDateTimeP
                             user.IsActive && !user.IsDeleted && user.Role == UserRole.Supplier && !category.IsDeleted
                           select new { product, shop, profile, category }).SingleOrDefaultAsync(ct);
         if (root == null) return null;
+        var images = await (from image in db.ProductImages.AsNoTracking()
+                            join media in db.ShopMediaAssets.AsNoTracking() on image.MediaAssetId equals media.Id into mediaRows
+                            from media in mediaRows.DefaultIfEmpty()
+                            where image.ProductId == productId && !image.IsDeleted &&
+                                (image.MediaAssetId == null || (media != null && !media.IsDeleted && media.Status == "Ready"))
+                            orderby image.SortOrder, image.Id
+                            select new ProductImageResponse(image.Id, image.MediaAssetId, media == null ? image.ImageUrl : media.PublicUrl ?? image.ImageUrl,
+                                image.IsPrimary, image.SortOrder)).ToArrayAsync(ct);
+
         var variants = await (from variant in db.ProductVariants.AsNoTracking()
                               join media in db.ShopMediaAssets.AsNoTracking() on variant.ImageAssetId equals media.Id into mediaRows
                               from media in mediaRows.DefaultIfEmpty()
@@ -319,15 +328,26 @@ public sealed class ProductCatalogRepository(ApplicationDbContext db, IDateTimeP
                                   root.product.BasePrice + variant.PriceAdjustment, variant.StockQty > 0,
                                   media == null || media.IsDeleted || media.Status != "Ready" ? variant.ImageUrl : media.PublicUrl ?? variant.ImageUrl))
             .ToArrayAsync(ct);
-        if (variants.Length == 0) return null;
-        var images = await (from image in db.ProductImages.AsNoTracking()
-                            join media in db.ShopMediaAssets.AsNoTracking() on image.MediaAssetId equals media.Id into mediaRows
-                            from media in mediaRows.DefaultIfEmpty()
-                            where image.ProductId == productId && !image.IsDeleted &&
-                                (image.MediaAssetId == null || (media != null && !media.IsDeleted && media.Status == "Ready"))
-                            orderby image.SortOrder, image.Id
-                            select new ProductImageResponse(image.Id, image.MediaAssetId, media == null ? image.ImageUrl : media.PublicUrl ?? image.ImageUrl,
-                                image.IsPrimary, image.SortOrder)).ToArrayAsync(ct);
+
+        if (variants.Length == 0)
+        {
+            var fallbackImageUrl = images.FirstOrDefault(x => x.IsPrimary)?.ImageUrl ?? images.FirstOrDefault()?.ImageUrl;
+            var isGift = root.product.Name.Contains("Hộp", StringComparison.OrdinalIgnoreCase) || root.product.Name.Contains("Bộ", StringComparison.OrdinalIgnoreCase);
+            variants = [
+                new ProductVariantPublicResponse(
+                    root.product.Id,
+                    isGift ? "Hộp tiêu chuẩn" : "Bánh tiêu chuẩn",
+                    $"SKU-STD-{root.product.Id.ToString()[..8].ToUpperInvariant()}",
+                    "Tiêu chuẩn",
+                    root.product.Ingredients,
+                    "Tiêu chuẩn",
+                    200,
+                    isGift,
+                    root.product.BasePrice,
+                    true,
+                    fallbackImageUrl)
+            ];
+        }
         var stats = await db.ProductReviews.AsNoTracking().Where(x => x.ProductId == productId && !x.IsDeleted && x.IsPublic && !x.IsHiddenByAdmin && x.Rating.HasValue)
             .GroupBy(x => x.ProductId).Select(g => new { Count = g.Count(), Average = g.Average(x => (decimal?)x.Rating) }).SingleOrDefaultAsync(ct);
         var status = variants.Any(x => x.IsAvailable) ? ProductStatus.Active : ProductStatus.OutOfStock;

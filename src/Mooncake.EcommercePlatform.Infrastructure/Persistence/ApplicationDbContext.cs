@@ -51,6 +51,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
     public DbSet<ProductSearchDocument> ProductSearchDocuments => Set<ProductSearchDocument>();
     public DbSet<ProductViewEvent> ProductViewEvents => Set<ProductViewEvent>();
+    public DbSet<ProductWishlist> ProductWishlists => Set<ProductWishlist>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<ReputationLog> ReputationLogs => Set<ReputationLog>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();

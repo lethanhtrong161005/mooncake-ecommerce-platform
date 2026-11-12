@@ -90,6 +90,8 @@ public static class DependencyInjection
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<IShopRepository, ShopRepository>();
         services.AddScoped<IProductCatalogRepository, ProductCatalogRepository>();
+        services.AddScoped<IWishlistRepository, WishlistRepository>();
+        services.AddScoped<IWishlistCursorProtector, WishlistCursorProtector>();
         services.AddScoped<IShopCursorProtector, ShopCursorProtector>();
         services.AddScoped<IFileSafetyScanner, ClamAvFileSafetyScanner>();
         services.AddScoped<IShopMediaGateway, ShopMediaGateway>();

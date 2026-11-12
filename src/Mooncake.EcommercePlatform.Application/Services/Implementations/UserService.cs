@@ -44,6 +44,46 @@ public class UserService(IUserRepository userRepository, IUserHelper userHelper)
         return userHelper.ToResponse(user);
     }
 
+    public async Task<UserResponse> GetOwnProfileAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        userHelper.ToResponse(await GetActiveOwnUserAsync(userId, cancellationToken));
+
+    public async Task<UserResponse> UpdateOwnProfileAsync(Guid userId, UpdateOwnProfileRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await GetActiveOwnUserAsync(userId, cancellationToken);
+
+        return await UpdateUserAsync(userId, new UpdateUserRequest
+        {
+            FullName = request.FullName.Trim(),
+            Email = user.Email,
+            Phone = request.Phone,
+            AvatarUrl = request.AvatarUrl
+        }, cancellationToken);
+    }
+
+    public async Task<UserResponse> UpdateOwnAvatarAsync(Guid userId, string? avatarUrl,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await GetActiveOwnUserAsync(userId, cancellationToken);
+        var normalized = string.IsNullOrWhiteSpace(avatarUrl) ? null : avatarUrl.Trim();
+        if (normalized is not null && normalized.Length > 500)
+            throw new HttpException(400, "Liên kết ảnh đại diện tối đa 500 ký tự.");
+
+        user.AvatarUrl = normalized;
+        user.UpdatedAtUtc = DateTime.UtcNow;
+
+        var updated = await userRepository.UpdateAsync(user, cancellationToken);
+        return userHelper.ToResponse(updated);
+    }
+
+    private async Task<AuthUserData> GetActiveOwnUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null || user.IsDeleted || !user.IsActive)
+            throw new HttpException(401, MessageConstant.SessionExpired);
+        return user;
+    }
+
     public async Task<UserResponse> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
     {
         var existing = await userRepository.GetByEmailAsync(request.Email, cancellationToken);

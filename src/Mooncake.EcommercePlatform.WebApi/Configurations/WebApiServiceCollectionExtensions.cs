@@ -143,7 +143,8 @@ public static class WebApiServiceCollectionExtensions
                 {
                     if (context.Request.Path.StartsWithSegments(
                             Mooncake.EcommercePlatform.Application.Common.Constant.SupplierVerificationConstants.HubPath)
-                        || context.Request.Path.StartsWithSegments("/api/v1/hubs/notifications"))
+                        || context.Request.Path.StartsWithSegments("/api/v1/hubs/notifications")
+                        || context.Request.Path.StartsWithSegments(Mooncake.EcommercePlatform.Application.Common.Constant.ChatConstants.HubPath))
                         context.Token = context.Request.Query["access_token"];
                     return Task.CompletedTask;
                 }

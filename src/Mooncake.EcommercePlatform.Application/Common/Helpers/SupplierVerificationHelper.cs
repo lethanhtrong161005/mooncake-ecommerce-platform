@@ -35,7 +35,8 @@ public static class SupplierVerificationHelper
         return new(user.Id, user.Phone, user.FullName, user.Role, user.RequestedRole,
             new(eligible, canSubmit, verified, verified, eligible && profile?.RevokedAtUtc != null),
             eligible ? new(profile?.Id, profile?.CurrentSubmissionId == null ? C.NotSubmitted : profile.VerificationStatus.ToString(),
-                profile?.CurrentSubmissionId == null ? null : profile.VerificationStatus, profile?.Version ?? 0) : null);
+                profile?.CurrentSubmissionId == null ? null : profile.VerificationStatus, profile?.Version ?? 0) : null,
+            user.AvatarUrl);
     }
     public static Mooncake.EcommercePlatform.Application.DTOs.Authen.Responses.AuthenUserResponse AuthUser(AuthUserData user, SupplierProfile? profile)
     {
@@ -48,7 +49,8 @@ public static class SupplierVerificationHelper
         return new(user.Id, user.Phone, user.FullName, user.Role, user.RequestedRole,
             new(eligible, canSubmit, verified, verified, eligible && profile?.RevokedAtUtc != null),
             eligible ? new(profile?.Id, profile?.CurrentSubmissionId == null ? C.NotSubmitted : profile.VerificationStatus.ToString(),
-                profile?.CurrentSubmissionId == null ? null : profile.VerificationStatus, profile?.Version ?? 0) : null);
+                profile?.CurrentSubmissionId == null ? null : profile.VerificationStatus, profile?.Version ?? 0) : null,
+            user.AvatarUrl);
     }
     public static void Require(bool condition, int status = 400, string code = C.Invalid)
     {

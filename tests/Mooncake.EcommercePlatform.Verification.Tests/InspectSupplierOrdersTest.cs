@@ -98,6 +98,9 @@ public sealed class InspectSupplierOrdersTest(ITestOutputHelper output)
             }
         }
     }
+
+    private async Task InspectTargetProductAsync()
+    {
         var factory = new ApplicationDbContextFactory();
         await using var db = factory.CreateDbContext([]);
 

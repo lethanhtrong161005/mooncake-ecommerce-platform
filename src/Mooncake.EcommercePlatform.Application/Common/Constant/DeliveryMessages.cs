@@ -27,6 +27,8 @@ public static class DeliveryMessages
     public const string RecipientNameRequired = "Recipient name is required.";
     public const string RecipientPhoneInvalid = "Recipient phone number must be a valid 10-digit Vietnamese mobile number.";
     public const string ScheduledDateInPast = "Scheduled delivery date cannot be in the past.";
+    public const string ScheduledDateRequired = "A scheduled delivery date is required.";
+    public const string ScheduledDateTooSoon = "Scheduled delivery date must be at least 24 hours after the shipment is created.";
     public const string SingleDeliveryLimitExceeded = "Direct bulk orders support only a single active shipment in v1.";
     public const string ProofRequiredBeforeDelivered = "A delivery proof photo is required before marking the shipment as delivered.";
     public const string DeliveryAlreadyCompleted = "This delivery has already been completed.";

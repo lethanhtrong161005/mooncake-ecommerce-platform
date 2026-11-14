@@ -18,6 +18,8 @@ public interface IPaymentRepository
     Task<bool> CreatePaymentAsync(Payment payment, CancellationToken cancellationToken = default);
     Task<Payment?> PrepareVnPayPaymentAsync(Guid customerId, Guid contractId, Guid milestoneId,
         CancellationToken cancellationToken = default);
+    Task<Payment?> PrepareFullContractVnPayPaymentAsync(Guid customerId, Guid contractId,
+        CancellationToken cancellationToken = default);
     Task<Payment?> PrepareOrderVnPayPaymentAsync(Guid customerId, Guid orderId,
         CancellationToken cancellationToken = default);
     Task<Payment?> GetPaymentByNumberAsync(string paymentNumber, CancellationToken cancellationToken = default);

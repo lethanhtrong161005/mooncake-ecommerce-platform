@@ -53,6 +53,8 @@ public sealed class ContractService(
     public async Task<ContractResponse> GetAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default)
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
+        var customer = await suppliers.GetUserAsync(contract.CustomerId, cancellationToken);
+        var supplierProfile = await suppliers.GetProfileByIdAsync(contract.SupplierId, cancellationToken);
         var milestones = await repository.GetMilestonesAsync(contractId, cancellationToken);
         var pendingExt = await repository.GetPendingExtensionAsync(contractId, cancellationToken);
         var activeDispute = await repository.GetActiveDisputeAsync(contractId, cancellationToken);
@@ -61,7 +63,12 @@ public sealed class ContractService(
             contract,
             milestones.Select(ToMilestoneResponse).ToArray(),
             pendingExt != null ? ToExtensionResponse(pendingExt) : null,
-            activeDispute != null ? ToDisputeResponse(activeDispute) : null);
+            activeDispute != null ? ToDisputeResponse(activeDispute) : null) with
+        {
+            CustomerName = customer?.FullName,
+            CustomerPhone = customer?.Phone,
+            SupplierAddress = supplierProfile?.Address
+        };
     }
 
     public async Task<ContractResponse> RequestSignatureOtpAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default)
@@ -211,8 +218,10 @@ public sealed class ContractService(
             throw new HttpException(409, "The deposit milestone must be paid before requesting final acceptance.");
 
         var productionMilestones = milestones.Where(m => !m.IsDeposit && m.SequenceNumber < 3).ToList();
-        if (productionMilestones.Any(m => m.Status != MilestoneStatus.CompletedOnTime && m.Status != MilestoneStatus.CompletedLate))
+        if (productionMilestones.Any(m => m.Status is not (MilestoneStatus.CompletedOnTime or MilestoneStatus.CompletedLate or MilestoneStatus.Paid)))
             throw new HttpException(409, "All previous production milestones must be completed before requesting final acceptance.");
+        if (!await repository.AreAllShipmentsDeliveredAsync(contractId, cancellationToken))
+            throw new HttpException(409, "All contract shipments must be marked delivered before requesting final acceptance.");
 
         var success = await repository.RequestFinalAcceptanceAsync(contractId, userId, cancellationToken);
         if (!success)
@@ -229,6 +238,17 @@ public sealed class ContractService(
             throw new HttpException(403, "Only the customer can confirm final acceptance.");
         if (contract.Status != ContractStatus.Active)
             throw new HttpException(409, "Final acceptance can only be confirmed for active contracts.");
+
+        var milestones = await repository.GetMilestonesAsync(contractId, cancellationToken);
+        if (!await repository.AreAllShipmentsDeliveredAsync(contractId, cancellationToken))
+            throw new HttpException(409, "All contract shipments must be marked delivered before final acceptance.");
+        if (milestones.Any(m => !m.IsDeposit && m.SequenceNumber == 2 &&
+            m.Status is not (MilestoneStatus.CompletedOnTime or MilestoneStatus.CompletedLate or MilestoneStatus.Paid)))
+            throw new HttpException(409, "Milestone M2 must be confirmed before final acceptance.");
+        var finalMilestone = milestones.FirstOrDefault(m => !m.IsDeposit && m.SequenceNumber == 3);
+        var fullContractPaid = await repository.HasCompletedFullContractPaymentAsync(contractId, cancellationToken);
+        if (finalMilestone is not null && finalMilestone.Status != MilestoneStatus.Paid && !fullContractPaid)
+            throw new HttpException(409, "Pay the final milestone before confirming final acceptance.");
 
         var completed = await repository.ConfirmFinalAcceptanceAsync(contractId, request.ConfirmedQualityAndQuantity, request.AcceptanceNotes, userId, cancellationToken)
             ?? throw new HttpException(409, "Failed to confirm final acceptance.");
@@ -300,7 +320,8 @@ public sealed class ContractService(
             contract.CompletedAt,
             milestones,
             pendingExtension,
-            activeDispute);
+            activeDispute,
+            contract.SupplierId);
 
     private static ContractMilestoneResponse ToMilestoneResponse(ContractMilestone m)
     {
@@ -313,7 +334,7 @@ public sealed class ContractService(
         return new(
             m.Id,
             m.SequenceNumber,
-            m.Name,
+            m.SequenceNumber == 2 ? "Sản xuất và tiến hành giao" : m.Name,
             m.Description,
             m.IsDeposit,
             m.DueDate,

@@ -19,4 +19,8 @@ public sealed record ContractResponse(
     DateTime? CompletedAt = null,
     IReadOnlyList<ContractMilestoneResponse>? Milestones = null,
     ContractExtensionResponse? PendingExtension = null,
-    ContractDisputeResponse? ActiveDispute = null);
+    ContractDisputeResponse? ActiveDispute = null,
+    Guid? SupplierId = null,
+    string? CustomerName = null,
+    string? CustomerPhone = null,
+    string? SupplierAddress = null);

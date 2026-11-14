@@ -91,8 +91,16 @@ public sealed class DeliveryService(
         if (string.IsNullOrWhiteSpace(request.RecipientPhone) || !PhoneRegex.IsMatch(request.RecipientPhone.Trim()))
             throw new HttpException(400, DeliveryMessages.RecipientPhoneInvalid, OrderErrorCodes.ValidationError);
 
-        if (request.ScheduledDate.HasValue && request.ScheduledDate.Value < DateOnly.FromDateTime(clock.UtcNow.AddDays(-1)))
-            throw new HttpException(400, DeliveryMessages.ScheduledDateInPast, OrderErrorCodes.ValidationError);
+        if (!request.ScheduledDate.HasValue)
+            throw new HttpException(400, DeliveryMessages.ScheduledDateRequired, OrderErrorCodes.ValidationError);
+        // Delivery dates are calendar dates in the Vietnam marketplace timezone (UTC+7).
+        var marketplaceNow = clock.UtcNow.AddHours(7);
+        var earliestDelivery = marketplaceNow.AddHours(24);
+        var minimumScheduledDate = DateOnly.FromDateTime(earliestDelivery);
+        if (minimumScheduledDate.ToDateTime(TimeOnly.MinValue) < earliestDelivery)
+            minimumScheduledDate = minimumScheduledDate.AddDays(1);
+        if (request.ScheduledDate.Value < minimumScheduledDate)
+            throw new HttpException(400, DeliveryMessages.ScheduledDateTooSoon, OrderErrorCodes.ValidationError);
 
         if (request.ContractId.HasValue)
         {

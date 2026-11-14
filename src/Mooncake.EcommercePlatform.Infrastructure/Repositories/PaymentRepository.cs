@@ -284,6 +284,10 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         var contract = await context.Contracts.FromSqlInterpolated(
                 $"SELECT * FROM contracts WHERE id = {contractId} FOR UPDATE")
             .SingleOrDefaultAsync(cancellationToken);
+        if (await context.Payments.AnyAsync(p => p.ContractId == contractId && p.MilestoneId == null
+                && (p.Status == PaymentStatus.Pending || p.Status == PaymentStatus.Processing || p.Status == PaymentStatus.Completed)
+                && !p.IsDeleted, cancellationToken))
+            return null;
         var milestone = await context.ContractMilestones.FromSqlInterpolated(
                 $"SELECT * FROM contract_milestones WHERE id = {milestoneId} FOR UPDATE")
             .SingleOrDefaultAsync(cancellationToken);
@@ -292,6 +296,19 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
             (contract.Status != ContractStatus.PendingDeposit && contract.Status != ContractStatus.Active) ||
             milestone.Amount is not > 0)
             return null;
+
+        if (!milestone.IsDeposit && milestone.SequenceNumber == 3)
+        {
+            var milestone2Paid = await context.ContractMilestones.AsNoTracking().AnyAsync(item =>
+                item.ContractId == contractId && item.SequenceNumber == 2 && item.Status == MilestoneStatus.Paid
+                && !item.IsDeleted, cancellationToken);
+            var shipments = context.Deliveries.AsNoTracking()
+                .Where(item => item.ContractId == contractId && !item.IsDeleted);
+            var shipmentsDelivered = await shipments.AnyAsync(cancellationToken)
+                && !await shipments.AnyAsync(item => item.Status != DeliveryStatus.Delivered, cancellationToken);
+            if (!milestone2Paid || !shipmentsDelivered)
+                return null;
+        }
 
         var payment = await context.Payments.FromSqlInterpolated(
                 $"SELECT * FROM payments WHERE milestone_id = {milestoneId} AND is_deleted = FALSE FOR UPDATE")
@@ -328,6 +345,49 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return payment;
+    }
+
+    public async Task<Payment?> PrepareFullContractVnPayPaymentAsync(Guid customerId, Guid contractId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var contract = await context.Contracts.FromSqlInterpolated(
+                $"SELECT * FROM contracts WHERE id = {contractId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
+        if (contract is null || contract.CustomerId != customerId || contract.IsDeleted
+            || contract.Status != ContractStatus.PendingDeposit || contract.TotalValue is not > 0)
+            return null;
+
+        var existing = await context.Payments.FromSqlInterpolated(
+                $"SELECT * FROM payments WHERE contract_id = {contractId} AND milestone_id IS NULL AND is_deleted = FALSE FOR UPDATE")
+            .OrderByDescending(p => p.CreatedAt).FirstOrDefaultAsync(cancellationToken);
+        if (existing?.Status == PaymentStatus.Completed) return null;
+        var now = clock.UtcNow;
+        if (existing is null)
+        {
+            existing = new Payment
+            {
+                Id = Guid.NewGuid(), ContractId = contractId, CustomerId = customerId,
+                PaymentNumber = $"PAY-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..22].ToUpperInvariant(),
+                Amount = contract.TotalValue.Value, Currency = "VND", Method = PaymentMethod.VNPay,
+                Provider = "VNPay", Status = PaymentStatus.Pending, ExpiresAt = now.AddHours(48), CreatedBy = customerId
+            };
+            context.Payments.Add(existing);
+        }
+        else if (existing.Status is PaymentStatus.Pending or PaymentStatus.Failed)
+        {
+            existing.Amount = contract.TotalValue.Value;
+            existing.Method = PaymentMethod.VNPay;
+            existing.Provider = "VNPay";
+            existing.Status = PaymentStatus.Pending;
+            existing.ExpiresAt = now.AddHours(48);
+            existing.UpdatedAt = now;
+            existing.UpdatedBy = customerId;
+        }
+        else return null;
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return existing;
     }
 
     public async Task<Payment?> PrepareOrderVnPayPaymentAsync(Guid customerId, Guid orderId,
@@ -520,6 +580,46 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
                         ReferenceType = "contract", ReferenceId = contract.Id
                     });
             }
+        }
+        else if (payment.ContractId is Guid prepaidContractId)
+        {
+            var contract = await context.Contracts.FirstOrDefaultAsync(item => item.Id == prepaidContractId && !item.IsDeleted,
+                cancellationToken);
+            if (contract is null || contract.CustomerId != payment.CustomerId) return null;
+            var deposit = await context.ContractMilestones.FirstOrDefaultAsync(m => m.ContractId == contract.Id
+                && m.IsDeposit && !m.IsDeleted, cancellationToken);
+            if (deposit is null) return null;
+            var unusedDepositInstructions = await context.Payments
+                .Where(p => p.ContractId == contract.Id && p.MilestoneId == deposit.Id
+                    && p.Id != payment.Id && p.Status == PaymentStatus.Pending && !p.IsDeleted)
+                .ToListAsync(cancellationToken);
+            foreach (var unusedPayment in unusedDepositInstructions)
+            {
+                unusedPayment.IsDeleted = true;
+                unusedPayment.UpdatedAt = now;
+            }
+            deposit.Status = MilestoneStatus.Paid;
+            deposit.CompletionDate = DateOnly.FromDateTime(now);
+            deposit.UpdatedAt = now;
+            if (contract.Status == ContractStatus.PendingDeposit)
+            {
+                contract.Status = ContractStatus.Active;
+                contract.DepositPaidAt = now;
+                contract.UpdatedAt = now;
+                var nextMilestone = await context.ContractMilestones.FirstOrDefaultAsync(m => m.ContractId == contract.Id
+                    && m.SequenceNumber == 2 && m.Status == MilestoneStatus.Pending && !m.IsDeleted, cancellationToken);
+                if (nextMilestone is not null)
+                {
+                    nextMilestone.Status = MilestoneStatus.InProgress;
+                    nextMilestone.UpdatedAt = now;
+                }
+            }
+            context.Notifications.Add(new Notification
+            {
+                UserId = contract.CustomerId, Type = "contract.active", Title = "Contract is active",
+                Content = "Your full contract payment was confirmed and is held for release according to the accepted milestones.",
+                ReferenceType = "contract", ReferenceId = contract.Id
+            });
         }
 
         if (payment.OrderId is not null)
@@ -810,6 +910,12 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
             .AsNoTracking()
             .Where(m => contractIds.Contains(m.ContractId) && !m.IsDeleted)
             .ToListAsync(cancellationToken);
+        var fullPrepayments = await context.Payments.AsNoTracking()
+            .Where(p => contractIds.Contains(p.ContractId ?? Guid.Empty) && p.MilestoneId == null
+                && p.Status == PaymentStatus.Completed && !p.IsDeleted)
+            .GroupBy(p => p.ContractId!.Value)
+            .Select(g => new { ContractId = g.Key, Amount = g.Sum(p => p.Amount) })
+            .ToDictionaryAsync(x => x.ContractId, x => x.Amount, cancellationToken);
 
         var milestonesByContract = allMilestones
             .GroupBy(m => m.ContractId)
@@ -836,7 +942,10 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         {
             var milestones = milestonesByContract.GetValueOrDefault(c.Id, new List<ContractMilestone>());
             var paidMilestones = milestones.Where(m => m.Status == MilestoneStatus.Paid).ToList();
-            var heldAmount = paidMilestones.Sum(m => m.Amount ?? 0m);
+            var hasFullPrepayment = fullPrepayments.TryGetValue(c.Id, out var fullPrepaidAmount);
+            var heldAmount = hasFullPrepayment
+                ? fullPrepaidAmount
+                : paidMilestones.Sum(m => m.Amount ?? 0m);
 
             if (c.Status == ContractStatus.Active) activeCount++;
             if (c.Status is ContractStatus.Active or ContractStatus.PendingDeposit)

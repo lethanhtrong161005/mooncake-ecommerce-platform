@@ -449,4 +449,60 @@ public sealed class DeliveryManagementTests
         Assert.Equal(2, createdProofs.Count);
         Assert.Equal(DeliveryStatus.AwaitingCustomerConfirmation, delivery.Status);
     }
+
+    [Fact]
+    public async Task CreateAsync_ContractDelivery_RequiresScheduledDateAtLeast24HoursUtcPlus7()
+    {
+        var service = new DeliveryService(repository.Object, clock.Object);
+
+        var missingDateEx = await Assert.ThrowsAsync<HttpException>(() => service.CreateAsync(userId, new CreateDeliveryRequest
+        {
+            ContractId = contractId,
+            FromAddress = "Bat Trang Warehouse",
+            ToAddress = "Keangnam Tower",
+            RecipientName = "Nguyen Van Hung",
+            RecipientPhone = "0912345678",
+            ScheduledDate = null
+        }));
+        Assert.Equal(400, missingDateEx.StatusCode);
+
+        var tooSoonEx = await Assert.ThrowsAsync<HttpException>(() => service.CreateAsync(userId, new CreateDeliveryRequest
+        {
+            ContractId = contractId,
+            FromAddress = "Bat Trang Warehouse",
+            ToAddress = "Keangnam Tower",
+            RecipientName = "Nguyen Van Hung",
+            RecipientPhone = "0912345678",
+            ScheduledDate = DateOnly.FromDateTime(fixedNow.AddHours(7).AddDays(1))
+        }));
+        Assert.Equal(400, tooSoonEx.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateAsync_OrderDelivery_AllowsTodayScheduledDateForImmediateDispatch()
+    {
+        var service = new DeliveryService(repository.Object, clock.Object);
+        var orderId = Guid.NewGuid();
+        var todayUtcPlus7 = DateOnly.FromDateTime(fixedNow.AddHours(7));
+
+        repository.Setup(r => r.CanManageOrderAsync(orderId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repository.Setup(r => r.GetByOrderIdAsync(orderId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        repository.Setup(r => r.CreateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Delivery d, CancellationToken _) => d);
+
+        var result = await service.CreateAsync(userId, new CreateDeliveryRequest
+        {
+            OrderId = orderId,
+            FromAddress = "Bat Trang Warehouse",
+            ToAddress = "Keangnam Tower",
+            RecipientName = "Nguyen Van Hung",
+            RecipientPhone = "0912345678",
+            ScheduledDate = todayUtcPlus7
+        });
+
+        Assert.NotNull(result);
+        Assert.Equal(todayUtcPlus7, result.ScheduledDate);
+    }
 }

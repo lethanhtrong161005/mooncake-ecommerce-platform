@@ -35,5 +35,14 @@ public static class DeliveryMessages
     public const string PhotoRequired = "On-site delivery photo evidence is required.";
     public const string SignatureRequiredForContract = "Recipient signature is required when submitting contract delivery proof.";
     public const string DefaultDriverLabel = "Delivery Driver";
+    public const string ShareLinkRetrieved = "Delivery PoD share link status retrieved successfully.";
+    public const string ShareLinkCreated = "Delivery PoD share link created successfully.";
+    public const string ShareLinkRevoked = "Delivery PoD share link revoked successfully.";
+    public const string ShareLinkTtlInvalid = "Share link expiration must be between 1 and 168 hours.";
+    public const string ShareLinkNotFound = "Delivery PoD share link is invalid or has been replaced.";
+    public const string ShareLinkRevokedError = "This delivery PoD share link has been revoked by the supplier.";
+    public const string ShareLinkExpiredError = "This delivery PoD share link has expired. Please request a new link from the supplier.";
+    public const string DeliveryCannotAcceptShareLink = "Completed or returned deliveries cannot generate a new driver PoD link.";
+    public const string DriverPhotoUploaded = "Driver PoD photo uploaded successfully.";
 }
 

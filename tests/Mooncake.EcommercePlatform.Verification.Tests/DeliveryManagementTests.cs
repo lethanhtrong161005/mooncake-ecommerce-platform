@@ -329,4 +329,124 @@ public sealed class DeliveryManagementTests
         var result = await service.VerifyProofIntegrityAsync(proofId);
         Assert.True(result);
     }
+
+    [Fact]
+    public async Task CreateOrReshareLinkAsync_CreatesAndRotatesTokenWithExpiry()
+    {
+        var service = new DeliveryService(repository.Object, clock.Object);
+        var delivery = new Delivery
+        {
+            Id = deliveryId,
+            OrderId = Guid.NewGuid(),
+            Status = DeliveryStatus.InTransit,
+            DeliveryNumber = "DEL-202611-009"
+        };
+
+        repository.Setup(r => r.GetByIdAsync(deliveryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+        repository.Setup(r => r.CanManageDeliveryAsync(deliveryId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repository.Setup(r => r.UpdateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Delivery d, CancellationToken _) => d);
+
+        var created = await service.CreateOrReshareLinkAsync(userId, deliveryId, new CreateDeliveryShareLinkRequest
+        {
+            ExpiresInHours = 12,
+            Reshare = false
+        });
+
+        Assert.True(created.IsActive);
+        Assert.False(string.IsNullOrWhiteSpace(created.Token));
+        Assert.Equal(fixedNow.AddHours(12), created.ExpiresAtUtc);
+
+        var reused = await service.CreateOrReshareLinkAsync(userId, deliveryId, new CreateDeliveryShareLinkRequest
+        {
+            ExpiresInHours = 24,
+            Reshare = false
+        });
+        Assert.Equal(created.Token, reused.Token);
+
+        var reshared = await service.CreateOrReshareLinkAsync(userId, deliveryId, new CreateDeliveryShareLinkRequest
+        {
+            ExpiresInHours = 48,
+            Reshare = true
+        });
+        Assert.True(reshared.IsActive);
+        Assert.NotEqual(created.Token, reshared.Token);
+        Assert.Equal(fixedNow.AddHours(48), reshared.ExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task GetPublicByTokenAsync_WhenExpiredOrRevoked_Throws410()
+    {
+        var service = new DeliveryService(repository.Object, clock.Object);
+        var expiredDelivery = new Delivery
+        {
+            Id = deliveryId,
+            OrderId = Guid.NewGuid(),
+            Status = DeliveryStatus.InTransit,
+            DeliveryNumber = "DEL-202611-010",
+            ShareToken = "expired_token_value",
+            ShareTokenExpiresAtUtc = fixedNow.AddMinutes(-1)
+        };
+
+        repository.Setup(r => r.GetByShareTokenAsync("expired_token_value", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expiredDelivery);
+
+        var expiredEx = await Assert.ThrowsAsync<HttpException>(() =>
+            service.GetPublicByTokenAsync("expired_token_value"));
+        Assert.Equal(410, expiredEx.StatusCode);
+
+        expiredDelivery.ShareTokenExpiresAtUtc = fixedNow.AddHours(5);
+        expiredDelivery.ShareTokenRevokedAtUtc = fixedNow.AddMinutes(-1);
+
+        var revokedEx = await Assert.ThrowsAsync<HttpException>(() =>
+            service.GetPublicByTokenAsync("expired_token_value"));
+        Assert.Equal(410, revokedEx.StatusCode);
+    }
+
+    [Fact]
+    public async Task SubmitPublicProofAsync_MultiPhotoForOrder_CreatesAllProofsAndMovesToAwaitingCustomerConfirmation()
+    {
+        var service = new DeliveryService(repository.Object, clock.Object);
+        var orderId = Guid.NewGuid();
+        var delivery = new Delivery
+        {
+            Id = deliveryId,
+            OrderId = orderId,
+            Status = DeliveryStatus.InTransit,
+            DeliveryNumber = "DEL-202611-011",
+            ShareToken = "active_driver_token",
+            ShareTokenExpiresAtUtc = fixedNow.AddHours(24),
+            CreatedBy = userId
+        };
+
+        var createdProofs = new List<DeliveryProof>();
+        repository.Setup(r => r.GetByShareTokenAsync("active_driver_token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+        repository.Setup(r => r.CreateProofAsync(It.IsAny<DeliveryProof>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DeliveryProof p, CancellationToken _) =>
+            {
+                createdProofs.Add(p);
+                return p;
+            });
+        repository.Setup(r => r.UpdateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Delivery d, CancellationToken _) => d);
+
+        var result = await service.SubmitPublicProofAsync("active_driver_token", new CreateDeliveryProofRequest
+        {
+            ProofType = ProofType.Delivery,
+            PhotoUrls =
+            [
+                "https://storage.mooncake.vn/pod/1.jpg",
+                "https://storage.mooncake.vn/pod/2.jpg"
+            ],
+            SignatureBase64 = "data:image/png;base64,AAA",
+            TakenBy = "Nguyễn Văn Tài"
+        });
+
+        Assert.NotNull(result);
+        Assert.Equal(2, createdProofs.Count);
+        Assert.Equal(DeliveryStatus.AwaitingCustomerConfirmation, delivery.Status);
+    }
 }

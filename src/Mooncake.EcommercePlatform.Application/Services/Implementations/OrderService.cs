@@ -19,9 +19,18 @@ public sealed class OrderService : IOrderService
     private readonly IOrderRepository repository;
     private readonly IDateTimeProvider dateTimeProvider;
     private readonly IEnterpriseOrderRepository? enterpriseRepository;
+    private readonly INotificationService? notificationService;
 
     public OrderService(IOrderRepository repository, IDateTimeProvider dateTimeProvider)
-        : this(repository, dateTimeProvider, null)
+        : this(repository, dateTimeProvider, null, null)
+    {
+    }
+
+    public OrderService(
+        IOrderRepository repository,
+        IDateTimeProvider dateTimeProvider,
+        IEnterpriseOrderRepository? enterpriseRepository)
+        : this(repository, dateTimeProvider, enterpriseRepository, null)
     {
     }
 
@@ -29,11 +38,13 @@ public sealed class OrderService : IOrderService
     public OrderService(
         IOrderRepository repository,
         IDateTimeProvider dateTimeProvider,
-        IEnterpriseOrderRepository? enterpriseRepository)
+        IEnterpriseOrderRepository? enterpriseRepository,
+        INotificationService? notificationService = null)
     {
         this.repository = repository;
         this.dateTimeProvider = dateTimeProvider;
         this.enterpriseRepository = enterpriseRepository;
+        this.notificationService = notificationService;
     }
 
     public async Task<OrderQuotePreviewResponse> PreviewQuoteAsync(OrderQuotePreviewRequest request,
@@ -273,6 +284,13 @@ public sealed class OrderService : IOrderService
                 order, supplierUserId, dateTimeProvider.UtcNow, order.DeliveryDateExpected, cancellationToken);
         }
 
+        await NotifyCustomerOrderEventAsync(
+            order,
+            "OrderConfirmed",
+            $"Đơn hàng #{order.OrderNumber} đã được xác nhận",
+            "Xưởng đã xác nhận đơn hàng của bạn. Vui lòng kiểm tra lịch thanh toán và tiến độ thực hiện.",
+            cancellationToken);
+
         return await ToResponseAsync(order, supplierUserId, true, false, cancellationToken);
     }
 
@@ -286,6 +304,14 @@ public sealed class OrderService : IOrderService
             throw new HttpException(409, "Only pending orders can be rejected.", OrderErrorCodes.StateConflict);
         if (!await repository.CancelPendingOrderAsync(order, supplierUserId, $"Supplier rejected: {request.Reason.Trim()}", cancellationToken))
             throw new HttpException(409, "The order status changed and it can no longer be rejected.", OrderErrorCodes.StateConflict);
+
+        await NotifyCustomerOrderEventAsync(
+            order,
+            "OrderRejected",
+            $"Đơn hàng #{order.OrderNumber} đã bị từ chối",
+            $"Xưởng đã từ chối đơn hàng. Lý do: {request.Reason.Trim()}",
+            cancellationToken);
+
         return await ToResponseAsync(order, supplierUserId, true, false, cancellationToken);
     }
 
@@ -316,6 +342,13 @@ public sealed class OrderService : IOrderService
         if (enterpriseRepository is not null)
             await enterpriseRepository.CommitInventoryReservationsAsync(orderId, cancellationToken);
 
+        await NotifyCustomerOrderEventAsync(
+            order,
+            "OrderProcessing",
+            $"Đơn hàng #{order.OrderNumber} đã vào sản xuất",
+            "Xưởng đã bắt đầu sản xuất đơn hàng theo quy cách của bạn.",
+            cancellationToken);
+
         return response;
     }
 
@@ -329,7 +362,16 @@ public sealed class OrderService : IOrderService
         if (enterpriseRepository is not null && await enterpriseRepository.HasUnpaidPreShippingObligationAsync(orderId, cancellationToken))
             throw new HttpException(409, "All remaining balance and supplemental packaging payment obligations must be paid before shipping.", OrderErrorCodes.PaymentRequired);
 
-        return await TransitionAsSupplierAsync(supplierUserId, order, OrderStatus.Processing, OrderStatus.Shipped, cancellationToken);
+        var response = await TransitionAsSupplierAsync(supplierUserId, order, OrderStatus.Processing, OrderStatus.Shipped, cancellationToken);
+
+        await NotifyCustomerOrderEventAsync(
+            order,
+            "OrderShipped",
+            $"Đơn hàng #{order.OrderNumber} đang trên đường giao",
+            "Xưởng đã xuất kho và bàn giao đơn hàng cho đơn vị vận chuyển.",
+            cancellationToken);
+
+        return response;
     }
 
     public async Task<OrderResponse> ConfirmDeliveryAsync(Guid customerId, Guid orderId, CancellationToken cancellationToken = default)
@@ -549,5 +591,34 @@ public sealed class OrderService : IOrderService
             throw new HttpException(400, $"Product '{product.Name}' allows a maximum quantity of {product.MaxOrderQty.Value}.", OrderErrorCodes.ValidationError);
         if (variant.StockQty < quantity)
             throw new HttpException(409, $"Variant '{variant.Name}' has only {variant.StockQty} units available.", OrderErrorCodes.InsufficientStock);
+    }
+
+    private async Task NotifyCustomerOrderEventAsync(
+        Order order,
+        string type,
+        string title,
+        string content,
+        CancellationToken cancellationToken)
+    {
+        if (notificationService is null)
+            return;
+
+        try
+        {
+            await notificationService.DispatchNotificationAsync(
+                order.CustomerId,
+                type,
+                title,
+                content,
+                referenceType: "Order",
+                referenceId: order.Id,
+                actionUrl: "/don-hang-cua-toi",
+                priority: "high",
+                ct: cancellationToken);
+        }
+        catch
+        {
+            // Order transitions must stay committed even if realtime notification dispatch fails.
+        }
     }
 }

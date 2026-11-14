@@ -31,4 +31,12 @@ public class Delivery : BaseEntity
     public DeliveryType DeliveryType { get; set; } = DeliveryType.PlatformManaged;
 
     public DeliveryStatus Status { get; set; } = DeliveryStatus.Pending;
+
+    public string? ShareToken { get; set; }
+
+    public DateTime? ShareTokenCreatedAtUtc { get; set; }
+
+    public DateTime? ShareTokenExpiresAtUtc { get; set; }
+
+    public DateTime? ShareTokenRevokedAtUtc { get; set; }
 }

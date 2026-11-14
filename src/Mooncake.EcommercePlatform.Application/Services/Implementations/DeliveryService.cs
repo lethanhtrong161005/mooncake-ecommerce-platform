@@ -50,7 +50,9 @@ public sealed class DeliveryService(
             throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
 
         var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
-        return DeliveryResponseHelper.ToDetailResponse(delivery, proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray());
+        var contexts = await repository.GetPartyContextsAsync([delivery], cancellationToken);
+        var context = contexts?.GetValueOrDefault(delivery.Id);
+        return DeliveryResponseHelper.ToDetailResponse(delivery, proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray(), context);
     }
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetByContractAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default)
@@ -209,7 +211,11 @@ public sealed class DeliveryService(
         return DeliveryResponseHelper.ToResponse(updated, proofCount);
     }
 
-    public async Task<DeliveryProofResponse> SubmitProofAsync(Guid userId, Guid deliveryId, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default)
+    public Task<DeliveryProofResponse> SubmitProofAsync(Guid userId, Guid deliveryId, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default) =>
+        SubmitProofCoreAsync(userId, deliveryId, request, cancellationToken);
+
+    private async Task<DeliveryProofResponse> SubmitProofCoreAsync(Guid userId, Guid deliveryId,
+        CreateDeliveryProofRequest request, CancellationToken cancellationToken)
     {
         var delivery = await repository.GetByIdAsync(deliveryId, cancellationToken)
             ?? throw new HttpException(404, DeliveryMessages.DeliveryNotFound);
@@ -218,7 +224,121 @@ public sealed class DeliveryService(
         if (!canManage)
             throw new HttpException(403, DeliveryMessages.ProofSubmitDenied, OrderErrorCodes.TenantForbidden);
 
-        if (delivery.Status == DeliveryStatus.Delivered)
+        return await CreateProofsAndAdvanceStatusAsync(delivery, userId, request, cancellationToken);
+    }
+
+    public async Task<DeliveryShareLinkResponse> GetShareLinkAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var delivery = await GetManagedDeliveryAsync(userId, deliveryId, cancellationToken);
+        return DeliveryResponseHelper.ToShareLinkResponse(delivery, clock.UtcNow);
+    }
+
+    public async Task<DeliveryShareLinkResponse> CreateOrReshareLinkAsync(Guid userId, Guid deliveryId,
+        CreateDeliveryShareLinkRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.ExpiresInHours is < 1 or > 168)
+            throw new HttpException(400, DeliveryMessages.ShareLinkTtlInvalid, OrderErrorCodes.ValidationError);
+
+        var delivery = await GetManagedDeliveryAsync(userId, deliveryId, cancellationToken);
+        if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
+            throw new HttpException(409, DeliveryMessages.DeliveryCannotAcceptShareLink, OrderErrorCodes.StateConflict);
+
+        var hasActiveLink = !string.IsNullOrWhiteSpace(delivery.ShareToken)
+            && !delivery.ShareTokenRevokedAtUtc.HasValue
+            && delivery.ShareTokenExpiresAtUtc.HasValue
+            && delivery.ShareTokenExpiresAtUtc.Value > clock.UtcNow;
+
+        if (hasActiveLink && !request.Reshare)
+            return DeliveryResponseHelper.ToShareLinkResponse(delivery, clock.UtcNow);
+
+        delivery.ShareToken = GenerateShareToken();
+        delivery.ShareTokenCreatedAtUtc = clock.UtcNow;
+        delivery.ShareTokenExpiresAtUtc = clock.UtcNow.AddHours(request.ExpiresInHours);
+        delivery.ShareTokenRevokedAtUtc = null;
+        delivery.UpdatedBy = userId;
+        delivery.UpdatedAt = clock.UtcNow;
+
+        var updated = await repository.UpdateAsync(delivery, cancellationToken);
+        return DeliveryResponseHelper.ToShareLinkResponse(updated, clock.UtcNow);
+    }
+
+    public async Task RevokeShareLinkAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var delivery = await GetManagedDeliveryAsync(userId, deliveryId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(delivery.ShareToken) && !delivery.ShareTokenRevokedAtUtc.HasValue)
+            return;
+
+        delivery.ShareTokenRevokedAtUtc = clock.UtcNow;
+        delivery.UpdatedBy = userId;
+        delivery.UpdatedAt = clock.UtcNow;
+        await repository.UpdateAsync(delivery, cancellationToken);
+    }
+
+    public async Task<PublicDriverDeliveryResponse> GetPublicByTokenAsync(string token, CancellationToken cancellationToken = default)
+    {
+        var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
+        var referenceCode = await repository.GetReferenceCodeAsync(delivery, cancellationToken);
+        return DeliveryResponseHelper.ToPublicDriverResponse(delivery, proofs.Count, referenceCode);
+    }
+
+    public async Task EnsurePublicTokenSubmittableAsync(string token, CancellationToken cancellationToken = default)
+    {
+        var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
+            throw new HttpException(409, DeliveryMessages.DeliveryAlreadyCompleted, OrderErrorCodes.StateConflict);
+    }
+
+    public async Task<DeliveryProofResponse> SubmitPublicProofAsync(string token, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default)
+    {
+        var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        var actorUserId = delivery.UpdatedBy ?? delivery.CreatedBy;
+        return await CreateProofsAndAdvanceStatusAsync(delivery, actorUserId, request, cancellationToken);
+    }
+
+    private async Task<Delivery> GetManagedDeliveryAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken)
+    {
+        var delivery = await repository.GetByIdAsync(deliveryId, cancellationToken)
+            ?? throw new HttpException(404, DeliveryMessages.DeliveryNotFound);
+
+        var canManage = await repository.CanManageDeliveryAsync(deliveryId, userId, cancellationToken);
+        if (!canManage)
+            throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
+
+        return delivery;
+    }
+
+    private async Task<Delivery> ValidatePublicTokenAsync(string token, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            throw new HttpException(404, DeliveryMessages.ShareLinkNotFound);
+
+        var delivery = await repository.GetByShareTokenAsync(token.Trim(), cancellationToken)
+            ?? throw new HttpException(404, DeliveryMessages.ShareLinkNotFound);
+
+        if (delivery.ShareTokenRevokedAtUtc.HasValue)
+            throw new HttpException(410, DeliveryMessages.ShareLinkRevokedError, OrderErrorCodes.StateConflict);
+
+        if (!delivery.ShareTokenExpiresAtUtc.HasValue || delivery.ShareTokenExpiresAtUtc.Value <= clock.UtcNow)
+            throw new HttpException(410, DeliveryMessages.ShareLinkExpiredError, OrderErrorCodes.StateConflict);
+
+        return delivery;
+    }
+
+    private static string GenerateShareToken()
+    {
+        Span<byte> bytes = stackalloc byte[24];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToBase64String(bytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+    }
+
+    private async Task<DeliveryProofResponse> CreateProofsAndAdvanceStatusAsync(
+        Delivery delivery, Guid? actorUserId, CreateDeliveryProofRequest request, CancellationToken cancellationToken)
+    {
+        if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
             throw new HttpException(409, DeliveryMessages.DeliveryAlreadyCompleted, OrderErrorCodes.StateConflict);
 
         if (request.LocationLat.HasValue && (request.LocationLat.Value < -90m || request.LocationLat.Value > 90m))
@@ -227,43 +347,51 @@ public sealed class DeliveryService(
         if (request.LocationLng.HasValue && (request.LocationLng.Value < -180m || request.LocationLng.Value > 180m))
             throw new HttpException(400, DeliveryMessages.LongitudeInvalid, OrderErrorCodes.ValidationError);
 
-        var photoUrl = request.PhotoUrl ?? request.PhotoBase64;
+        var photoUrls = CollectPhotoUrls(request);
         var signatureUrl = request.SignatureUrl ?? request.SignatureBase64;
 
-        if (string.IsNullOrWhiteSpace(photoUrl))
+        if (photoUrls.Count == 0)
             throw new HttpException(400, DeliveryMessages.PhotoRequired, OrderErrorCodes.ValidationError);
 
         if (delivery.ContractId.HasValue && request.ProofType == ProofType.Delivery && string.IsNullOrWhiteSpace(signatureUrl))
             throw new HttpException(400, DeliveryMessages.SignatureRequiredForContract, OrderErrorCodes.ValidationError);
 
-        var rawPayload = $"{deliveryId}|{request.ProofType}|{request.LocationLat}|{request.LocationLng}|{clock.UtcNow:O}|{photoUrl}|{signatureUrl}";
-        var tamperProofHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawPayload))).ToLowerInvariant();
+        var takenBy = string.IsNullOrWhiteSpace(request.TakenBy) ? DeliveryMessages.DefaultDriverLabel : request.TakenBy.Trim();
+        DeliveryProof? firstCreated = null;
 
-        var proof = new DeliveryProof
+        for (var i = 0; i < photoUrls.Count; i++)
         {
-            Id = Guid.NewGuid(),
-            DeliveryId = deliveryId,
-            ProofType = request.ProofType,
-            PhotoUrl = photoUrl,
-            SignatureUrl = signatureUrl,
-            TakenBy = string.IsNullOrWhiteSpace(request.TakenBy) ? DeliveryMessages.DefaultDriverLabel : request.TakenBy.Trim(),
-            TakenAt = clock.UtcNow,
-            LocationLat = request.LocationLat,
-            LocationLng = request.LocationLng,
-            Notes = request.Notes?.Trim(),
-            TamperProofHash = tamperProofHash,
-            CreatedBy = userId,
-            CreatedAt = clock.UtcNow
-        };
+            var photoUrl = photoUrls[i];
+            var rawPayload = $"{delivery.Id}|{request.ProofType}|{request.LocationLat}|{request.LocationLng}|{clock.UtcNow:O}|{i}|{photoUrl}|{signatureUrl}";
+            var tamperProofHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawPayload))).ToLowerInvariant();
 
-        var createdProof = await repository.CreateProofAsync(proof, cancellationToken);
+            var proof = new DeliveryProof
+            {
+                Id = Guid.NewGuid(),
+                DeliveryId = delivery.Id,
+                ProofType = request.ProofType,
+                PhotoUrl = photoUrl,
+                SignatureUrl = signatureUrl,
+                TakenBy = takenBy,
+                TakenAt = clock.UtcNow,
+                LocationLat = request.LocationLat,
+                LocationLng = request.LocationLng,
+                Notes = request.Notes?.Trim(),
+                TamperProofHash = tamperProofHash,
+                CreatedBy = actorUserId,
+                CreatedAt = clock.UtcNow
+            };
+
+            var createdProof = await repository.CreateProofAsync(proof, cancellationToken);
+            firstCreated ??= createdProof;
+        }
 
         if (request.ProofType == ProofType.Delivery)
         {
             if (delivery.OrderId.HasValue)
             {
                 delivery.Status = DeliveryStatus.AwaitingCustomerConfirmation;
-                delivery.UpdatedBy = userId;
+                delivery.UpdatedBy = actorUserId;
                 delivery.UpdatedAt = clock.UtcNow;
                 await repository.UpdateAsync(delivery, cancellationToken);
             }
@@ -271,7 +399,7 @@ public sealed class DeliveryService(
             {
                 delivery.Status = DeliveryStatus.Delivered;
                 delivery.ActualDeliveryDate = DateOnly.FromDateTime(clock.UtcNow);
-                delivery.UpdatedBy = userId;
+                delivery.UpdatedBy = actorUserId;
                 delivery.UpdatedAt = clock.UtcNow;
                 await repository.UpdateAsync(delivery, cancellationToken);
             }
@@ -279,19 +407,43 @@ public sealed class DeliveryService(
         else if (request.ProofType == ProofType.Pickup && (delivery.Status == DeliveryStatus.Pending || delivery.Status == DeliveryStatus.Confirmed))
         {
             delivery.Status = DeliveryStatus.PickedUp;
-            delivery.UpdatedBy = userId;
+            delivery.UpdatedBy = actorUserId;
             delivery.UpdatedAt = clock.UtcNow;
             await repository.UpdateAsync(delivery, cancellationToken);
         }
         else if (request.ProofType == ProofType.FailedAttempt)
         {
             delivery.Status = DeliveryStatus.Failed;
-            delivery.UpdatedBy = userId;
+            delivery.UpdatedBy = actorUserId;
             delivery.UpdatedAt = clock.UtcNow;
             await repository.UpdateAsync(delivery, cancellationToken);
         }
 
-        return DeliveryResponseHelper.ToProofResponse(createdProof);
+        return DeliveryResponseHelper.ToProofResponse(firstCreated!);
+    }
+
+    private static IReadOnlyList<string> CollectPhotoUrls(CreateDeliveryProofRequest request)
+    {
+        var results = new List<string>(5);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        void AddIfValid(string? candidate)
+        {
+            if (string.IsNullOrWhiteSpace(candidate) || results.Count >= 5)
+                return;
+            var trimmed = candidate.Trim();
+            if (seen.Add(trimmed))
+                results.Add(trimmed);
+        }
+
+        if (request.PhotoUrls is not null)
+        {
+            foreach (var url in request.PhotoUrls)
+                AddIfValid(url);
+        }
+
+        AddIfValid(request.PhotoUrl ?? request.PhotoBase64);
+        return results;
     }
 
     public async Task<IReadOnlyList<DeliveryProofResponse>> GetProofsAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default)
@@ -328,13 +480,15 @@ public sealed class DeliveryService(
             return [];
 
         var counts = await repository.GetProofCountsAsync(deliveries.Select(d => d.Id).ToArray(), cancellationToken);
+        var contexts = await repository.GetPartyContextsAsync(deliveries, cancellationToken);
         var responses = new List<DeliveryResponse>(deliveries.Count);
         foreach (var delivery in deliveries)
         {
             var proofCount = counts is not null
                 ? counts.GetValueOrDefault(delivery.Id, 0)
                 : (await repository.GetProofsAsync(delivery.Id, cancellationToken)).Count;
-            responses.Add(DeliveryResponseHelper.ToResponse(delivery, proofCount));
+            var context = contexts?.GetValueOrDefault(delivery.Id);
+            responses.Add(DeliveryResponseHelper.ToResponse(delivery, proofCount, context));
         }
 
         return responses;

@@ -1767,6 +1767,23 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("date")
                         .HasColumnName("scheduled_date");
 
+                    b.Property<string>("ShareToken")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("share_token");
+
+                    b.Property<DateTime?>("ShareTokenCreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("share_token_created_at_utc");
+
+                    b.Property<DateTime?>("ShareTokenExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("share_token_expires_at_utc");
+
+                    b.Property<DateTime?>("ShareTokenRevokedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("share_token_revoked_at_utc");
+
                     b.Property<DeliveryStatus>("Status")
                         .HasColumnType("delivery_status")
                         .HasColumnName("status");
@@ -1801,6 +1818,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "OrderId" }, "idx_del_order_id")
                         .HasFilter("(order_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "ShareToken" }, "idx_del_share_token")
+                        .IsUnique()
+                        .HasFilter("(share_token IS NOT NULL)");
 
                     b.HasIndex(new[] { "Status" }, "idx_del_status");
 

@@ -10,16 +10,50 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 [ApiController]
 public sealed class PackagingTemplatesController(IPackagingTemplateService service) : BaseApiController
 {
+    private const long MaxImageUploadRequestBytes = 6 * 1024 * 1024;
+
     /// <summary>Returns the active packaging templates for a given shop (Customer / Public).</summary>
     [HttpGet("/api/v1/shops/{shopId:guid}/packaging-templates")]
     public async Task<IActionResult> GetByShopIdAsync(Guid shopId, CancellationToken ct) =>
         Success(await service.GetByShopIdAsync(shopId, ct), "Tải danh sách mẫu bao bì thành công.");
 
-    /// <summary>Returns the current supplier's packaging templates.</summary>
+    /// <summary>Returns the current supplier's packaging templates (paged & filtered when query parameters are provided).</summary>
     [Authorize]
     [HttpGet("/api/v1/suppliers/me/packaging-templates")]
-    public async Task<IActionResult> GetMineAsync(CancellationToken ct) =>
-        Success(await service.GetMineAsync(GetCurrentUserId(), ct), "Tải danh sách mẫu bao bì thành công.");
+    public async Task<IActionResult> GetMineAsync([FromQuery] PackagingTemplatePageQueryRequest query, CancellationToken ct)
+    {
+        var usePaging = Request.Query.ContainsKey("page")
+            || Request.Query.ContainsKey("pageSize")
+            || Request.Query.ContainsKey("q")
+            || Request.Query.ContainsKey("isActive")
+            || Request.Query.ContainsKey("capacity")
+            || Request.Query.ContainsKey("material")
+            || Request.Query.ContainsKey("sort");
+
+        return Success<object>(
+            usePaging
+                ? await service.GetMinePageAsync(GetCurrentUserId(), query, ct)
+                : await service.GetMineAsync(GetCurrentUserId(), ct),
+            "Tải danh sách mẫu bao bì thành công.");
+    }
+
+    /// <summary>Uploads a sample box photo to Cloudinary for packaging templates.</summary>
+    [Authorize]
+    [HttpPost("/api/v1/suppliers/me/packaging-templates/upload-image")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxImageUploadRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxImageUploadRequestBytes)]
+    public async Task<IActionResult> UploadImageAsync(IFormFile? file, CancellationToken ct)
+    {
+        await using var stream = file?.OpenReadStream();
+        var uploaded = await service.UploadImageAsync(
+            GetCurrentUserId(),
+            stream,
+            file?.FileName,
+            file?.Length ?? 0,
+            ct);
+        return Success(uploaded, "Tải ảnh mẫu hộp thành công.");
+    }
 
     /// <summary>Creates a new packaging template for the supplier's shop.</summary>
     [Authorize]
@@ -45,4 +79,3 @@ public sealed class PackagingTemplatesController(IPackagingTemplateService servi
 
     private Guid GetCurrentUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }
-

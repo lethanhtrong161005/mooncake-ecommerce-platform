@@ -14,6 +14,8 @@ public interface IContractRepository
     Task<PagedResult<Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses.ContractDisputeListItemResponse>>
         ListDisputesPageAsync(ContractDisputePageQueryRequest query, CancellationToken cancellationToken = default);
     Task<bool> IsPartyAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
+    Task<bool> AreAllShipmentsDeliveredAsync(Guid contractId, CancellationToken cancellationToken = default);
+    Task<bool> HasCompletedFullContractPaymentAsync(Guid contractId, CancellationToken cancellationToken = default);
     Task<bool> HasSignedAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> BeginSignatureAsync(Guid contractId, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<bool> FinalizeAcceptedBidContractAsync(Guid contractId, Guid customerUserId, CancellationToken cancellationToken = default);

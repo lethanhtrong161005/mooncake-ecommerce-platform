@@ -261,6 +261,98 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
         ).AnyAsync(cancellationToken);
     }
 
+    public async Task<Delivery?> GetByShareTokenAsync(string token, CancellationToken cancellationToken = default) =>
+        await context.Deliveries.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.ShareToken == token && !d.IsDeleted, cancellationToken);
+
+    public async Task<string?> GetReferenceCodeAsync(Delivery delivery, CancellationToken cancellationToken = default)
+    {
+        if (delivery.OrderId.HasValue)
+        {
+            return await context.Orders.AsNoTracking()
+                .Where(o => o.Id == delivery.OrderId.Value && !o.IsDeleted)
+                .Select(o => o.OrderNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (delivery.ContractId.HasValue)
+        {
+            return await context.Contracts.AsNoTracking()
+                .Where(c => c.Id == delivery.ContractId.Value && !c.IsDeleted)
+                .Select(c => c.ContractNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return null;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, DeliveryPartyContext>?> GetPartyContextsAsync(
+        IReadOnlyCollection<Delivery> deliveries, CancellationToken cancellationToken = default)
+    {
+        if (deliveries.Count == 0)
+            return new Dictionary<Guid, DeliveryPartyContext>();
+
+        var result = new Dictionary<Guid, DeliveryPartyContext>(deliveries.Count);
+
+        var orderIds = deliveries.Where(d => d.OrderId.HasValue).Select(d => d.OrderId!.Value).Distinct().ToArray();
+        var orderMap = orderIds.Length == 0
+            ? new Dictionary<Guid, DeliveryPartyContext>()
+            : await (
+                from o in context.Orders.AsNoTracking()
+                join c in context.Users.AsNoTracking() on o.CustomerId equals c.Id into customerJoin
+                from c in customerJoin.DefaultIfEmpty()
+                join s in context.Shops.AsNoTracking() on o.ShopId equals s.Id into shopJoin
+                from s in shopJoin.DefaultIfEmpty()
+                where orderIds.Contains(o.Id) && !o.IsDeleted
+                select new
+                {
+                    o.Id,
+                    o.OrderNumber,
+                    CustomerName = c != null ? (c.FullName ?? c.Email) : null,
+                    SupplierName = s != null ? s.Name : null
+                }
+            ).ToDictionaryAsync(
+                x => x.Id,
+                x => new DeliveryPartyContext(x.OrderNumber, null, x.CustomerName, x.SupplierName),
+                cancellationToken);
+
+        var contractIds = deliveries.Where(d => d.ContractId.HasValue).Select(d => d.ContractId!.Value).Distinct().ToArray();
+        var contractMap = contractIds.Length == 0
+            ? new Dictionary<Guid, DeliveryPartyContext>()
+            : await (
+                from ct in context.Contracts.AsNoTracking()
+                join c in context.Users.AsNoTracking() on ct.CustomerId equals c.Id into customerJoin
+                from c in customerJoin.DefaultIfEmpty()
+                join sp in context.SupplierProfiles.AsNoTracking() on ct.SupplierId equals sp.Id into spJoin
+                from sp in spJoin.DefaultIfEmpty()
+                where contractIds.Contains(ct.Id) && !ct.IsDeleted
+                select new
+                {
+                    ct.Id,
+                    ct.ContractNumber,
+                    CustomerName = c != null ? (c.FullName ?? c.Email) : null,
+                    SupplierName = sp != null ? sp.CompanyName : null
+                }
+            ).ToDictionaryAsync(
+                x => x.Id,
+                x => new DeliveryPartyContext(null, x.ContractNumber, x.CustomerName, x.SupplierName),
+                cancellationToken);
+
+        foreach (var delivery in deliveries)
+        {
+            if (delivery.OrderId.HasValue && orderMap.TryGetValue(delivery.OrderId.Value, out var ord))
+            {
+                result[delivery.Id] = ord;
+            }
+            else if (delivery.ContractId.HasValue && contractMap.TryGetValue(delivery.ContractId.Value, out var ctr))
+            {
+                result[delivery.Id] = ctr;
+            }
+        }
+
+        return result;
+    }
+
     private Task<bool> IsAdminAsync(Guid userId, CancellationToken cancellationToken) =>
         context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && !u.IsDeleted && u.Role == UserRole.Admin, cancellationToken);
 }

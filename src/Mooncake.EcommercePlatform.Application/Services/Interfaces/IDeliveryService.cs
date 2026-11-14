@@ -30,5 +30,18 @@ public interface IDeliveryService
     Task<DeliveryProofResponse> GetProofDetailAsync(Guid userId, Guid proofId, CancellationToken cancellationToken = default);
 
     Task<bool> VerifyProofIntegrityAsync(Guid proofId, CancellationToken cancellationToken = default);
+
+    Task<DeliveryShareLinkResponse> GetShareLinkAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default);
+
+    Task<DeliveryShareLinkResponse> CreateOrReshareLinkAsync(Guid userId, Guid deliveryId,
+        CreateDeliveryShareLinkRequest request, CancellationToken cancellationToken = default);
+
+    Task RevokeShareLinkAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default);
+
+    Task<PublicDriverDeliveryResponse> GetPublicByTokenAsync(string token, CancellationToken cancellationToken = default);
+
+    Task EnsurePublicTokenSubmittableAsync(string token, CancellationToken cancellationToken = default);
+
+    Task<DeliveryProofResponse> SubmitPublicProofAsync(string token, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default);
 }
 

@@ -141,11 +141,12 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
         if (!Uri.TryCreate(request.ReturnUrl, UriKind.Absolute, out var returnUri) ||
             returnUri.Scheme != Uri.UriSchemeHttps && returnUri.Scheme != Uri.UriSchemeHttp)
             throw new HttpException(400, "A valid return URL is required.", OrderErrorCodes.ValidationError);
-        var payment = await repository.PrepareVnPayPaymentAsync(customerId, request.ContractId,
-            request.MilestoneId, cancellationToken)
-            ?? throw new HttpException(409, "The contract deposit is not ready for VNPay payment.", OrderErrorCodes.StateConflict);
+        var payment = (request.PayFullContract
+            ? await repository.PrepareFullContractVnPayPaymentAsync(customerId, request.ContractId, cancellationToken)
+            : await repository.PrepareVnPayPaymentAsync(customerId, request.ContractId, request.MilestoneId, cancellationToken))
+            ?? throw new HttpException(409, "The contract payment is not ready for VNPay.", OrderErrorCodes.StateConflict);
         if (payment.Status == PaymentStatus.Completed)
-            throw new HttpException(409, "This contract deposit has already been paid.", OrderErrorCodes.StateConflict);
+            throw new HttpException(409, "This contract payment has already been paid.", OrderErrorCodes.StateConflict);
         return new VnPayUrlResponse(payment.Id, payment.PaymentNumber, payment.Amount,
             vnPayGateway.CreatePaymentUrl(payment, returnUri.AbsoluteUri, clientIpAddress ?? "127.0.0.1",
                 clock.UtcNow));

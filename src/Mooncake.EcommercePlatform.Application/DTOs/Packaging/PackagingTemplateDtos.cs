@@ -1,5 +1,18 @@
 namespace Mooncake.EcommercePlatform.Application.DTOs.Packaging;
 
+public sealed record PackagingTemplateImageUploadResponse(string Url, string PublicId);
+
+public sealed record PackagingTemplatePageQueryRequest
+{
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 5;
+    public string? Q { get; init; }
+    public bool? IsActive { get; init; }
+    public int? Capacity { get; init; }
+    public string? Material { get; init; }
+    public string? Sort { get; init; }
+}
+
 public sealed record PackagingTemplateResponse(
     Guid Id,
     Guid ShopId,

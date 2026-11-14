@@ -107,6 +107,7 @@ public static class DependencyInjection
         services.AddScoped<IEnterpriseOrderRepository, EnterpriseOrderRepository>();
         services.AddScoped<ICustomPackagingRepository, CustomPackagingRepository>();
         services.AddScoped<IPackagingTemplateRepository, PackagingTemplateRepository>();
+        services.AddScoped<IPackagingTemplateImageProcessor, PackagingTemplateImageProcessor>();
         services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRfqRepository, RfqRepository>();

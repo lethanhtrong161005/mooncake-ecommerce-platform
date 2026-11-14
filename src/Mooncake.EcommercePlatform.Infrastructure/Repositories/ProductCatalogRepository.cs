@@ -266,8 +266,17 @@ public sealed class ProductCatalogRepository(ApplicationDbContext db, IDateTimeP
         var account = await GetAccountAsync(actorUserId, ct);
         if (account?.ShopId == null) return new([], query.Page, query.PageSize, 0);
         var rows = db.Products.AsNoTracking().Where(x => x.ShopId == account.ShopId && !x.IsDeleted);
-        if (!string.IsNullOrWhiteSpace(query.Q)) rows = rows.Where(x => x.Name.Contains(query.Q));
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(x => EF.Functions.ILike(x.Name, term)
+                || db.ProductVariants.Any(v => v.ProductId == x.Id && !v.IsDeleted && EF.Functions.ILike(v.Sku, term)));
+        }
         if (query.CategoryId.HasValue) rows = rows.Where(x => x.CategoryId == query.CategoryId);
+        if (query.SupportsCustomPackaging.HasValue)
+        {
+            rows = rows.Where(x => x.SupportsCustomPackaging == query.SupportsCustomPackaging.Value);
+        }
         if (query.Status.HasValue)
         {
             rows = query.Status.Value switch
@@ -281,9 +290,10 @@ public sealed class ProductCatalogRepository(ApplicationDbContext db, IDateTimeP
         var total = await rows.CountAsync(ct);
         rows = query.Sort switch
         {
+            "createdAtDesc" => rows.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id),
             "nameAsc" => rows.OrderBy(x => x.Name).ThenBy(x => x.Id),
             "stockAsc" => rows.OrderBy(x => db.ProductVariants.Where(v => v.ProductId == x.Id && !v.IsDeleted).Sum(v => v.StockQty)).ThenBy(x => x.Id),
-            _ => rows.OrderByDescending(x => x.UpdatedAt).ThenBy(x => x.Id)
+            _ => rows.OrderByDescending(x => x.UpdatedAt).ThenByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
         };
         var items = await rows.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
             .Select(x => new ProductOwnerCardResponse(x.Id, x.Version, x.Name, x.CategoryId,

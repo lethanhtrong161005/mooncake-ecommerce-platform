@@ -98,11 +98,12 @@ public sealed record SetProductPublicationRequest
 public sealed record OwnerProductQuery
 {
     [Range(1, 1000)] public int Page { get; init; } = 1;
-    [Range(1, 100)] public int PageSize { get; init; } = 20;
+    [Range(1, 100)] public int PageSize { get; init; } = 10;
     [MaxLength(100)] public string? Q { get; init; }
     public ProductStatus? Status { get; init; }
     public Guid? CategoryId { get; init; }
-    [RegularExpression("^(updatedAtDesc|nameAsc|stockAsc)$")] public string Sort { get; init; } = "updatedAtDesc";
+    public bool? SupportsCustomPackaging { get; init; }
+    [RegularExpression("^(updatedAtDesc|createdAtDesc|nameAsc|stockAsc)$")] public string Sort { get; init; } = "updatedAtDesc";
 }
 
 public sealed record ProductSearchQuery

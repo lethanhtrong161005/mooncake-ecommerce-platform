@@ -1,7 +1,9 @@
 namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
+using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.DTOs.Packaging;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 
@@ -92,23 +94,87 @@ public class PackagingTemplateRepository(ApplicationDbContext db) : IPackagingTe
         var shopId = await GetShopIdForUserAsync(actorUserId, ct);
         if (!shopId.HasValue) return [];
 
-        var list = await db.PackagingTemplates.AsNoTracking()
-            .Where(x => x.ShopId == shopId.Value && !x.IsDeleted)
-            .OrderBy(x => x.SortOrder)
-            .ThenBy(x => x.CreatedAt)
-            .ToListAsync(ct);
-
-        if (list.Count == 0)
+        var hasAnyEver = await db.PackagingTemplates.AsNoTracking()
+            .AnyAsync(x => x.ShopId == shopId.Value, ct);
+        if (!hasAnyEver)
         {
             await SeedDefaultTemplatesAsync(shopId.Value, ct);
-            list = await db.PackagingTemplates.AsNoTracking()
-                .Where(x => x.ShopId == shopId.Value && !x.IsDeleted)
-                .OrderBy(x => x.SortOrder)
-                .ThenBy(x => x.CreatedAt)
-                .ToListAsync(ct);
         }
 
-        return list;
+        return await db.PackagingTemplates.AsNoTracking()
+            .Where(x => x.ShopId == shopId.Value && !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.UpdatedAt)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(ct);
+    }
+
+    public async Task<PagedResult<PackagingTemplate>> GetMinePageAsync(
+        Guid actorUserId,
+        PackagingTemplatePageQueryRequest query,
+        CancellationToken ct = default)
+    {
+        var shopId = await GetShopIdForUserAsync(actorUserId, ct);
+        var pageSize = Math.Clamp(query.PageSize, 1, 5);
+        if (!shopId.HasValue)
+        {
+            return new PagedResult<PackagingTemplate>([], query.Page, pageSize, 0);
+        }
+
+        var hasAnyEver = await db.PackagingTemplates.AsNoTracking()
+            .AnyAsync(x => x.ShopId == shopId.Value, ct);
+        if (!hasAnyEver)
+        {
+            await SeedDefaultTemplatesAsync(shopId.Value, ct);
+        }
+
+        IQueryable<PackagingTemplate> rows = db.PackagingTemplates.AsNoTracking()
+            .Where(x => x.ShopId == shopId.Value && !x.IsDeleted);
+
+        if (query.IsActive.HasValue)
+        {
+            rows = rows.Where(x => x.IsActive == query.IsActive.Value);
+        }
+
+        if (query.Capacity.HasValue)
+        {
+            rows = rows.Where(x => x.Capacity == query.Capacity.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Material))
+        {
+            var matTerm = $"%{query.Material.Trim()}%";
+            rows = rows.Where(x => x.Material != null && EF.Functions.ILike(x.Material, matTerm));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var term = $"%{query.Q.Trim()}%";
+            rows = rows.Where(x =>
+                EF.Functions.ILike(x.Name, term)
+                || (x.Description != null && EF.Functions.ILike(x.Description, term))
+                || (x.Material != null && EF.Functions.ILike(x.Material, term))
+                || (x.Technique != null && EF.Functions.ILike(x.Technique, term))
+                || (x.Dimensions != null && EF.Functions.ILike(x.Dimensions, term)));
+        }
+
+        var totalCount = await rows.CountAsync(ct);
+
+        rows = query.Sort switch
+        {
+            "createdAtAsc" => rows.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "priceAsc" => rows.OrderBy(x => x.BasePrice).ThenByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id),
+            "priceDesc" => rows.OrderByDescending(x => x.BasePrice).ThenByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id),
+            "nameAsc" => rows.OrderBy(x => x.Name).ThenByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id),
+            _ => rows.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.UpdatedAt).ThenByDescending(x => x.Id)
+        };
+
+        var items = await rows
+            .Skip((query.Page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new PagedResult<PackagingTemplate>(items, query.Page, pageSize, totalCount);
     }
 
     public async Task<PackagingTemplate?> GetByIdAsync(Guid id, CancellationToken ct = default)

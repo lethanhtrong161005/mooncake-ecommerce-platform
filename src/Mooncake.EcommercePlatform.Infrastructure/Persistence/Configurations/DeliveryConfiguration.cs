@@ -59,6 +59,15 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
             builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
         builder.Property(e => e.DeliveryType).HasColumnName("delivery_type");
         builder.Property(e => e.Status).HasColumnName("status");
+        builder.Property(e => e.ShareToken)
+            .HasMaxLength(128)
+            .HasColumnName("share_token");
+        builder.Property(e => e.ShareTokenCreatedAtUtc).HasColumnName("share_token_created_at_utc");
+        builder.Property(e => e.ShareTokenExpiresAtUtc).HasColumnName("share_token_expires_at_utc");
+        builder.Property(e => e.ShareTokenRevokedAtUtc).HasColumnName("share_token_revoked_at_utc");
         builder.HasIndex(e => e.Status, "idx_del_status");
+        builder.HasIndex(e => e.ShareToken, "idx_del_share_token")
+            .IsUnique()
+            .HasFilter("(share_token IS NOT NULL)");
     }
 }

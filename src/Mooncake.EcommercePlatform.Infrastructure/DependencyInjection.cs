@@ -28,7 +28,8 @@ public static class DependencyInjection
         }
 
         // Build NpgsqlDataSource with Enum & Vector mappings (using NpgsqlNullNameTranslator for PascalCase enum matching)
-        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        var normalizedConnectionString = NormalizeSupabaseSessionPool(connectionString);
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(normalizedConnectionString);
         dataSourceBuilder.UseVector();
 
         var translator = new NpgsqlNullNameTranslator();
@@ -149,5 +150,49 @@ public static class DependencyInjection
         });
         services.AddScoped<ICloudinaryStorageService, CloudinaryStorageService>();
         return services;
+    }
+
+    private static string NormalizeSupabaseSessionPool(string connectionString)
+    {
+        var csb = new NpgsqlConnectionStringBuilder(connectionString);
+        var isSupabaseSessionPooler = csb.Host?.Contains("pooler.supabase.com", StringComparison.OrdinalIgnoreCase) == true
+            && csb.Port == 5432;
+        if (!isSupabaseSessionPooler)
+        {
+            return connectionString;
+        }
+
+        // Supabase Supavisor session mode (port 5432) caps total clients at 15 across all consumers.
+        // Cap the Npgsql pool per API process and prune idle connections quickly so bursts queue in Npgsql instead of throwing EMAXCONNSESSION.
+        if (!connectionString.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
+            && !connectionString.Contains("MaxPoolSize", StringComparison.OrdinalIgnoreCase)
+            && !connectionString.Contains("Max Pool Size", StringComparison.OrdinalIgnoreCase))
+        {
+            csb.MaxPoolSize = 5;
+        }
+
+        if (!connectionString.Contains("Minimum Pool Size", StringComparison.OrdinalIgnoreCase)
+            && !connectionString.Contains("MinPoolSize", StringComparison.OrdinalIgnoreCase)
+            && !connectionString.Contains("Min Pool Size", StringComparison.OrdinalIgnoreCase))
+        {
+            csb.MinPoolSize = 0;
+        }
+
+        if (!connectionString.Contains("Connection Idle Lifetime", StringComparison.OrdinalIgnoreCase))
+        {
+            csb.ConnectionIdleLifetime = 15;
+        }
+
+        if (!connectionString.Contains("Connection Pruning Interval", StringComparison.OrdinalIgnoreCase))
+        {
+            csb.ConnectionPruningInterval = 5;
+        }
+
+        if (!connectionString.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            csb.Timeout = 30;
+        }
+
+        return csb.ConnectionString;
     }
 }

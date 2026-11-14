@@ -27,6 +27,8 @@ public static class DeliveryMessages
     public const string RecipientNameRequired = "Recipient name is required.";
     public const string RecipientPhoneInvalid = "Recipient phone number must be a valid 10-digit Vietnamese mobile number.";
     public const string ScheduledDateInPast = "Scheduled delivery date cannot be in the past.";
+    public const string ScheduledDateRequired = "A scheduled delivery date is required.";
+    public const string ScheduledDateTooSoon = "Scheduled delivery date must be at least 24 hours after the shipment is created.";
     public const string SingleDeliveryLimitExceeded = "Direct bulk orders support only a single active shipment in v1.";
     public const string ProofRequiredBeforeDelivered = "A delivery proof photo is required before marking the shipment as delivered.";
     public const string DeliveryAlreadyCompleted = "This delivery has already been completed.";
@@ -35,5 +37,14 @@ public static class DeliveryMessages
     public const string PhotoRequired = "On-site delivery photo evidence is required.";
     public const string SignatureRequiredForContract = "Recipient signature is required when submitting contract delivery proof.";
     public const string DefaultDriverLabel = "Delivery Driver";
+    public const string ShareLinkRetrieved = "Delivery PoD share link status retrieved successfully.";
+    public const string ShareLinkCreated = "Delivery PoD share link created successfully.";
+    public const string ShareLinkRevoked = "Delivery PoD share link revoked successfully.";
+    public const string ShareLinkTtlInvalid = "Share link expiration must be between 1 and 168 hours.";
+    public const string ShareLinkNotFound = "Delivery PoD share link is invalid or has been replaced.";
+    public const string ShareLinkRevokedError = "This delivery PoD share link has been revoked by the supplier.";
+    public const string ShareLinkExpiredError = "This delivery PoD share link has expired. Please request a new link from the supplier.";
+    public const string DeliveryCannotAcceptShareLink = "Completed or returned deliveries cannot generate a new driver PoD link.";
+    public const string DriverPhotoUploaded = "Driver PoD photo uploaded successfully.";
 }
 

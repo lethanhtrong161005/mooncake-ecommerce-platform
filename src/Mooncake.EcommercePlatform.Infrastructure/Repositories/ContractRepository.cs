@@ -62,6 +62,19 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         contract.CustomerId == userId || await context.SupplierProfiles.AsNoTracking()
             .AnyAsync(profile => profile.Id == contract.SupplierId && profile.UserId == userId && !profile.IsDeleted, cancellationToken);
 
+    public async Task<bool> AreAllShipmentsDeliveredAsync(Guid contractId, CancellationToken cancellationToken = default)
+    {
+        var shipments = context.Deliveries.AsNoTracking()
+            .Where(delivery => delivery.ContractId == contractId && !delivery.IsDeleted);
+        return await shipments.AnyAsync(cancellationToken)
+            && !await shipments.AnyAsync(delivery => delivery.Status != DeliveryStatus.Delivered, cancellationToken);
+    }
+
+    public Task<bool> HasCompletedFullContractPaymentAsync(Guid contractId, CancellationToken cancellationToken = default) =>
+        context.Payments.AsNoTracking().AnyAsync(payment => payment.ContractId == contractId
+            && payment.MilestoneId == null && payment.Status == PaymentStatus.Completed && !payment.IsDeleted,
+            cancellationToken);
+
     public async Task<bool> HasSignedAsync(Contract contract, Guid userId, CancellationToken cancellationToken = default)
     {
         if (contract.CustomerId == userId) return contract.SignedByCustomerAt is not null;
@@ -180,8 +193,8 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                 var m2Amount = decimal.Round(totalValue * 0.50m, 2, MidpointRounding.AwayFromZero);
                 var milestone2 = new ContractMilestone
                 {
-                    Id = Guid.NewGuid(), ContractId = contract.Id, SequenceNumber = 2, Name = "Sản xuất & Giao hàng đợt 1 (M2)",
-                    Description = "Báo cáo tiến độ sản xuất và giao đợt 1.", IsDeposit = false,
+                    Id = Guid.NewGuid(), ContractId = contract.Id, SequenceNumber = 2, Name = "Sản xuất và tiến hành giao",
+                    Description = "Sản xuất hàng hóa và tiến hành giao hàng theo hợp đồng.", IsDeposit = false,
                     Amount = m2Amount, Percentage = 50m,
                     DueDate = contract.DeliveryDeadline ?? DateOnly.FromDateTime(now.AddDays(14)), Status = MilestoneStatus.Pending,
                     CreatedBy = actorUserId
@@ -270,8 +283,8 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                 var now = clock.UtcNow;
                 var milestone2 = new ContractMilestone
                 {
-                    Id = Guid.NewGuid(), ContractId = contractId, SequenceNumber = 2, Name = "Sản xuất & Giao hàng đợt 1 (M2)",
-                    Description = "Báo cáo tiến độ sản xuất và giao đợt 1.", IsDeposit = false,
+                    Id = Guid.NewGuid(), ContractId = contractId, SequenceNumber = 2, Name = "Sản xuất và tiến hành giao",
+                    Description = "Sản xuất hàng hóa và tiến hành giao hàng theo hợp đồng.", IsDeposit = false,
                     Amount = m2Amount, Percentage = 50m,
                     DueDate = contract.DeliveryDeadline ?? DateOnly.FromDateTime(now.AddDays(14)),
                     Status = contract.Status == ContractStatus.Active ? MilestoneStatus.InProgress : MilestoneStatus.Pending,

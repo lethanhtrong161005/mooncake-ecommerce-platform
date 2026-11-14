@@ -5,6 +5,12 @@ using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 
 using Mooncake.EcommercePlatform.Domain.Entities;
 
+public sealed record DeliveryPartyContext(
+    string? OrderNumber,
+    string? ContractNumber,
+    string? CustomerName,
+    string? SupplierName);
+
 /// <summary>Persistence operations for shipments and Proof-of-Delivery records.</summary>
 public interface IDeliveryRepository
 {
@@ -41,4 +47,11 @@ public interface IDeliveryRepository
     Task<bool> CanAccessOrderAsync(Guid orderId, Guid userId, CancellationToken cancellationToken = default);
 
     Task<bool> CanManageOrderAsync(Guid orderId, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<Delivery?> GetByShareTokenAsync(string token, CancellationToken cancellationToken = default);
+
+    Task<string?> GetReferenceCodeAsync(Delivery delivery, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, DeliveryPartyContext>?> GetPartyContextsAsync(
+        IReadOnlyCollection<Delivery> deliveries, CancellationToken cancellationToken = default);
 }

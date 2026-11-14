@@ -55,6 +55,8 @@ public record CreateDeliveryProofRequest
 
     public string? PhotoUrl { get; init; }
 
+    public IReadOnlyList<string>? PhotoUrls { get; init; }
+
     public string? SignatureUrl { get; init; }
 
     public string? PhotoBase64 { get; init; }
@@ -68,6 +70,13 @@ public record CreateDeliveryProofRequest
     public decimal? LocationLng { get; init; }
 
     public string? Notes { get; init; }
+}
+
+public record CreateDeliveryShareLinkRequest
+{
+    public int ExpiresInHours { get; init; } = 24;
+
+    public bool Reshare { get; init; }
 }
 
 public record CarrierWebhookPayload

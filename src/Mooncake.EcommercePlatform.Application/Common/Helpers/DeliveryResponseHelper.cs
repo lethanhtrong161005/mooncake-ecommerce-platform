@@ -146,39 +146,44 @@ public static class DeliveryResponseHelper
         string? referenceCode = null,
         IReadOnlyList<DeliveryItemResponse>? items = null,
         int? totalBatches = null,
-        DeliveryPartyContext? context = null) => new()
+        DeliveryPartyContext? context = null)
     {
-        DeliveryId = delivery.Id,
-        DeliveryNumber = delivery.DeliveryNumber,
-        DeliveryType = delivery.DeliveryType,
-        Status = delivery.Status,
-        ScheduledDate = delivery.ScheduledDate,
-        ActualDeliveryDate = delivery.ActualDeliveryDate,
-        FromAddress = delivery.FromAddress,
-        ToAddress = delivery.ToAddress,
-        RecipientName = delivery.RecipientName,
-        RecipientPhone = delivery.RecipientPhone,
-        TrackingCode = delivery.TrackingCode,
-        Notes = delivery.Notes,
-        BatchNumber = delivery.BatchNumber,
-        TotalBatches = totalBatches,
-        Items = items ?? Array.Empty<DeliveryItemResponse>(),
-        ReferenceCode = referenceCode,
-        RequiresSignature = delivery.ContractId.HasValue,
-        ProofCount = proofCount,
-        ExpiresAtUtc = delivery.ShareTokenExpiresAtUtc ?? delivery.CreatedAt,
-        CanSubmitProof = delivery.Status != Domain.Enums.DeliveryStatus.Delivered
-                         && delivery.Status != Domain.Enums.DeliveryStatus.Returned
-                         && delivery.DriverClaimedAt.HasValue,
-        Token = delivery.ShareToken,
-        ShareCode = delivery.ShareCode,
-        DriverName = delivery.DriverName,
-        DriverPhone = delivery.DriverPhone,
-        VehiclePlate = delivery.VehiclePlate,
-        DriverClaimedAt = delivery.DriverClaimedAt,
-        OrderType = delivery.ContractId.HasValue ? "Contract" : "BulkOrder",
-        OrderNumber = context?.OrderNumber,
-        ContractNumber = context?.ContractNumber,
-        RecipientCompanyName = context?.CustomerCompanyName ?? context?.CustomerName ?? delivery.RecipientName
-    };
+        var canSubmitProof = delivery.Status != Domain.Enums.DeliveryStatus.Delivered
+                             && delivery.Status != Domain.Enums.DeliveryStatus.Returned;
+
+        return new()
+        {
+            DeliveryId = delivery.Id,
+            DeliveryNumber = delivery.DeliveryNumber,
+            DeliveryType = delivery.DeliveryType,
+            Status = delivery.Status,
+            ScheduledDate = delivery.ScheduledDate,
+            ActualDeliveryDate = delivery.ActualDeliveryDate,
+            FromAddress = delivery.FromAddress,
+            ToAddress = delivery.ToAddress,
+            RecipientName = delivery.RecipientName,
+            RecipientPhone = delivery.RecipientPhone,
+            TrackingCode = delivery.TrackingCode,
+            Notes = delivery.Notes,
+            BatchNumber = delivery.BatchNumber,
+            TotalBatches = totalBatches,
+            Items = items ?? Array.Empty<DeliveryItemResponse>(),
+            ReferenceCode = referenceCode,
+            RequiresSignature = delivery.ContractId.HasValue,
+            ProofCount = proofCount,
+            ExpiresAtUtc = delivery.ShareTokenExpiresAtUtc ?? delivery.CreatedAt,
+            CanSubmitProof = canSubmitProof,
+            RequiresClaim = canSubmitProof && !delivery.DriverClaimedAt.HasValue,
+            Token = delivery.ShareToken,
+            ShareCode = delivery.ShareCode,
+            DriverName = delivery.DriverName,
+            DriverPhone = delivery.DriverPhone,
+            VehiclePlate = delivery.VehiclePlate,
+            DriverClaimedAt = delivery.DriverClaimedAt,
+            OrderType = delivery.ContractId.HasValue ? "Contract" : "BulkOrder",
+            OrderNumber = context?.OrderNumber,
+            ContractNumber = context?.ContractNumber,
+            RecipientCompanyName = context?.CustomerCompanyName ?? context?.CustomerName ?? delivery.RecipientName
+        };
+    }
 }

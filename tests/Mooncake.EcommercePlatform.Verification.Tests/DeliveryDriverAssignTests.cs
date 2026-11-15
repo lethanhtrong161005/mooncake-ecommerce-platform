@@ -19,6 +19,7 @@ using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
+using Mooncake.EcommercePlatform.Application.DTOs.Orders.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Implementations;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;
@@ -557,6 +558,51 @@ public sealed class DeliveryDriverAssignTests
         // Test DELETE {id}/driver
         var delRes = await client.DeleteAsync($"/api/v1/deliveries/{DeliveryId}/driver");
         Assert.Equal(HttpStatusCode.OK, delRes.StatusCode);
+    }
+
+    [Fact]
+    public void OrderDeliverySnapshotResponse_ContainsDriverClaimInfo_AndExcludesShareCodeOrToken()
+    {
+        var claimedAt = fixedNow;
+        var snapshot = new OrderDeliverySnapshotResponse(
+            DeliveryId,
+            "DEL-202611-001",
+            DeliveryStatus.InTransit,
+            "TRK-123",
+            DateOnly.FromDateTime(fixedNow),
+            null,
+            0,
+            [],
+            "Nguyễn Văn Tài",
+            "0912345678",
+            "29A-12345",
+            claimedAt);
+
+        Assert.Equal("Nguyễn Văn Tài", snapshot.DriverName);
+        Assert.Equal("0912345678", snapshot.DriverPhone);
+        Assert.Equal("29A-12345", snapshot.VehiclePlate);
+        Assert.Equal(claimedAt, snapshot.DriverClaimedAt);
+
+        // Verify default values
+        var defaultSnapshot = new OrderDeliverySnapshotResponse(
+            DeliveryId,
+            "DEL-202611-001",
+            DeliveryStatus.Pending,
+            null,
+            null,
+            null,
+            0,
+            []);
+        Assert.Null(defaultSnapshot.DriverName);
+        Assert.Null(defaultSnapshot.DriverPhone);
+        Assert.Null(defaultSnapshot.VehiclePlate);
+        Assert.Null(defaultSnapshot.DriverClaimedAt);
+
+        // Security check: Must NOT expose ShareCode or ShareToken
+        var snapshotProps = typeof(OrderDeliverySnapshotResponse).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        Assert.DoesNotContain(snapshotProps, p => p.Name.Contains("ShareCode", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(snapshotProps, p => p.Name.Contains("ShareToken", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(snapshotProps, p => p.Name.Contains("Token", StringComparison.OrdinalIgnoreCase));
     }
 
     private DeliveryService CreateService(out Delivery delivery)

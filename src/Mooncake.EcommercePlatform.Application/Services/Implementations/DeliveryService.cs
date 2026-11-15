@@ -66,7 +66,12 @@ public sealed class DeliveryService(
         var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
         var contexts = await repository.GetPartyContextsAsync([delivery], cancellationToken);
         var context = contexts?.GetValueOrDefault(delivery.Id);
-        return DeliveryResponseHelper.ToDetailResponse(delivery, proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray(), context);
+        var items = ((await repository.GetDeliveryItemsAsync(deliveryId, cancellationToken)) ?? [])
+            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
+        var totalBatches = delivery.ContractId.HasValue
+            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
+            : (int?)null;
+        return DeliveryResponseHelper.ToDetailResponse(delivery, proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray(), context, items, totalBatches);
     }
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetByContractAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default)
@@ -76,6 +81,15 @@ public sealed class DeliveryService(
 
         var deliveries = await repository.GetByContractIdAsync(contractId, cancellationToken);
         return await MapDeliveryListAsync(deliveries, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ContractFulfillmentLineResponse>> GetContractFulfillmentAsync(
+        Guid userId, Guid contractId, CancellationToken cancellationToken = default)
+    {
+        if (!await repository.CanAccessContractAsync(contractId, userId, cancellationToken))
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
+
+        return await repository.GetContractFulfillmentAsync(contractId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetByOrderAsync(Guid userId, Guid orderId, CancellationToken cancellationToken = default)
@@ -107,6 +121,9 @@ public sealed class DeliveryService(
         if (string.IsNullOrWhiteSpace(request.RecipientPhone) || !PhoneRegex.IsMatch(request.RecipientPhone.Trim()))
             throw new HttpException(400, DeliveryMessages.RecipientPhoneInvalid, OrderErrorCodes.ValidationError);
 
+        int? batchNumber = null;
+        IReadOnlyList<ContractLineInfo> contractLines = [];
+
         if (request.ContractId.HasValue)
         {
             if (!request.ScheduledDate.HasValue)
@@ -123,6 +140,48 @@ public sealed class DeliveryService(
 
             if (!await repository.CanManageContractAsync(request.ContractId.Value, userId, cancellationToken))
                 throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
+
+            contractLines = (await repository.GetContractLinesAsync(request.ContractId.Value, cancellationToken)) ?? [];
+            if (contractLines.Count > 0 && (request.Items == null || request.Items.Count == 0))
+                throw new HttpException(400, "Delivery items are required for contract shipments.", OrderErrorCodes.ValidationError);
+
+            if (request.Items != null && request.Items.Count == 0)
+                throw new HttpException(400, "Delivery items are required for contract shipments.", OrderErrorCodes.ValidationError);
+
+            if (request.Items is { Count: > 0 })
+            {
+                foreach (var item in request.Items)
+                {
+                    var lineId = item.RfqItemId ?? item.ItemId ?? Guid.Empty;
+                    if (lineId == Guid.Empty)
+                        throw new HttpException(400, "Each delivery item must reference a contract item line.", OrderErrorCodes.ValidationError);
+
+                    if (item.Quantity <= 0)
+                        throw new HttpException(400, "Delivery item quantity must be greater than zero.", OrderErrorCodes.ValidationError);
+
+                    if (contractLines.Count > 0 && !contractLines.Any(l => l.LineId == lineId))
+                        throw new HttpException(400, $"Contract item line '{lineId}' was not found in contract.", OrderErrorCodes.ValidationError);
+                }
+
+                var fulfillment = (await repository.GetContractFulfillmentAsync(request.ContractId.Value, cancellationToken)) ?? [];
+                var fulfillmentMap = fulfillment.ToDictionary(f => f.LineId);
+
+                foreach (var item in request.Items)
+                {
+                    var lineId = item.RfqItemId ?? item.ItemId ?? Guid.Empty;
+                    if (fulfillmentMap.TryGetValue(lineId, out var fLine))
+                    {
+                        if (item.Quantity > fLine.RemainingQuantity)
+                        {
+                            throw new HttpException(409,
+                                $"Delivery quantity {item.Quantity} for '{fLine.ProductName}' exceeds the available contract balance ({fLine.RemainingQuantity} remaining).",
+                                OrderErrorCodes.StateConflict);
+                        }
+                    }
+                }
+            }
+
+            batchNumber = await repository.GetNextBatchNumberForContractAsync(request.ContractId.Value, cancellationToken);
         }
         else if (request.OrderId.HasValue)
         {
@@ -135,6 +194,8 @@ public sealed class DeliveryService(
             var existingOrderDeliveries = await repository.GetByOrderIdAsync(request.OrderId.Value, cancellationToken) ?? [];
             if (existingOrderDeliveries.Any(d => d.Status is not (DeliveryStatus.Failed or DeliveryStatus.Returned)))
                 throw new HttpException(409, DeliveryMessages.SingleDeliveryLimitExceeded, OrderErrorCodes.SingleDeliveryLimit);
+
+            batchNumber = 1;
         }
 
         var deliveryNumber = $"DEL-{clock.UtcNow:yyyyMM}-{Random.Shared.Next(1000, 9999)}";
@@ -153,11 +214,38 @@ public sealed class DeliveryService(
             RecipientPhone = request.RecipientPhone.Trim(),
             TrackingCode = string.IsNullOrWhiteSpace(request.TrackingCode) ? null : request.TrackingCode.Trim(),
             Notes = request.Notes?.Trim(),
+            BatchNumber = batchNumber,
             CreatedBy = userId,
             CreatedAt = clock.UtcNow
         };
 
         var created = await repository.CreateAsync(delivery, cancellationToken);
+        if (created.ContractId.HasValue && request.Items is { Count: > 0 })
+        {
+            var deliveryItems = new List<DeliveryItem>();
+            foreach (var item in request.Items)
+            {
+                var lineId = item.RfqItemId ?? item.ItemId ?? Guid.Empty;
+                var line = contractLines.FirstOrDefault(l => l.LineId == lineId);
+                deliveryItems.Add(new DeliveryItem
+                {
+                    Id = Guid.NewGuid(),
+                    DeliveryId = created.Id,
+                    RfqItemId = line?.LineId ?? lineId,
+                    ProductName = line?.ProductName ?? string.Empty,
+                    Unit = line?.Unit,
+                    Quantity = item.Quantity,
+                    CreatedAt = clock.UtcNow,
+                    CreatedBy = userId
+                });
+            }
+            await repository.CreateDeliveryItemsAsync(deliveryItems, cancellationToken);
+        }
+        else if (created.OrderId.HasValue)
+        {
+            await repository.SnapshotOrderItemsAsync(created.Id, created.OrderId.Value, userId, cancellationToken);
+        }
+
         if (created.ContractId.HasValue && contractRepository is not null && notificationService is not null)
         {
             var contract = await contractRepository.GetContractAsync(created.ContractId.Value, cancellationToken);
@@ -175,7 +263,7 @@ public sealed class DeliveryService(
                     cancellationToken);
             }
         }
-        return DeliveryResponseHelper.ToResponse(created, 0);
+        return await BuildDeliveryResponseAsync(created, 0, cancellationToken);
     }
 
     public async Task<DeliveryResponse> UpdateStatusAsync(Guid userId, Guid deliveryId, UpdateDeliveryStatusRequest request, CancellationToken cancellationToken = default)
@@ -212,7 +300,7 @@ public sealed class DeliveryService(
 
         var updated = await repository.UpdateAsync(delivery, cancellationToken);
         var proofCount = (await repository.GetProofsAsync(deliveryId, cancellationToken)).Count;
-        return DeliveryResponseHelper.ToResponse(updated, proofCount);
+        return await BuildDeliveryResponseAsync(updated, proofCount, cancellationToken);
     }
 
     public async Task<DeliveryResponse> ConfirmReceiptAsync(Guid customerId, Guid deliveryId, CancellationToken cancellationToken = default)
@@ -249,7 +337,7 @@ public sealed class DeliveryService(
                 "high",
                 cancellationToken);
         }
-        return DeliveryResponseHelper.ToResponse(updated, proofs.Count);
+        return await BuildDeliveryResponseAsync(updated, proofs.Count, cancellationToken);
     }
 
     public async Task<DeliveryResponse> UpdateCarrierInfoAsync(Guid userId, Guid deliveryId, UpdateCarrierInfoRequest request, CancellationToken cancellationToken = default)
@@ -288,7 +376,7 @@ public sealed class DeliveryService(
 
         var updated = await repository.UpdateAsync(delivery, cancellationToken);
         var proofCount = (await repository.GetProofsAsync(deliveryId, cancellationToken)).Count;
-        return DeliveryResponseHelper.ToResponse(updated, proofCount);
+        return await BuildDeliveryResponseAsync(updated, proofCount, cancellationToken);
     }
 
     public Task<DeliveryProofResponse> SubmitProofAsync(Guid userId, Guid deliveryId, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default) =>
@@ -359,7 +447,12 @@ public sealed class DeliveryService(
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
         var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
         var referenceCode = await repository.GetReferenceCodeAsync(delivery, cancellationToken);
-        return DeliveryResponseHelper.ToPublicDriverResponse(delivery, proofs.Count, referenceCode);
+        var items = ((await repository.GetDeliveryItemsAsync(delivery.Id, cancellationToken)) ?? [])
+            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
+        var totalBatches = delivery.ContractId.HasValue
+            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
+            : (int?)null;
+        return DeliveryResponseHelper.ToPublicDriverResponse(delivery, proofs.Count, referenceCode, items, totalBatches);
     }
 
     public async Task EnsurePublicTokenSubmittableAsync(string token, CancellationToken cancellationToken = default)
@@ -710,13 +803,30 @@ public sealed class DeliveryService(
         return proof is not null && !string.IsNullOrWhiteSpace(proof.TamperProofHash) && proof.TamperProofHash.Length == 64;
     }
 
+    private async Task<DeliveryResponse> BuildDeliveryResponseAsync(Delivery delivery, int proofCount, CancellationToken cancellationToken)
+    {
+        var contexts = await repository.GetPartyContextsAsync([delivery], cancellationToken);
+        var context = contexts?.GetValueOrDefault(delivery.Id);
+        var items = ((await repository.GetDeliveryItemsAsync(delivery.Id, cancellationToken)) ?? [])
+            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
+        var totalBatches = delivery.ContractId.HasValue
+            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
+            : (int?)null;
+        return DeliveryResponseHelper.ToResponse(delivery, proofCount, context, items, totalBatches);
+    }
+
     private async Task<IReadOnlyList<DeliveryResponse>> MapDeliveryListAsync(IReadOnlyList<Delivery> deliveries, CancellationToken cancellationToken)
     {
         if (deliveries.Count == 0)
             return [];
 
-        var counts = await repository.GetProofCountsAsync(deliveries.Select(d => d.Id).ToArray(), cancellationToken);
+        var deliveryIds = deliveries.Select(d => d.Id).ToArray();
+        var counts = await repository.GetProofCountsAsync(deliveryIds, cancellationToken);
         var contexts = await repository.GetPartyContextsAsync(deliveries, cancellationToken);
+        var itemsMap = await repository.GetDeliveryItemsMapAsync(deliveryIds, cancellationToken);
+        var contractIds = deliveries.Where(d => d.ContractId.HasValue).Select(d => d.ContractId!.Value).Distinct().ToArray();
+        var totalBatchesMap = await repository.GetContractTotalBatchesMapAsync(contractIds, cancellationToken);
+
         var responses = new List<DeliveryResponse>(deliveries.Count);
         foreach (var delivery in deliveries)
         {
@@ -724,7 +834,9 @@ public sealed class DeliveryService(
                 ? counts.GetValueOrDefault(delivery.Id, 0)
                 : (await repository.GetProofsAsync(delivery.Id, cancellationToken)).Count;
             var context = contexts?.GetValueOrDefault(delivery.Id);
-            responses.Add(DeliveryResponseHelper.ToResponse(delivery, proofCount, context));
+            var items = itemsMap?.GetValueOrDefault(delivery.Id)?.Select(DeliveryResponseHelper.ToItemResponse).ToArray() ?? [];
+            var totalBatches = delivery.ContractId.HasValue ? totalBatchesMap?.GetValueOrDefault(delivery.ContractId.Value) : null;
+            responses.Add(DeliveryResponseHelper.ToResponse(delivery, proofCount, context, items, totalBatches));
         }
 
         return responses;

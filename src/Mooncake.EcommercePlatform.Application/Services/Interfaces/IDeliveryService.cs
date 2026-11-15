@@ -15,6 +15,8 @@ public interface IDeliveryService
 
     Task<IReadOnlyList<DeliveryResponse>> GetByContractAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ContractFulfillmentLineResponse>> GetContractFulfillmentAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<DeliveryResponse>> GetByOrderAsync(Guid userId, Guid orderId, CancellationToken cancellationToken = default);
 
     Task<DeliveryResponse> CreateAsync(Guid userId, CreateDeliveryRequest request, CancellationToken cancellationToken = default);

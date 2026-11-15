@@ -2,6 +2,52 @@ namespace Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
 
 using Mooncake.EcommercePlatform.Domain.Enums;
 
+public record DeliveryItemResponse
+{
+    public Guid Id { get; init; }
+
+    public Guid DeliveryId { get; init; }
+
+    public Guid? OrderItemId { get; init; }
+
+    public Guid? RfqItemId { get; init; }
+
+    public string ProductName { get; init; } = string.Empty;
+
+    public string? Unit { get; init; }
+
+    public int Quantity { get; init; }
+}
+
+public record ContractFulfillmentLineResponse
+{
+    public Guid LineId { get; init; }
+
+    public Guid? RfqItemId { get; init; }
+
+    public Guid? OrderItemId { get; init; }
+
+    public string ProductName { get; init; } = string.Empty;
+
+    public string? Unit { get; init; }
+
+    public int TotalQuantity { get; init; }
+
+    public int ScheduledQuantity { get; init; }
+
+    public int DeliveredQuantity { get; init; }
+
+    public int RemainingQuantity { get; init; }
+
+    public int Total => TotalQuantity;
+
+    public int Scheduled => ScheduledQuantity;
+
+    public int Delivered => DeliveredQuantity;
+
+    public int Remaining => RemainingQuantity;
+}
+
 public record DeliveryProofResponse
 {
     public Guid Id { get; init; }
@@ -60,6 +106,12 @@ public record DeliveryResponse
     public string? TrackingCode { get; init; }
 
     public string? Notes { get; init; }
+
+    public int? BatchNumber { get; init; }
+
+    public int? TotalBatches { get; init; }
+
+    public IReadOnlyList<DeliveryItemResponse> Items { get; init; } = Array.Empty<DeliveryItemResponse>();
 
     public int ProofCount { get; init; }
 
@@ -129,6 +181,12 @@ public record PublicDriverDeliveryResponse
     public string? Notes { get; init; }
 
     public string? ReferenceCode { get; init; }
+
+    public int? BatchNumber { get; init; }
+
+    public int? TotalBatches { get; init; }
+
+    public IReadOnlyList<DeliveryItemResponse> Items { get; init; } = Array.Empty<DeliveryItemResponse>();
 
     public bool RequiresSignature { get; init; }
 

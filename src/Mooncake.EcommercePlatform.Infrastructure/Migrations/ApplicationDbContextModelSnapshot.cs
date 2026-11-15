@@ -1717,6 +1717,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("date")
                         .HasColumnName("actual_delivery_date");
 
+                    b.Property<int?>("BatchNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("batch_number");
+
                     b.Property<Guid?>("ContractId")
                         .HasColumnType("uuid")
                         .HasColumnName("contract_id");
@@ -1838,6 +1842,81 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_deliveries_single_parent", "(contract_id IS NOT NULL) <> (order_id IS NOT NULL)");
                         });
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.DeliveryItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("DeliveryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("delivery_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("OrderItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_item_id");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("product_name");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid?>("RfqItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_item_id");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("delivery_items_pkey");
+
+                    b.HasIndex(new[] { "DeliveryId" }, "idx_di_delivery_id");
+
+                    b.HasIndex(new[] { "OrderItemId" }, "idx_di_order_item_id")
+                        .HasFilter("(order_item_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "RfqItemId" }, "idx_di_rfq_item_id")
+                        .HasFilter("(rfq_item_id IS NOT NULL)");
+
+                    b.ToTable("delivery_items", (string)null);
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.DeliveryProof", b =>

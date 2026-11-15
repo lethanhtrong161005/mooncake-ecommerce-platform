@@ -66,8 +66,57 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
     {
         var shipments = context.Deliveries.AsNoTracking()
             .Where(delivery => delivery.ContractId == contractId && !delivery.IsDeleted);
-        return await shipments.AnyAsync(cancellationToken)
-            && !await shipments.AnyAsync(delivery => delivery.Status != DeliveryStatus.Delivered, cancellationToken);
+
+        if (!await shipments.AnyAsync(cancellationToken))
+            return false;
+
+        if (await shipments.AnyAsync(delivery => delivery.Status != DeliveryStatus.Delivered, cancellationToken))
+            return false;
+
+        var contract = await context.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == contractId && !c.IsDeleted, cancellationToken);
+        if (contract == null)
+            return false;
+
+        IReadOnlyList<(Guid Id, int Quantity)> contractLines = [];
+        if (contract.RfqId.HasValue)
+        {
+            contractLines = await context.RfqItems.AsNoTracking()
+                .Where(ri => ri.RfqId == contract.RfqId.Value && !ri.IsDeleted)
+                .Select(ri => new ValueTuple<Guid, int>(ri.Id, ri.Quantity))
+                .ToListAsync(cancellationToken);
+        }
+        else if (contract.OrderId.HasValue)
+        {
+            contractLines = await context.OrderItems.AsNoTracking()
+                .Where(oi => oi.OrderId == contract.OrderId.Value && !oi.IsDeleted)
+                .Select(oi => new ValueTuple<Guid, int>(oi.Id, oi.Quantity))
+                .ToListAsync(cancellationToken);
+        }
+
+        if (contractLines.Count == 0)
+            return true;
+
+        var deliveredShipmentIds = await shipments
+            .Where(d => d.Status == DeliveryStatus.Delivered)
+            .Select(d => d.Id)
+            .ToListAsync(cancellationToken);
+
+        var deliveryItems = await context.DeliveryItems.AsNoTracking()
+            .Where(di => deliveredShipmentIds.Contains(di.DeliveryId) && !di.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        foreach (var (lineId, requiredQuantity) in contractLines)
+        {
+            var deliveredQty = deliveryItems
+                .Where(di => di.RfqItemId == lineId || di.OrderItemId == lineId)
+                .Sum(di => di.Quantity);
+
+            if (deliveredQty < requiredQuantity)
+                return false;
+        }
+
+        return true;
     }
 
     public Task<bool> HasCompletedFullContractPaymentAsync(Guid contractId, CancellationToken cancellationToken = default) =>

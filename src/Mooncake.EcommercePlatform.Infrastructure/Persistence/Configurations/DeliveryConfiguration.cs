@@ -59,6 +59,7 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
             builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
         builder.Property(e => e.DeliveryType).HasColumnName("delivery_type");
         builder.Property(e => e.Status).HasColumnName("status");
+        builder.Property(e => e.BatchNumber).HasColumnName("batch_number");
         builder.Property(e => e.ShareToken)
             .HasMaxLength(128)
             .HasColumnName("share_token");

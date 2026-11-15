@@ -32,6 +32,8 @@ public class Delivery : BaseEntity
 
     public DeliveryStatus Status { get; set; } = DeliveryStatus.Pending;
 
+    public int? BatchNumber { get; set; }
+
     public string? ShareToken { get; set; }
 
     public DateTime? ShareTokenCreatedAtUtc { get; set; }

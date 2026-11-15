@@ -42,6 +42,10 @@ public sealed class DeliveriesController(
     public async Task<IActionResult> GetByContractAsync(Guid contractId, CancellationToken cancellationToken) =>
         Success(await deliveryService.GetByContractAsync(CurrentUserId, contractId, cancellationToken), DeliveryMessages.ContractDeliveriesRetrieved);
 
+    [HttpGet("contract/{contractId:guid}/fulfillment")]
+    public async Task<IActionResult> GetContractFulfillmentAsync(Guid contractId, CancellationToken cancellationToken) =>
+        Success(await deliveryService.GetContractFulfillmentAsync(CurrentUserId, contractId, cancellationToken), "Contract delivery fulfillment retrieved successfully.");
+
     [HttpGet("order/{orderId:guid}")]
     public async Task<IActionResult> GetByOrderAsync(Guid orderId, CancellationToken cancellationToken) =>
         Success(await deliveryService.GetByOrderAsync(CurrentUserId, orderId, cancellationToken), DeliveryMessages.OrderDeliveriesRetrieved);

@@ -202,6 +202,10 @@ public sealed class ContractsControllerHttpTests
     [Fact]
     public async Task SignAsync_Returns400_WhenOtpIsInvalid()
     {
+        contractService.Setup(s => s.SignAsync(CustomerId, ContractId, "12", true,
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Mooncake.EcommercePlatform.Application.Common.Exceptions.HttpException(400, "Invalid OTP code."));
+
         using var client = CreateClient("Customer");
         var invalid = new SignContractRequest { OtpCode = "12", ConfirmTerms = true }; // RegularExpression 6 digits
         var response = await client.PostAsJsonAsync($"/api/v1/contracts/{ContractId}/sign", invalid);

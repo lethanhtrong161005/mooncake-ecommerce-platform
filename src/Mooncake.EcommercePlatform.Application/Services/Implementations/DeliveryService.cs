@@ -35,6 +35,12 @@ public sealed class DeliveryService(
     }
 
     private static readonly Regex PhoneRegex = new(@"^(0|\+84)(3|5|7|8|9)[0-9]{8}$", RegexOptions.Compiled);
+    private const int MaxSignaturePayloadBytes = 500 * 1024;
+    private const string DataImagePrefix = "data:image/";
+    private const string Base64Marker = ";base64,";
+    private const string InvalidCloudinaryPhotoUrlMessage = "Delivery proof photos must be hosted on the platform Cloudinary storage.";
+    private const string InvalidSignatureDataUrlMessage = "Driver signature must be a valid base64 image data URL.";
+    private const string SignatureTooLargeMessage = "Driver signature image must not exceed 500 KB.";
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetMineAsync(Guid userId, bool isSupplier, CancellationToken cancellationToken = default)
     {
@@ -360,9 +366,114 @@ public sealed class DeliveryService(
     public async Task<DeliveryProofResponse> SubmitPublicProofAsync(string token, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default)
     {
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        ValidatePublicProofRequest(request);
         var actorUserId = delivery.UpdatedBy ?? delivery.CreatedBy;
         return await CreateProofsAndAdvanceStatusAsync(delivery, actorUserId, request, cancellationToken);
     }
+
+    private static void ValidatePublicProofRequest(CreateDeliveryProofRequest request)
+    {
+        if (request is null)
+            throw new HttpException(400, DeliveryMessages.PhotoRequired, OrderErrorCodes.ValidationError);
+
+        var photoUrls = new List<string>();
+        if (request.PhotoUrls is not null)
+            photoUrls.AddRange(request.PhotoUrls);
+        if (!string.IsNullOrWhiteSpace(request.PhotoUrl))
+            photoUrls.Add(request.PhotoUrl);
+
+        if (photoUrls.Count == 0)
+            throw new HttpException(400, DeliveryMessages.PhotoRequired, OrderErrorCodes.ValidationError);
+
+        foreach (var url in photoUrls)
+        {
+            if (!IsValidCloudinaryUrl(url))
+                throw new HttpException(400, InvalidCloudinaryPhotoUrlMessage, OrderErrorCodes.ValidationError);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.PhotoBase64))
+            throw new HttpException(400, InvalidCloudinaryPhotoUrlMessage, OrderErrorCodes.ValidationError);
+
+        ValidatePublicSignature(request);
+    }
+
+    private static bool IsValidCloudinaryUrl(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        if (!Uri.TryCreate(candidate.Trim(), UriKind.Absolute, out var uri))
+            return false;
+
+        if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(uri.AbsolutePath) || uri.AbsolutePath == "/")
+            return false;
+
+        return uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.EndsWith(".cloudinary.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ValidatePublicSignature(CreateDeliveryProofRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.SignatureBase64))
+        {
+            ValidateImageDataUrl(request.SignatureBase64.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SignatureUrl))
+        {
+            var sigUrl = request.SignatureUrl.Trim();
+            if (sigUrl.StartsWith(DataImagePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateImageDataUrl(sigUrl);
+            }
+            else if (!IsValidCloudinaryUrl(sigUrl))
+            {
+                throw new HttpException(400, InvalidCloudinaryPhotoUrlMessage, OrderErrorCodes.ValidationError);
+            }
+        }
+    }
+
+    private static void ValidateImageDataUrl(string dataUrl)
+    {
+        if (!dataUrl.StartsWith(DataImagePrefix, StringComparison.OrdinalIgnoreCase))
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        var markerIndex = dataUrl.IndexOf(Base64Marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < DataImagePrefix.Length)
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        var mimeSubtype = dataUrl[DataImagePrefix.Length..markerIndex].Trim();
+        if (!IsAllowedSignatureImageFormat(mimeSubtype))
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        var base64Part = dataUrl[(markerIndex + Base64Marker.Length)..].Trim();
+        if (string.IsNullOrEmpty(base64Part))
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        if ((base64Part.Length * 3L) / 4 > MaxSignaturePayloadBytes + 4)
+            throw new HttpException(400, SignatureTooLargeMessage, OrderErrorCodes.ValidationError);
+
+        try
+        {
+            var bytes = Convert.FromBase64String(base64Part);
+            if (bytes.Length > MaxSignaturePayloadBytes)
+                throw new HttpException(400, SignatureTooLargeMessage, OrderErrorCodes.ValidationError);
+        }
+        catch (FormatException)
+        {
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+        }
+    }
+
+    private static bool IsAllowedSignatureImageFormat(string subtype) =>
+        subtype.Equals("png", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("jpeg", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("jpg", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("webp", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("svg+xml", StringComparison.OrdinalIgnoreCase);
 
     private async Task<Delivery> GetManagedDeliveryAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken)
     {

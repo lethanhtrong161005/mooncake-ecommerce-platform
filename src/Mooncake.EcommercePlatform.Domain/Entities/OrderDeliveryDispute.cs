@@ -21,12 +21,20 @@ public sealed class OrderDeliveryDispute : BaseEntity
 
     public string? RefundBankSnapshotJson { get; set; }
 
-    public string Status { get; set; } = "Open";
+    public string Status { get; set; } = "AwaitingSupplierRebuttal";
 
     public string? ResolutionNotes { get; set; }
 
     public Guid? ResolvedByAdminId { get; set; }
 
     public DateTime? ResolvedAt { get; set; }
+
+    public string? SupplierRebuttalNotes { get; set; }
+
+    public string? SupplierRebuttalEvidenceUrlsJson { get; set; }
+
+    public DateTime? SupplierRebuttalAt { get; set; }
+
+    public DateTime? RebuttalDeadlineAt { get; set; }
 }
 

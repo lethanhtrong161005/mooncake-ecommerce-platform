@@ -2646,6 +2646,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
+                    b.Property<DateTime?>("RebuttalDeadlineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rebuttal_deadline_at");
+
                     b.Property<string>("RefundBankSnapshotJson")
                         .HasColumnType("text")
                         .HasColumnName("refund_bank_snapshot_json");
@@ -2672,6 +2676,19 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
+
+                    b.Property<DateTime?>("SupplierRebuttalAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("supplier_rebuttal_at");
+
+                    b.Property<string>("SupplierRebuttalEvidenceUrlsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("supplier_rebuttal_evidence_urls_json");
+
+                    b.Property<string>("SupplierRebuttalNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("supplier_rebuttal_notes");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

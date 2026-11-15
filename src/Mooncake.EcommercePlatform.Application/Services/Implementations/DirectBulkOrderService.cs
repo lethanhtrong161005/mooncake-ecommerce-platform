@@ -308,6 +308,10 @@ public sealed class DirectBulkOrderService(
         Guid adminUserId, Guid disputeId, ResolveOrderDeliveryDisputeRequest request, CancellationToken cancellationToken = default) =>
         enterpriseRepository.ResolveDeliveryDisputeAsync(disputeId, adminUserId, request, cancellationToken);
 
+    public Task<OrderDeliveryDisputeResponse> SubmitDeliveryDisputeRebuttalAsync(
+        Guid supplierUserId, Guid orderId, Guid disputeId, SubmitSupplierDeliveryDisputeRebuttalRequest request, CancellationToken cancellationToken = default) =>
+        enterpriseRepository.SubmitDeliveryDisputeRebuttalAsync(supplierUserId, orderId, disputeId, request, cancellationToken);
+
     public async Task<OrderRefundCaseResponse> RequestRefundAsync(
         Guid customerId, Guid orderId, CreateOrderRefundRequest request, CancellationToken cancellationToken = default)
     {

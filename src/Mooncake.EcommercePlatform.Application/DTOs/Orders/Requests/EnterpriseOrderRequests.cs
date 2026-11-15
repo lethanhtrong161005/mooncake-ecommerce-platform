@@ -121,6 +121,16 @@ public sealed record ResolveOrderDeliveryDisputeRequest
     public bool DeferTransfer { get; init; }
 }
 
+/// <summary>Supplier rebuttal for a delivery dispute within the 48-hour rebuttal window.</summary>
+public sealed record SubmitSupplierDeliveryDisputeRebuttalRequest
+{
+    [Required, MinLength(5), MaxLength(2000)]
+    public string Notes { get; init; } = string.Empty;
+
+    [MaxLength(10)]
+    public List<string>? EvidenceUrls { get; init; }
+}
+
 /// <summary>Generates a VNPay redirect URL for a specific order payment part.</summary>
 public sealed record CreateOrderPartVnPayUrlRequest
 {

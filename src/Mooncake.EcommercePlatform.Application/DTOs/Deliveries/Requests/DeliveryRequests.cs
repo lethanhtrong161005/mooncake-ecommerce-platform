@@ -23,6 +23,19 @@ public record CreateDeliveryRequest
     public string? TrackingCode { get; init; }
 
     public string? Notes { get; init; }
+
+    public IReadOnlyList<CreateDeliveryItemRequest>? Items { get; init; }
+}
+
+public record CreateDeliveryItemRequest
+{
+    public Guid? RfqItemId { get; init; }
+
+    public Guid? OrderItemId { get; init; }
+
+    public Guid? ItemId { get; init; }
+
+    public int Quantity { get; init; }
 }
 
 public record UpdateDeliveryStatusRequest

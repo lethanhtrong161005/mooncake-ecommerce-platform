@@ -8,7 +8,12 @@ using Mooncake.EcommercePlatform.Domain.Entities;
 public static class DeliveryResponseHelper
 {
     /// <summary>Maps a delivery entity and its proof count to a summary response.</summary>
-    public static DeliveryResponse ToResponse(Delivery delivery, int proofCount, DeliveryPartyContext? context = null) => new()
+    public static DeliveryResponse ToResponse(
+        Delivery delivery,
+        int proofCount,
+        DeliveryPartyContext? context = null,
+        IReadOnlyList<DeliveryItemResponse>? items = null,
+        int? totalBatches = null) => new()
     {
         Id = delivery.Id,
         ContractId = delivery.ContractId,
@@ -24,6 +29,9 @@ public static class DeliveryResponseHelper
         RecipientPhone = delivery.RecipientPhone,
         TrackingCode = delivery.TrackingCode,
         Notes = delivery.Notes,
+        BatchNumber = delivery.BatchNumber,
+        TotalBatches = totalBatches,
+        Items = items ?? Array.Empty<DeliveryItemResponse>(),
         ProofCount = proofCount,
         ContractNumber = context?.ContractNumber,
         OrderNumber = context?.OrderNumber,
@@ -35,7 +43,11 @@ public static class DeliveryResponseHelper
 
     /// <summary>Maps a delivery entity and its proof list to a detail response.</summary>
     public static DeliveryDetailResponse ToDetailResponse(
-        Delivery delivery, IReadOnlyList<DeliveryProofResponse> proofs, DeliveryPartyContext? context = null) => new()
+        Delivery delivery,
+        IReadOnlyList<DeliveryProofResponse> proofs,
+        DeliveryPartyContext? context = null,
+        IReadOnlyList<DeliveryItemResponse>? items = null,
+        int? totalBatches = null) => new()
     {
         Id = delivery.Id,
         ContractId = delivery.ContractId,
@@ -51,6 +63,9 @@ public static class DeliveryResponseHelper
         RecipientPhone = delivery.RecipientPhone,
         TrackingCode = delivery.TrackingCode,
         Notes = delivery.Notes,
+        BatchNumber = delivery.BatchNumber,
+        TotalBatches = totalBatches,
+        Items = items ?? Array.Empty<DeliveryItemResponse>(),
         ProofCount = proofs.Count,
         Proofs = proofs,
         ContractNumber = context?.ContractNumber,
@@ -79,6 +94,18 @@ public static class DeliveryResponseHelper
         CreatedAt = proof.CreatedAt
     };
 
+    /// <summary>Maps a delivery item entity to an item response.</summary>
+    public static DeliveryItemResponse ToItemResponse(DeliveryItem item) => new()
+    {
+        Id = item.Id,
+        DeliveryId = item.DeliveryId,
+        OrderItemId = item.OrderItemId,
+        RfqItemId = item.RfqItemId,
+        ProductName = item.ProductName,
+        Unit = item.Unit,
+        Quantity = item.Quantity
+    };
+
     /// <summary>Maps delivery share token state to a supplier share-link status response.</summary>
     public static DeliveryShareLinkResponse ToShareLinkResponse(Delivery delivery, DateTime utcNow)
     {
@@ -103,7 +130,11 @@ public static class DeliveryResponseHelper
 
     /// <summary>Maps a delivery entity to an anonymous field driver PoD payload.</summary>
     public static PublicDriverDeliveryResponse ToPublicDriverResponse(
-        Delivery delivery, int proofCount, string? referenceCode = null) => new()
+        Delivery delivery,
+        int proofCount,
+        string? referenceCode = null,
+        IReadOnlyList<DeliveryItemResponse>? items = null,
+        int? totalBatches = null) => new()
     {
         DeliveryId = delivery.Id,
         DeliveryNumber = delivery.DeliveryNumber,
@@ -117,6 +148,9 @@ public static class DeliveryResponseHelper
         RecipientPhone = delivery.RecipientPhone,
         TrackingCode = delivery.TrackingCode,
         Notes = delivery.Notes,
+        BatchNumber = delivery.BatchNumber,
+        TotalBatches = totalBatches,
+        Items = items ?? Array.Empty<DeliveryItemResponse>(),
         ReferenceCode = referenceCode,
         RequiresSignature = delivery.ContractId.HasValue,
         ProofCount = proofCount,
@@ -125,4 +159,3 @@ public static class DeliveryResponseHelper
                          && delivery.Status != Domain.Enums.DeliveryStatus.Returned
     };
 }
-

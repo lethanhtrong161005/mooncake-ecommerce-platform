@@ -89,6 +89,15 @@ public sealed record ReportOrderDeliveryDisputeRequest
 
     [MaxLength(10)]
     public List<string>? EvidenceUrls { get; init; }
+
+    [MaxLength(120)]
+    public string? RefundBankName { get; init; }
+
+    [MaxLength(50)]
+    public string? RefundAccountNumber { get; init; }
+
+    [MaxLength(150)]
+    public string? RefundAccountHolderName { get; init; }
 }
 
 /// <summary>Administrator resolution for a reported delivery dispute.</summary>
@@ -102,6 +111,14 @@ public sealed record ResolveOrderDeliveryDisputeRequest
 
     [Required, MinLength(5), MaxLength(1000)]
     public string Notes { get; init; } = string.Empty;
+
+    [MaxLength(120)]
+    public string? RefundReferenceCode { get; init; }
+
+    [MaxLength(1000)]
+    public string? TransferProofImageUrl { get; init; }
+
+    public bool DeferTransfer { get; init; }
 }
 
 /// <summary>Generates a VNPay redirect URL for a specific order payment part.</summary>
@@ -119,6 +136,15 @@ public sealed record CreateOrderRefundRequest
 
     [Required, MinLength(5), MaxLength(1000)]
     public string Reason { get; init; } = string.Empty;
+
+    [MaxLength(120)]
+    public string? RefundBankName { get; init; }
+
+    [MaxLength(50)]
+    public string? RefundAccountNumber { get; init; }
+
+    [MaxLength(150)]
+    public string? RefundAccountHolderName { get; init; }
 }
 
 /// <summary>Administrator processing decision for a sandbox order refund case.</summary>
@@ -131,6 +157,9 @@ public sealed record ProcessOrderRefundCaseRequest
 
     [MaxLength(120)]
     public string? RefundReferenceCode { get; init; }
+
+    [MaxLength(1000)]
+    public string? TransferProofImageUrl { get; init; }
 
     [Required, MinLength(5), MaxLength(1000)]
     public string Notes { get; init; } = string.Empty;
@@ -202,20 +231,38 @@ public sealed record UpsertSupplierPayoutAccountRequest
     public string? BranchName { get; init; }
 }
 
-/// <summary>Supplier request to disburse eligible funds for a delivered order in sandbox mode.</summary>
+/// <summary>Supplier request to disburse eligible funds for a delivered order via bank transfer.</summary>
 public sealed record CreateOrderPayoutRequest
 {
+    [MaxLength(30)]
+    public string? BankCode { get; init; }
+
+    [MaxLength(120)]
+    public string? BankName { get; init; }
+
+    [MaxLength(50)]
+    public string? AccountNumber { get; init; }
+
+    [MaxLength(150)]
+    public string? AccountHolderName { get; init; }
+
+    [MaxLength(150)]
+    public string? BranchName { get; init; }
+
     [MaxLength(500)]
     public string? Notes { get; init; }
 }
 
-/// <summary>Administrator decision on a supplier simulated payout request.</summary>
+/// <summary>Administrator decision on a supplier payout request.</summary>
 public sealed record ProcessOrderPayoutRequest
 {
     public bool Approve { get; init; }
 
     [MaxLength(120)]
     public string? PayoutReferenceCode { get; init; }
+
+    [MaxLength(1000)]
+    public string? TransferProofImageUrl { get; init; }
 
     [Required, MinLength(5), MaxLength(1000)]
     public string Notes { get; init; } = string.Empty;

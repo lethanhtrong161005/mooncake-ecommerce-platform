@@ -15,6 +15,7 @@ public static class B2BOrderingMessages
     public const string PackagingRevisionNotFound = "Packaging revision was not found.";
     public const string PackagingRevisionStatusInvalid = "Only a design under review can be reviewed.";
     public const string PackagingRevisionNotesRequired = "Revision notes must contain at least 10 characters.";
+    public const string PackagingRevisionSurchargeDisallowed = "Revision surcharge is only allowed starting from revision 5.";
     public const string PackagingProductionBlocked = "Custom packaging design must be approved before production can start.";
     public const string PackagingNotSupported = "Custom packaging is not supported for one or more products in this order.";
     public const string OrderNotFound = "Order was not found.";

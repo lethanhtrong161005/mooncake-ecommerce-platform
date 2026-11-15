@@ -106,6 +106,8 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
             .Where(item => item.CustomPackagingId == current.Id)
             .Select(item => (int?)item.RevisionNumber).MaxAsync(cancellationToken) ?? 0;
         revision.RevisionNumber++;
+        if (revision.RevisionNumber < 5 && revision.RevisionSurcharge > 0m)
+            throw new HttpException(400, B2BOrderingMessages.PackagingRevisionSurchargeDisallowed, OrderErrorCodes.ValidationError);
         current.Status = CustomPackagingStatus.DesignReview;
         current.UpdatedAt = revision.SubmittedAt;
         current.UpdatedBy = revision.SubmittedByUserId;
@@ -117,7 +119,19 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
                 .SetProperty(item => item.Status, "Superseded")
                 .SetProperty(item => item.UpdatedAt, revision.SubmittedAt), cancellationToken);
 
-        if (revision.DesignFee > 0m)
+        var existingSurcharges = await context.CustomPackagingRevisions
+            .Where(item => item.CustomPackagingId == current.Id && item.Id != revision.Id)
+            .SumAsync(item => (decimal?)item.RevisionSurcharge, cancellationToken) ?? 0m;
+        var effectiveDesignFee = revision.DesignFee > 0m
+            ? revision.DesignFee
+            : (await context.CustomPackagingRevisions
+                .Where(item => item.CustomPackagingId == current.Id && !item.IsDeleted && item.DesignFee > 0m)
+                .OrderByDescending(item => item.RevisionNumber)
+                .Select(item => (decimal?)item.DesignFee)
+                .FirstOrDefaultAsync(cancellationToken) ?? 0m);
+        var totalFeeForRevision = effectiveDesignFee + existingSurcharges + revision.RevisionSurcharge;
+
+        if (totalFeeForRevision > 0m)
         {
             context.PackagingFeeChangeRequests.Add(new PackagingFeeChangeRequest
             {
@@ -126,10 +140,10 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
                 CustomPackagingId = current.Id,
                 RevisionId = revision.Id,
                 OldPackagingFee = order.PackagingFee,
-                DeltaAmount = revision.DesignFee,
-                NewPackagingFee = order.PackagingFee + revision.DesignFee,
+                DeltaAmount = totalFeeForRevision,
+                NewPackagingFee = order.PackagingFee + totalFeeForRevision,
                 OldOrderTotal = order.TotalAmount,
-                NewOrderTotal = order.TotalAmount + revision.DesignFee,
+                NewOrderTotal = order.TotalAmount + totalFeeForRevision,
                 OrderVersionSnapshot = order.Version,
                 Status = "PendingCustomerApproval",
                 CreatedBy = revision.SubmittedByUserId,
@@ -205,14 +219,24 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
             var order = await context.Orders.FromSqlInterpolated(
                     $"SELECT * FROM orders WHERE id = {currentPackaging.OrderId} FOR UPDATE")
                 .SingleAsync(cancellationToken);
-            order.PackagingFee += currentRevision.DesignFee;
-            order.TotalAmount += currentRevision.DesignFee;
+
+            var allRevisions = await context.CustomPackagingRevisions
+                .Where(item => item.CustomPackagingId == currentPackaging.Id && !item.IsDeleted)
+                .ToListAsync(cancellationToken);
+            var totalRevisionSurcharge = allRevisions.Sum(item => item.RevisionSurcharge);
+            var effectiveDesignFee = currentRevision.DesignFee > 0m
+                ? currentRevision.DesignFee
+                : (allRevisions.OrderByDescending(item => item.RevisionNumber).FirstOrDefault(item => item.DesignFee > 0m)?.DesignFee ?? 0m);
+            var totalPackagingFee = effectiveDesignFee + totalRevisionSurcharge;
+
+            order.PackagingFee += totalPackagingFee;
+            order.TotalAmount += totalPackagingFee;
             order.Version += 1;
             order.UpdatedAt = reviewedAtUtc;
             order.UpdatedBy = actorUserId;
 
             Guid? generatedObligationId = null;
-            if (currentRevision.DesignFee > 0m)
+            if (totalPackagingFee > 0m)
             {
                 var existingObligations = await context.OrderPaymentObligations
                     .Where(item => item.OrderId == order.Id && !item.IsDeleted)
@@ -227,7 +251,7 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
                         SequenceNo = nextSeq,
                         ObligationType = "PackagingFeeAdjustment",
                         Title = $"Custom packaging fee adjustment (Revision #{currentRevision.RevisionNumber})",
-                        TotalAmount = currentRevision.DesignFee,
+                        TotalAmount = totalPackagingFee,
                         PaidAmount = 0m,
                         Status = "Pending",
                         IsRequiredBeforeProduction = true,
@@ -242,7 +266,7 @@ public sealed class CustomPackagingRepository(ApplicationDbContext context) : IC
                     generatedObligationId = supplemental.Id;
 
                     var partAmounts = PriceQuoteVersionHelper.SplitIntoParts(
-                        currentRevision.DesignFee, OrderPolicyDefaults.VnPayMaxAmountPerPartVnd);
+                        totalPackagingFee, OrderPolicyDefaults.VnPayMaxAmountPerPartVnd);
                     for (var i = 0; i < partAmounts.Count; i++)
                     {
                         context.OrderPaymentParts.Add(new OrderPaymentPart

@@ -1598,6 +1598,12 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.Property<int>("RevisionNumber")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("RevisionSurcharge")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)

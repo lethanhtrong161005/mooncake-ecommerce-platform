@@ -78,6 +78,11 @@ public sealed class CustomPackagingService(
             CustomPackagingStatus.DesignReview or CustomPackagingStatus.RevisionRequested))
             throw new HttpException(409, B2BOrderingMessages.PackagingRevisionLocked, OrderErrorCodes.StateConflict);
 
+        var existingRevisions = await repository.GetRevisionsAsync(packaging.Id, cancellationToken);
+        var nextRevisionNumber = existingRevisions.Count == 0 ? 1 : existingRevisions.Max(item => item.RevisionNumber) + 1;
+        if (nextRevisionNumber < 5 && request.RevisionSurcharge > 0m)
+            throw new HttpException(400, B2BOrderingMessages.PackagingRevisionSurchargeDisallowed, OrderErrorCodes.ValidationError);
+
         var now = dateTimeProvider.UtcNow;
         var revision = new CustomPackagingRevision
         {
@@ -86,6 +91,7 @@ public sealed class CustomPackagingService(
             MockupUrl = CustomPackagingRequestHelper.NormalizeHttpsUrl(request.MockupUrl),
             SupplierNotes = request.SupplierNotes?.Trim(),
             DesignFee = request.DesignFee,
+            RevisionSurcharge = request.RevisionSurcharge,
             Status = CustomPackagingStatus.DesignReview,
             SubmittedByUserId = supplierUserId,
             SubmittedAt = now,

@@ -38,6 +38,10 @@ public interface IDeliveryRepository
 
     Task<bool> CanAccessDeliveryAsync(Guid deliveryId, Guid userId, CancellationToken cancellationToken = default);
 
+    Task<bool> CanConfirmDeliveryReceiptAsync(Guid deliveryId, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<Guid?> GetSupplierUserIdForDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default);
+
     Task<bool> CanManageDeliveryAsync(Guid deliveryId, Guid userId, CancellationToken cancellationToken = default);
 
     Task<bool> CanAccessContractAsync(Guid contractId, Guid userId, CancellationToken cancellationToken = default);

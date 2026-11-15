@@ -113,6 +113,7 @@ public sealed class NotificationService(
         var r = (refType ?? string.Empty).ToLowerInvariant();
         if (t.Contains("pay") || r.Contains("pay")) return "payment";
         if (t.Contains("contract") || r.Contains("contract")) return "contract";
+        if (t.Contains("delivery") || r.Contains("delivery")) return "delivery";
         if (t.Contains("order") || r.Contains("order")) return "order";
         if (t.Contains("rfq") || r.Contains("rfq")) return "rfq";
         return "system";
@@ -124,7 +125,7 @@ public sealed class NotificationService(
         if (refId == null) return "/#/";
         if (r.Contains("contract")) return $"/#/hop-dong-tien-do?id={refId}";
         if (r.Contains("order")) return "/#/don-hang-cua-toi";
-        if (r.Contains("delivery")) return $"/#/giao-nhan-pod?id={refId}";
+        if (r.Contains("delivery")) return "/#/giao-hang-pod";
         if (r.Contains("rfq")) return $"/#/rfq-dau-thau?id={refId}";
         return "/#/";
     }

@@ -21,6 +21,8 @@ public interface IDeliveryService
 
     Task<DeliveryResponse> UpdateStatusAsync(Guid userId, Guid deliveryId, UpdateDeliveryStatusRequest request, CancellationToken cancellationToken = default);
 
+    Task<DeliveryResponse> ConfirmReceiptAsync(Guid customerId, Guid deliveryId, CancellationToken cancellationToken = default);
+
     Task<DeliveryResponse> UpdateCarrierInfoAsync(Guid userId, Guid deliveryId, UpdateCarrierInfoRequest request, CancellationToken cancellationToken = default);
 
     Task<DeliveryProofResponse> SubmitProofAsync(Guid userId, Guid deliveryId, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default);

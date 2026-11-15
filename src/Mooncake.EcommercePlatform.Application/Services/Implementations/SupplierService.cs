@@ -173,6 +173,15 @@ public sealed class SupplierService(ISupplierRepository repository, IDateTimePro
                 doc.ReviewStatus = request.Approve == true ? "Approved" : "Rejected";
                 doc.ReviewedAt = clock.UtcNow; doc.ReviewedByUserId = actorId; doc.RejectionReason = reason;
             }
+            if (request.Approve == true)
+            {
+                var todayVn = DateOnly.FromDateTime(clock.UtcNow.AddHours(7));
+                var hasValidAttp = selected.Any(d => d.DocumentType == C.FoodSafety && (!d.ExpiresOn.HasValue || d.ExpiresOn.Value >= todayVn));
+                if (hasValidAttp)
+                {
+                    await repository.UnsuspendShopIfSuspendedForExpiredLicenseAsync(profile.Id, token);
+                }
+            }
             RecordEvent(profile, actorId, C.Pending, request.Approve == true ? C.Approved : C.Rejected, reason, true);
             var result = Result(profile, submission.Revision);
             StoreResult(actorId, C.Approved, profileId, parsedKey, request, result);

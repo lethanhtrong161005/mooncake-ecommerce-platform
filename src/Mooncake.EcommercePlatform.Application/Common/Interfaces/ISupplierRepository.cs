@@ -23,6 +23,8 @@ public interface ISupplierRepository
     Task<VerificationIdempotencyRecord?> GetIdempotencyAsync(Guid actor, string operation, Guid resource, Guid key, CancellationToken cancellationToken);
     Task<VerificationPage<SupplierApplicationResponse>> ListAsync(SupplierApplicationQuery query, CancellationToken cancellationToken);
     Task<VerificationPage<SupplierHistoryResponse>> HistoryAsync(Guid profileId, int page, int pageSize, CancellationToken cancellationToken);
+    Task<int> ProcessLicenseExpiriesAsync(CancellationToken cancellationToken = default);
+    Task<int> UnsuspendShopIfSuspendedForExpiredLicenseAsync(Guid supplierProfileId, CancellationToken cancellationToken = default);
     void AddProfile(SupplierProfile profile);
     void AddSubmission(SupplierVerificationSubmission submission);
     void AddDocument(SupplierVerificationDocument document);

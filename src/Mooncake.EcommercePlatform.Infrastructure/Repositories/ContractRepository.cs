@@ -426,7 +426,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             && milestone.Status != MilestoneStatus.Failed
             && milestone.Status != MilestoneStatus.Overdue)
         {
-            throw new Mooncake.EcommercePlatform.Application.Common.Exceptions.HttpException(409, "Milestone progress cannot be submitted for completed or pending-review milestones.");
+            throw new Mooncake.EcommercePlatform.Application.Common.Exceptions.HttpException(409, "Mốc này đã hoàn tất hoặc đang chờ khách duyệt nên chưa thể nộp lại tiến độ. Hãy chờ khách phản hồi.");
         }
 
         var fromStatus = milestone.Status;

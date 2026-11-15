@@ -117,6 +117,7 @@ public static class DirectBulkOrderEnterpriseConfiguration
         refundCase.Property(x => x.Status).HasMaxLength(30);
         refundCase.Property(x => x.AdminNotes).HasMaxLength(1000);
         refundCase.Property(x => x.RefundReferenceCode).HasMaxLength(120);
+        refundCase.Property(x => x.TransferProofImageUrl).HasMaxLength(1000);
         refundCase.Property(x => x.RequestedAmount).HasPrecision(14, 2);
         refundCase.Property(x => x.ApprovedAmount).HasPrecision(14, 2);
         refundCase.HasOne<Order>().WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
@@ -156,6 +157,7 @@ public static class DirectBulkOrderEnterpriseConfiguration
         payoutRequest.Property(x => x.Status).HasMaxLength(30);
         payoutRequest.Property(x => x.AdminNotes).HasMaxLength(1000);
         payoutRequest.Property(x => x.PayoutReferenceCode).HasMaxLength(120);
+        payoutRequest.Property(x => x.TransferProofImageUrl).HasMaxLength(1000);
         payoutRequest.Property(x => x.Amount).HasPrecision(14, 2);
         payoutRequest.HasOne<Order>().WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
         payoutRequest.HasOne<SupplierPayoutAccount>().WithMany().HasForeignKey(x => x.PayoutAccountId).OnDelete(DeleteBehavior.Restrict);

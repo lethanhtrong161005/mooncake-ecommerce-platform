@@ -104,8 +104,16 @@ public class AiAnalyticsReportRepository : IAiAnalyticsReportRepository
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        var orderQuery = _dbContext.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && o.CreatedAt <= to && !o.IsDeleted);
-        var contractQuery = _dbContext.Contracts.AsNoTracking().Where(c => c.CreatedAt >= from && c.CreatedAt <= to && !c.IsDeleted);
+        var orderQuery = _dbContext.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && o.CreatedAt <= to && !o.IsDeleted
+            && (o.Status == OrderStatus.Confirmed
+                || o.Status == OrderStatus.AwaitingCustomerDeliveryApproval
+                || o.Status == OrderStatus.Processing
+                || o.Status == OrderStatus.Shipped
+                || o.Status == OrderStatus.Delivered));
+        var contractQuery = _dbContext.Contracts.AsNoTracking().Where(c => c.CreatedAt >= from && c.CreatedAt <= to && !c.IsDeleted
+            && (c.Status == ContractStatus.Active
+                || c.Status == ContractStatus.CompletedOnTime
+                || c.Status == ContractStatus.CompletedLate));
 
         if (shopId.HasValue)
         {
@@ -116,7 +124,11 @@ public class AiAnalyticsReportRepository : IAiAnalyticsReportRepository
             }
         }
 
-        var totalOrderGmv = await orderQuery.SumAsync(o => (decimal?)o.TotalAmount, cancellationToken) ?? 0m;
+        var grossOrderGmv = await orderQuery.SumAsync(o => (decimal?)o.TotalAmount, cancellationToken) ?? 0m;
+        var refundedOrderGmv = await _dbContext.OrderFinancialLedgerEntries.AsNoTracking()
+            .Where(e => !e.IsDeleted && e.EntryType == "RefundedSimulated" && orderQuery.Any(o => o.Id == e.OrderId))
+            .SumAsync(e => (decimal?)e.Amount, cancellationToken) ?? 0m;
+        var totalOrderGmv = Math.Max(0m, grossOrderGmv - refundedOrderGmv);
         var totalContractGmv = await contractQuery.SumAsync(c => (decimal?)c.TotalValue, cancellationToken) ?? 0m;
         var totalGmv = totalOrderGmv + totalContractGmv;
 
@@ -165,8 +177,16 @@ public class AiAnalyticsReportRepository : IAiAnalyticsReportRepository
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        var orderQuery = _dbContext.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && o.CreatedAt <= to && !o.IsDeleted);
-        var contractQuery = _dbContext.Contracts.AsNoTracking().Where(c => c.CreatedAt >= from && c.CreatedAt <= to && !c.IsDeleted);
+        var orderQuery = _dbContext.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && o.CreatedAt <= to && !o.IsDeleted
+            && (o.Status == OrderStatus.Confirmed
+                || o.Status == OrderStatus.AwaitingCustomerDeliveryApproval
+                || o.Status == OrderStatus.Processing
+                || o.Status == OrderStatus.Shipped
+                || o.Status == OrderStatus.Delivered));
+        var contractQuery = _dbContext.Contracts.AsNoTracking().Where(c => c.CreatedAt >= from && c.CreatedAt <= to && !c.IsDeleted
+            && (c.Status == ContractStatus.Active
+                || c.Status == ContractStatus.CompletedOnTime
+                || c.Status == ContractStatus.CompletedLate));
 
         if (shopId.HasValue)
         {
@@ -177,7 +197,11 @@ public class AiAnalyticsReportRepository : IAiAnalyticsReportRepository
             }
         }
 
-        var totalOrderGmv = await orderQuery.SumAsync(o => (decimal?)o.TotalAmount, cancellationToken) ?? 0m;
+        var grossOrderGmv = await orderQuery.SumAsync(o => (decimal?)o.TotalAmount, cancellationToken) ?? 0m;
+        var refundedOrderGmv = await _dbContext.OrderFinancialLedgerEntries.AsNoTracking()
+            .Where(e => !e.IsDeleted && e.EntryType == "RefundedSimulated" && orderQuery.Any(o => o.Id == e.OrderId))
+            .SumAsync(e => (decimal?)e.Amount, cancellationToken) ?? 0m;
+        var totalOrderGmv = Math.Max(0m, grossOrderGmv - refundedOrderGmv);
         var totalContractGmv = await contractQuery.SumAsync(c => (decimal?)c.TotalValue, cancellationToken) ?? 0m;
         var totalGmv = totalOrderGmv + totalContractGmv;
 

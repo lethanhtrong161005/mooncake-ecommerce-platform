@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<IAiChatService, AiChatService>();
         services.AddScoped<IAiAnalyticsService, AiAnalyticsService>();
+        services.AddScoped<IReportService, ReportService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IWishlistService, WishlistService>();
         services.AddScoped<IChatService, ChatService>();

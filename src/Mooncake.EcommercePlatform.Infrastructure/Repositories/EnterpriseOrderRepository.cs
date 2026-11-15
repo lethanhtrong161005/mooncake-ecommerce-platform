@@ -1103,6 +1103,13 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     var reason = request.Reason.Trim();
     var supplierUserId = await GetSupplierUserIdByShopAsync(lockedOrder.ShopId, cancellationToken);
 
+    // D24: default refund suggestion (50% for Processing with approved/in-production custom packaging, else 100%).
+    var packagingStatusForSuggestion = await context.CustomPackagings.AsNoTracking()
+        .Where(item => item.OrderId == lockedOrder.Id && !item.IsDeleted)
+        .Select(item => (CustomPackagingStatus?)item.Status)
+        .FirstOrDefaultAsync(cancellationToken);
+    var suggestion = OrderRefundSuggestionHelper.Suggest(lockedOrder.Status, packagingStatusForSuggestion, paidAmount);
+
     // Matrix 10.10:
     // 1) Pending or AwaitingCustomerDeliveryApproval, OR Confirmed with 0 paid and Customer/Supplier cancels before production:
     //    Wait: Confirmed with 0 paid -> unilateral immediate cancel allowed!
@@ -1120,7 +1127,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       OrderStatusSnapshot = lockedOrder.Status.ToString(),
       Reason = reason,
       Status = autoApprove ? "AutoApproved" : "Pending",
-      ProposedRefundAmount = paidAmount,
+      ProposedRefundAmount = suggestion.Amount,
       ReviewedByUserId = autoApprove ? actorUserId : null,
       ReviewedAt = autoApprove ? now : null,
       ReviewNotes = autoApprove ? "Automatically approved under Direct Bulk Order policy matrix." : null,
@@ -1132,7 +1139,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
     if (autoApprove)
     {
-      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelEntity.Id, actorUserId, reason, paidAmount, now, cancellationToken);
+      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelEntity.Id, actorUserId, reason, paidAmount, now, cancellationToken, suggestion.Amount);
     }
     else
     {
@@ -1170,7 +1177,12 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
     await context.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
-    return (MapCancelRequest(cancelEntity), lockedOrder.Status);
+    return (MapCancelRequest(cancelEntity) with
+    {
+      SuggestedRefundAmount = suggestion.Amount,
+      SuggestedRefundPercent = suggestion.Percent,
+      SuggestionReason = suggestion.Reason
+    }, lockedOrder.Status);
   }
 
   public async Task<(OrderCancellationRequestResponse Request, OrderStatus UpdatedOrderStatus)> RespondCancellationRequestAsync(
@@ -1210,7 +1222,8 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       var paidAmount = await context.Payments
           .Where(item => item.OrderId == lockedOrder.Id && item.Status == PaymentStatus.Completed && !item.IsDeleted)
           .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelReq.Id, actorUserId, cancelReq.Reason, paidAmount, now, cancellationToken);
+      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelReq.Id, actorUserId, cancelReq.Reason, paidAmount, now, cancellationToken,
+          Math.Min(paidAmount, cancelReq.ProposedRefundAmount));
     }
     else
     {
@@ -2508,8 +2521,9 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
   private async Task ExecuteOrderCancellationCoreAsync(
       Order lockedOrder, Guid? cancelRequestId, Guid actorUserId, string reason, decimal paidAmount,
-      DateTime now, CancellationToken cancellationToken)
+      DateTime now, CancellationToken cancellationToken, decimal? refundAmount = null)
   {
+    var suggestedRefund = refundAmount ?? paidAmount;
     var previousStatus = lockedOrder.Status;
     lockedOrder.Status = OrderStatus.Cancelled;
     lockedOrder.CancelledAt = now;
@@ -2537,7 +2551,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
           ShopId = lockedOrder.ShopId,
           CancellationRequestId = cancelRequestId,
           CaseNumber = $"RFD-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
-          RequestedAmount = paidAmount,
+          RequestedAmount = suggestedRefund,
           ApprovedAmount = 0m,
           Reason = $"Automatic refund case after order cancellation: {reason}",
           Status = "Pending",
@@ -2557,7 +2571,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
           EntryType = "ReservedForRefund",
           BalanceBucket = "Held",
           Amount = 0m,
-          Description = $"Refund case {refundCase.CaseNumber} queued ({paidAmount:N0} VND) after order cancellation.",
+          Description = $"Refund case {refundCase.CaseNumber} queued ({suggestedRefund:N0} VND) after order cancellation.",
           IdempotencyKey = $"cancel-refund:{lockedOrder.Id}",
           CreatedBy = actorUserId,
           CreatedAt = now,

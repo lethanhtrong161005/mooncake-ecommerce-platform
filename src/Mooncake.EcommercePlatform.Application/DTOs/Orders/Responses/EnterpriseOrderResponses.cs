@@ -229,7 +229,11 @@ public sealed record OrderDeliverySnapshotResponse(
     DateOnly? ScheduledDate,
     DateOnly? ActualDeliveryDate,
     int ProofCount,
-    IReadOnlyList<OrderDeliveryProofPhotoResponse> Proofs);
+    IReadOnlyList<OrderDeliveryProofPhotoResponse> Proofs,
+    string? DriverName = null,
+    string? DriverPhone = null,
+    string? VehiclePlate = null,
+    DateTime? DriverClaimedAt = null);
 
 /// <summary>PoD photo entry embedded inside an order delivery snapshot.</summary>
 public sealed record OrderDeliveryProofPhotoResponse(

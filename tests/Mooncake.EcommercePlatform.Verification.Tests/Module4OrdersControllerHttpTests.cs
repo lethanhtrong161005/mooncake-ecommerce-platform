@@ -428,6 +428,59 @@ public sealed class Module4OrdersControllerHttpTests
     }
 
     [Fact]
+    public async Task GetOrder_WithClaimedDriverDelivery_ReturnsDriverInfoInLatestDeliveryForCustomerAndSupplier()
+    {
+        var deliveryId = Guid.NewGuid();
+        var claimedAt = DateTime.UtcNow;
+        var deliverySnapshot = new OrderDeliverySnapshotResponse(
+            deliveryId,
+            "DEL-20261116-001",
+            DeliveryStatus.InTransit,
+            "TRK-998877",
+            DateOnly.FromDateTime(claimedAt),
+            null,
+            0,
+            [],
+            "Nguyễn Văn Tài",
+            "0912345678",
+            "29A-12345",
+            claimedAt);
+
+        var orderWithDelivery = CreateOrder(OrderStatus.Shipped) with
+        {
+            LatestDelivery = deliverySnapshot
+        };
+
+        // 1. Customer
+        var customerClient = CreateClient("Customer");
+        orderService.Setup(s => s.GetAsync(CustomerId, false, OrderId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(orderWithDelivery);
+
+        var custResponse = await customerClient.GetAsync($"/api/v1/orders/{OrderId}");
+        Assert.Equal(HttpStatusCode.OK, custResponse.StatusCode);
+        var custJson = await custResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var custDelivery = custJson.GetProperty("data").GetProperty("latestDelivery");
+        Assert.Equal("Nguyễn Văn Tài", custDelivery.GetProperty("driverName").GetString());
+        Assert.Equal("0912345678", custDelivery.GetProperty("driverPhone").GetString());
+        Assert.Equal("29A-12345", custDelivery.GetProperty("vehiclePlate").GetString());
+        Assert.NotNull(custDelivery.GetProperty("driverClaimedAt").GetString());
+
+        // 2. Supplier
+        var supplierClient = CreateClient("Supplier");
+        orderService.Setup(s => s.GetAsync(SupplierId, true, OrderId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(orderWithDelivery);
+
+        var supResponse = await supplierClient.GetAsync($"/api/v1/orders/{OrderId}");
+        Assert.Equal(HttpStatusCode.OK, supResponse.StatusCode);
+        var supJson = await supResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var supDelivery = supJson.GetProperty("data").GetProperty("latestDelivery");
+        Assert.Equal("Nguyễn Văn Tài", supDelivery.GetProperty("driverName").GetString());
+        Assert.Equal("0912345678", supDelivery.GetProperty("driverPhone").GetString());
+        Assert.Equal("29A-12345", supDelivery.GetProperty("vehiclePlate").GetString());
+        Assert.NotNull(supDelivery.GetProperty("driverClaimedAt").GetString());
+    }
+
+    [Fact]
     public async Task CancelOrder_Customer_Returns200OK()
     {
         var client = CreateClient("Customer");

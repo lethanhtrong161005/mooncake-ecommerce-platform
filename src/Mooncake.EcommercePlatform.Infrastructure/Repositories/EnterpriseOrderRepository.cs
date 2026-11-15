@@ -570,7 +570,11 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
               proofsByDelivery.GetValueOrDefault(latestDelivery.Id, []).Count,
               proofsByDelivery.GetValueOrDefault(latestDelivery.Id, [])
                   .Select(p => new OrderDeliveryProofPhotoResponse(p.Id, p.ProofType, p.PhotoUrl, p.TakenBy, p.TakenAt ?? p.CreatedAt, p.Notes))
-                  .ToList());
+                  .ToList(),
+              latestDelivery.DriverName,
+              latestDelivery.DriverPhone,
+              latestDelivery.VehiclePlate,
+              latestDelivery.DriverClaimedAt);
 
       var allowedActions = ComputeAllowedActions(
           order, baseResp.CustomPackaging, paymentSummary, financialSummary, deliverySnapshot,

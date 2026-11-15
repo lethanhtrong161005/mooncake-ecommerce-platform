@@ -415,7 +415,7 @@ public sealed class DeliveryDisputeRebuttalTests
         var exBeforeRebuttal = await Assert.ThrowsAsync<HttpException>(() =>
             repo.ResolveDeliveryDisputeAsync(disputeId, adminUserId, resolveRequest));
         Assert.Equal(409, exBeforeRebuttal.StatusCode);
-        Assert.Contains("awaiting supplier rebuttal", exBeforeRebuttal.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hạn phản biện", exBeforeRebuttal.Message, StringComparison.OrdinalIgnoreCase);
 
         // 2. Xưởng nộp phản biện
         var rebuttalRequest = new SubmitSupplierDeliveryDisputeRebuttalRequest

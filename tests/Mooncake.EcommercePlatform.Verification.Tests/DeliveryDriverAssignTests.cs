@@ -61,7 +61,7 @@ public sealed class DeliveryDriverAssignTests
             }));
 
         Assert.Equal(409, ex.StatusCode);
-        Assert.Equal("Hãy nhận chuyến trước", ex.Message);
+        Assert.Equal(DeliveryMessages.MustClaimTripFirst, ex.Message);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public sealed class DeliveryDriverAssignTests
             service.EnsurePublicTokenSubmittableAsync("sample-token"));
 
         Assert.Equal(409, ex.StatusCode);
-        Assert.Equal("Hãy nhận chuyến trước", ex.Message);
+        Assert.Equal(DeliveryMessages.MustClaimTripFirst, ex.Message);
     }
 
     [Fact]
@@ -252,7 +252,7 @@ public sealed class DeliveryDriverAssignTests
             service.ClaimTripAsync("sample-token", request));
 
         Assert.Equal(409, ex.StatusCode);
-        Assert.Equal("Chuyến đã có tài xế nhận", ex.Message);
+        Assert.Equal(DeliveryMessages.DriverAlreadyClaimedConflict, ex.Message);
     }
 
     [Fact]

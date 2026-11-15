@@ -23,7 +23,7 @@ public sealed class ContractService(
         PagedQueryHelper.Validate(query);
         PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "totalAmountAsc", "totalAmountDesc");
         if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value))
-            throw new HttpException(400, "Invalid contract status filter.", "VALIDATION_ERROR");
+            throw new HttpException(400, "Bộ lọc trạng thái hợp đồng chưa hợp lệ. Hãy chọn lại trạng thái cần xem.", "VALIDATION_ERROR");
         var page = await repository.GetContractsPageAsync(userId, supplier, query, cancellationToken);
         return new PagedResult<ContractResponse>(page.Items.Select(contract => ToResponse(contract)).ToArray(),
             page.Page, page.PageSize, page.TotalCount);
@@ -75,9 +75,9 @@ public sealed class ContractService(
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.Status != ContractStatus.PendingSignature)
-            throw new HttpException(409, "The contract must be pending signature before requesting an OTP.");
+            throw new HttpException(409, "Hợp đồng chưa ở bước chờ ký nên chưa thể gửi mã OTP. Hãy chờ hợp đồng được gửi để ký.");
         if (await repository.HasSignedAsync(contract, userId, cancellationToken))
-            throw new HttpException(409, "This party has already signed the contract.");
+            throw new HttpException(409, "Bên này đã ký hợp đồng rồi. Hãy chờ bên còn lại hoàn tất việc ký.");
         await authService.RequestContractSignatureOtpAsync(userId, contractId, cancellationToken);
         return ToResponse(contract);
     }
@@ -89,7 +89,7 @@ public sealed class ContractService(
         {
             var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
             if (contract.Status != ContractStatus.PendingSignature)
-                throw new HttpException(409, "Only a draft contract can be sent for signature.");
+                throw new HttpException(409, "Chỉ hợp đồng ở trạng thái nháp mới gửi đi ký được. Hãy tải lại trang để xem trạng thái mới nhất.");
         }
         return await GetAsync(userId, contractId, cancellationToken);
     }
@@ -97,17 +97,17 @@ public sealed class ContractService(
     public async Task<ContractResponse> SignAsync(Guid userId, Guid contractId, string code, bool confirmTerms, string? ipAddress,
         string? userAgent, CancellationToken cancellationToken = default)
     {
-        if (!confirmTerms) throw new HttpException(400, "Confirmation of the contract terms is required.");
+        if (!confirmTerms) throw new HttpException(400, "Hãy tích chọn xác nhận đã đọc điều khoản hợp đồng trước khi ký.");
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (await repository.HasSignedAsync(contract, userId, cancellationToken))
             return ToResponse(contract);
         if (contract.Status != ContractStatus.PendingSignature)
-            throw new HttpException(409, "The contract is not awaiting signature.");
+            throw new HttpException(409, "Hợp đồng hiện không ở bước chờ ký. Hãy tải lại trang để xem trạng thái mới nhất.");
         if (string.IsNullOrWhiteSpace(code))
-            throw new HttpException(400, "Signature verification code is required.");
+            throw new HttpException(400, "Hãy nhập mã OTP xác thực chữ ký. Nếu chưa nhận được mã, hãy bấm gửi lại mã.");
         await authService.VerifyContractSignatureOtpAsync(userId, contractId, code, cancellationToken);
         var signed = await repository.SignAsync(contractId, userId, ipAddress, userAgent, cancellationToken)
-                     ?? throw new HttpException(409, "The contract state changed while signature was being recorded. Refresh and try again.");
+                     ?? throw new HttpException(409, "Hợp đồng vừa được cập nhật trong lúc ghi nhận chữ ký. Hãy tải lại trang và ký lại.");
         return ToResponse(signed);
     }
 
@@ -122,22 +122,22 @@ public sealed class ContractService(
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.CustomerId == userId)
-            throw new HttpException(403, "Only the supplier can submit milestone progress.");
+            throw new HttpException(403, "Chỉ xưởng mới nộp được tiến độ mốc sản xuất. Hãy đăng nhập bằng tài khoản của xưởng.");
         if (contract.Status != ContractStatus.Active)
-            throw new HttpException(409, "Milestone progress can only be submitted for active contracts.");
+            throw new HttpException(409, "Chỉ hợp đồng đang hiệu lực mới nộp được tiến độ. Hãy kiểm tra trạng thái hợp đồng.");
 
         var milestone = await repository.GetMilestoneAsync(contractId, milestoneId, cancellationToken)
-            ?? throw new HttpException(404, "Milestone not found.");
+            ?? throw new HttpException(404, "Không tìm thấy mốc tiến độ. Hãy tải lại trang và thử lại.");
         if (milestone.IsDeposit)
-            throw new HttpException(400, "Deposit milestones cannot have progress submitted.");
+            throw new HttpException(400, "Mốc đặt cọc không cần nộp tiến độ. Hãy chọn mốc sản xuất khác.");
         if (milestone.Status != MilestoneStatus.Pending
             && milestone.Status != MilestoneStatus.InProgress
             && milestone.Status != MilestoneStatus.Failed
             && milestone.Status != MilestoneStatus.Overdue)
-            throw new HttpException(409, "Milestone progress cannot be submitted for completed or pending-review milestones.");
+            throw new HttpException(409, "Mốc này đã hoàn tất hoặc đang chờ khách duyệt nên chưa thể nộp lại tiến độ. Hãy chờ khách phản hồi.");
 
         var updated = await repository.SubmitMilestoneProgressAsync(contractId, milestoneId, request.ProgressNotes, request.EvidenceUrls, userId, cancellationToken)
-            ?? throw new HttpException(409, "Failed to submit milestone progress.");
+            ?? throw new HttpException(409, "Chưa nộp được tiến độ vì mốc vừa thay đổi. Hãy tải lại trang và nộp lại.");
 
         return ToMilestoneResponse(updated);
     }
@@ -146,17 +146,17 @@ public sealed class ContractService(
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.CustomerId != userId)
-            throw new HttpException(403, "Only the customer can verify milestone progress.");
+            throw new HttpException(403, "Chỉ khách hàng mới duyệt được tiến độ mốc. Hãy đăng nhập bằng tài khoản của khách.");
         if (contract.Status != ContractStatus.Active)
-            throw new HttpException(409, "Milestones can only be verified for active contracts.");
+            throw new HttpException(409, "Chỉ hợp đồng đang hiệu lực mới duyệt được mốc tiến độ. Hãy kiểm tra trạng thái hợp đồng.");
 
         var milestone = await repository.GetMilestoneAsync(contractId, milestoneId, cancellationToken)
-            ?? throw new HttpException(404, "Milestone not found.");
+            ?? throw new HttpException(404, "Không tìm thấy mốc tiến độ. Hãy tải lại trang và thử lại.");
         if (milestone.Status != MilestoneStatus.PendingReview && milestone.Status != MilestoneStatus.InProgress)
-            throw new HttpException(409, "Milestone is not awaiting review.");
+            throw new HttpException(409, "Mốc này chưa có tiến độ chờ duyệt. Hãy chờ xưởng nộp tiến độ.");
 
         var updated = await repository.VerifyMilestoneAsync(contractId, milestoneId, request.IsApproved, request.RejectionReason, userId, cancellationToken)
-            ?? throw new HttpException(409, "Failed to verify milestone.");
+            ?? throw new HttpException(409, "Chưa duyệt được mốc vì dữ liệu vừa thay đổi. Hãy tải lại trang và thử lại.");
 
         return ToMilestoneResponse(updated);
     }
@@ -165,17 +165,17 @@ public sealed class ContractService(
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.CustomerId == userId)
-            throw new HttpException(403, "Only the supplier can request a contract extension.");
+            throw new HttpException(403, "Chỉ xưởng mới đề nghị gia hạn được hợp đồng. Hãy đăng nhập bằng tài khoản của xưởng.");
         if (contract.Status != ContractStatus.Active)
-            throw new HttpException(409, "Extensions can only be requested for active contracts.");
+            throw new HttpException(409, "Chỉ hợp đồng đang hiệu lực mới đề nghị gia hạn được. Hãy kiểm tra trạng thái hợp đồng.");
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
         if (request.ProposedDueDate <= today)
-            throw new HttpException(400, "Proposed due date must be in the future.");
+            throw new HttpException(400, "Hạn mới đề xuất phải sau thời điểm hiện tại. Hãy chọn một ngày trong tương lai.");
 
         var pending = await repository.GetPendingExtensionAsync(contractId, cancellationToken);
         if (pending != null)
-            throw new HttpException(409, "An extension request is already pending for this contract.");
+            throw new HttpException(409, "Hợp đồng này đã có đề nghị gia hạn đang chờ khách phản hồi. Hãy chờ kết quả trước khi gửi đề nghị mới.");
 
         var extension = await repository.RequestExtensionAsync(contractId, request.ProposedDueDate, request.Reason, userId, cancellationToken);
         return ToExtensionResponse(extension);
@@ -185,13 +185,13 @@ public sealed class ContractService(
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.CustomerId != userId)
-            throw new HttpException(403, "Only the customer can respond to extension requests.");
+            throw new HttpException(403, "Chỉ khách hàng mới phản hồi được đề nghị gia hạn. Hãy đăng nhập bằng tài khoản của khách.");
 
         var pending = await repository.GetPendingExtensionAsync(contractId, cancellationToken)
-            ?? throw new HttpException(404, "No pending extension request found for this contract.");
+            ?? throw new HttpException(404, "Hợp đồng này chưa có đề nghị gia hạn nào đang chờ. Hãy tải lại trang để xem mới nhất.");
 
         var updated = await repository.RespondExtensionAsync(contractId, request.IsApproved, request.ResponseNote, userId, cancellationToken)
-            ?? throw new HttpException(409, "Failed to respond to extension request.");
+            ?? throw new HttpException(409, "Chưa ghi nhận được phản hồi vì đề nghị vừa thay đổi. Hãy tải lại trang và thử lại.");
 
         return ToExtensionResponse(updated);
     }
@@ -200,11 +200,11 @@ public sealed class ContractService(
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.Status is ContractStatus.Draft or ContractStatus.PendingSignature or ContractStatus.CompletedOnTime or ContractStatus.CompletedLate or ContractStatus.Cancelled or ContractStatus.Breached)
-            throw new HttpException(409, "A dispute cannot be raised for contracts in the current status.");
+            throw new HttpException(409, "Hợp đồng ở trạng thái hiện tại chưa thể mở khiếu nại. Hãy liên hệ hỗ trợ nếu cần.");
 
         var existing = await repository.GetActiveDisputeAsync(contractId, cancellationToken);
         if (existing != null || contract.Status == ContractStatus.Disputed)
-            throw new HttpException(409, "A dispute is already active for this contract.");
+            throw new HttpException(409, "Hợp đồng này đã có khiếu nại đang xử lý. Hãy chờ kết quả xử lý.");
 
         var dispute = await repository.RaiseDisputeAsync(contractId, request.DisputeReason, request.EvidenceUrls, userId, cancellationToken);
         return ToDisputeResponse(dispute);
@@ -214,50 +214,50 @@ public sealed class ContractService(
     {
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.CustomerId == userId)
-            throw new HttpException(403, "Only the supplier can request final acceptance.");
+            throw new HttpException(403, "Chỉ xưởng mới đề nghị nghiệm thu cuối được. Hãy đăng nhập bằng tài khoản của xưởng.");
         if (contract.Status != ContractStatus.Active)
-            throw new HttpException(409, "Final acceptance can only be requested for active contracts.");
+            throw new HttpException(409, "Chỉ hợp đồng đang hiệu lực mới đề nghị nghiệm thu cuối được. Hãy kiểm tra trạng thái hợp đồng.");
 
         var milestones = await repository.GetMilestonesAsync(contractId, cancellationToken);
         var depositPaid = milestones.Where(m => m.IsDeposit).All(m => m.Status == MilestoneStatus.Paid);
         if (!depositPaid)
-            throw new HttpException(409, "The deposit milestone must be paid before requesting final acceptance.");
+            throw new HttpException(409, "Cần thanh toán mốc đặt cọc trước khi đề nghị nghiệm thu cuối.");
 
         var productionMilestones = milestones.Where(m => !m.IsDeposit && m.SequenceNumber < 3).ToList();
         if (productionMilestones.Any(m => m.Status is not (MilestoneStatus.CompletedOnTime or MilestoneStatus.CompletedLate or MilestoneStatus.Paid)))
-            throw new HttpException(409, "All previous production milestones must be completed before requesting final acceptance.");
+            throw new HttpException(409, "Cần hoàn tất các mốc sản xuất trước đó trước khi đề nghị nghiệm thu cuối.");
         if (!await repository.AreAllShipmentsDeliveredAsync(contractId, cancellationToken))
-            throw new HttpException(409, "All contract shipments must be marked delivered before requesting final acceptance.");
+            throw new HttpException(409, "Cần giao xong tất cả các đợt giao của hợp đồng trước khi đề nghị nghiệm thu cuối.");
 
         var success = await repository.RequestFinalAcceptanceAsync(contractId, userId, cancellationToken);
         if (!success)
-            throw new HttpException(409, "Failed to request final acceptance.");
+            throw new HttpException(409, "Chưa gửi được đề nghị nghiệm thu vì hợp đồng vừa thay đổi. Hãy tải lại trang và thử lại.");
     }
 
     public async Task<ContractResponse> ConfirmFinalAcceptanceAsync(Guid userId, Guid contractId, ConfirmFinalAcceptanceRequest request, CancellationToken cancellationToken = default)
     {
         if (!request.ConfirmedQualityAndQuantity)
-            throw new HttpException(400, "Final inspection confirmation is required.");
+            throw new HttpException(400, "Hãy tích chọn xác nhận đã kiểm tra hàng trước khi nghiệm thu cuối.");
 
         var contract = await GetOwnedAsync(userId, contractId, cancellationToken);
         if (contract.CustomerId != userId)
-            throw new HttpException(403, "Only the customer can confirm final acceptance.");
+            throw new HttpException(403, "Chỉ khách hàng mới xác nhận nghiệm thu cuối được. Hãy đăng nhập bằng tài khoản của khách.");
         if (contract.Status != ContractStatus.Active)
-            throw new HttpException(409, "Final acceptance can only be confirmed for active contracts.");
+            throw new HttpException(409, "Chỉ hợp đồng đang hiệu lực mới nghiệm thu cuối được. Hãy kiểm tra trạng thái hợp đồng.");
 
         var milestones = await repository.GetMilestonesAsync(contractId, cancellationToken);
         if (!await repository.AreAllShipmentsDeliveredAsync(contractId, cancellationToken))
-            throw new HttpException(409, "All contract shipments must be marked delivered before final acceptance.");
+            throw new HttpException(409, "Cần giao xong tất cả các đợt giao của hợp đồng trước khi nghiệm thu cuối.");
         if (milestones.Any(m => !m.IsDeposit && m.SequenceNumber == 2 &&
             m.Status is not (MilestoneStatus.CompletedOnTime or MilestoneStatus.CompletedLate or MilestoneStatus.Paid)))
-            throw new HttpException(409, "Milestone M2 must be confirmed before final acceptance.");
+            throw new HttpException(409, "Cần xác nhận mốc M2 trước khi nghiệm thu cuối.");
         var finalMilestone = milestones.FirstOrDefault(m => !m.IsDeposit && m.SequenceNumber == 3);
         var fullContractPaid = await repository.HasCompletedFullContractPaymentAsync(contractId, cancellationToken);
         if (finalMilestone is not null && finalMilestone.Status != MilestoneStatus.Paid && !fullContractPaid)
-            throw new HttpException(409, "Pay the final milestone before confirming final acceptance.");
+            throw new HttpException(409, "Hãy thanh toán mốc cuối trước khi xác nhận nghiệm thu cuối.");
 
         var completed = await repository.ConfirmFinalAcceptanceAsync(contractId, request.ConfirmedQualityAndQuantity, request.AcceptanceNotes, userId, cancellationToken)
-            ?? throw new HttpException(409, "Failed to confirm final acceptance.");
+            ?? throw new HttpException(409, "Chưa xác nhận được nghiệm thu vì hợp đồng vừa thay đổi. Hãy tải lại trang và thử lại.");
 
         return await GetAsync(userId, contractId, cancellationToken);
     }
@@ -265,12 +265,12 @@ public sealed class ContractService(
     public async Task<ContractDisputeResponse> ResolveDisputeAsync(Guid adminUserId, Guid contractId, AdminResolveDisputeRequest request, CancellationToken cancellationToken = default)
     {
         var contract = await repository.GetContractAsync(contractId, cancellationToken)
-            ?? throw new HttpException(404, "Contract was not found.");
+            ?? throw new HttpException(404, "Không tìm thấy hợp đồng. Hãy tải lại danh sách và thử lại.");
         if (contract.Status != ContractStatus.Disputed)
-            throw new HttpException(409, "The contract is not in disputed status.");
+            throw new HttpException(409, "Hợp đồng không ở trạng thái khiếu nại nên chưa cần phân xử.");
 
         var resolved = await repository.ResolveDisputeAsync(contractId, request.ResolutionType, request.RefundAmount, request.AdminVerdict, adminUserId, cancellationToken)
-            ?? throw new HttpException(409, "Failed to resolve dispute.");
+            ?? throw new HttpException(409, "Chưa phân xử được khiếu nại vì dữ liệu vừa thay đổi. Hãy tải lại trang và thử lại.");
 
         return ToDisputeResponse(resolved);
     }
@@ -281,7 +281,7 @@ public sealed class ContractService(
     public async Task<ContractDisputeResponse> ResolveDisputeByIdAsync(Guid adminUserId, Guid disputeId, AdminResolveDisputeRequest request, CancellationToken cancellationToken = default)
     {
         var dispute = await repository.GetDisputeByIdAsync(disputeId, cancellationToken)
-            ?? throw new HttpException(404, "Dispute was not found.");
+            ?? throw new HttpException(404, "Không tìm thấy khiếu nại. Hãy tải lại trang và thử lại.");
 
         return await ResolveDisputeAsync(adminUserId, dispute.ContractId, request, cancellationToken);
     }
@@ -290,7 +290,7 @@ public sealed class ContractService(
     {
         var contract = await repository.GetContractAsync(contractId, cancellationToken);
         if (contract is null || contract.IsDeleted || !await repository.IsPartyAsync(contract, userId, cancellationToken))
-            throw new HttpException(404, "Contract was not found.");
+            throw new HttpException(404, "Không tìm thấy hợp đồng. Hãy tải lại danh sách và thử lại.");
         if (contract.CustomerId != userId)
         {
             var profile = await suppliers.GetProfileByIdAsync(contract.SupplierId, cancellationToken);

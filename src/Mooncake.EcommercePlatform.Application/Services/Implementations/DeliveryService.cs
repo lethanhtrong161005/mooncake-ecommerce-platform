@@ -30,7 +30,7 @@ public sealed class DeliveryService(
         PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "scheduledDateAsc", "scheduledDateDesc");
         if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value)
             || query.ScheduledFrom > query.ScheduledTo)
-            throw new HttpException(400, "Invalid delivery filter.", OrderErrorCodes.ValidationError);
+            throw new HttpException(400, "Bộ lọc chuyến giao chưa hợp lệ. Hãy chọn lại trạng thái cần xem.", OrderErrorCodes.ValidationError);
         var page = await repository.GetDeliveriesPageAsync(userId, isSupplier, query, cancellationToken);
         var items = await MapDeliveryListAsync(page.Items, cancellationToken);
         return new PagedResult<DeliveryResponse>(items, page.Page, page.PageSize, page.TotalCount);
@@ -40,14 +40,14 @@ public sealed class DeliveryService(
     private const int MaxSignaturePayloadBytes = 500 * 1024;
     private const string DataImagePrefix = "data:image/";
     private const string Base64Marker = ";base64,";
-    private const string InvalidCloudinaryPhotoUrlMessage = "Delivery proof photos must be hosted on the platform Cloudinary storage.";
+    private const string InvalidCloudinaryPhotoUrlMessage = "Ảnh bằng chứng cần được tải lên qua hệ thống. Hãy chọn ảnh từ thiết bị và tải lên lại.";
     private const int MaxProofPhotos = 5;
     private const int MaxProofPhotoBytes = 2 * 1024 * 1024;
-    private const string InvalidProofPhotoMessage = "Delivery proof photos must be a platform Cloudinary URL or a valid JPEG, PNG, or WEBP base64 image data URL up to 2 MB.";
-    private const string TooManyProofPhotosMessage = "A maximum of 5 delivery proof photos is allowed.";
+    private const string InvalidProofPhotoMessage = "Ảnh bằng chứng chưa hợp lệ. Hãy dùng ảnh JPEG, PNG hoặc WEBP dung lượng tối đa 2 MB.";
+    private const string TooManyProofPhotosMessage = "Mỗi lần chỉ gửi tối đa 5 ảnh bằng chứng. Hãy bỏ bớt ảnh rồi gửi lại.";
     private static readonly string[] AllowedProofPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
-    private const string InvalidSignatureDataUrlMessage = "Driver signature must be a valid base64 image data URL.";
-    private const string SignatureTooLargeMessage = "Driver signature image must not exceed 500 KB.";
+    private const string InvalidSignatureDataUrlMessage = "Chữ ký chưa hợp lệ. Hãy ký lại và gửi lại.";
+    private const string SignatureTooLargeMessage = "Ảnh chữ ký vượt quá 500 KB. Hãy ký lại với nét vẽ gọn hơn rồi gửi lại.";
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetMineAsync(Guid userId, bool isSupplier, CancellationToken cancellationToken = default)
     {
@@ -144,10 +144,10 @@ public sealed class DeliveryService(
 
             contractLines = (await repository.GetContractLinesAsync(request.ContractId.Value, cancellationToken)) ?? [];
             if (contractLines.Count > 0 && (request.Items == null || request.Items.Count == 0))
-                throw new HttpException(400, "Delivery items are required for contract shipments.", OrderErrorCodes.ValidationError);
+                throw new HttpException(400, "Chuyến giao theo hợp đồng cần có ít nhất một sản phẩm. Hãy thêm sản phẩm và số lượng giao.", OrderErrorCodes.ValidationError);
 
             if (request.Items != null && request.Items.Count == 0)
-                throw new HttpException(400, "Delivery items are required for contract shipments.", OrderErrorCodes.ValidationError);
+                throw new HttpException(400, "Chuyến giao theo hợp đồng cần có ít nhất một sản phẩm. Hãy thêm sản phẩm và số lượng giao.", OrderErrorCodes.ValidationError);
 
             if (request.Items is { Count: > 0 })
             {
@@ -155,13 +155,13 @@ public sealed class DeliveryService(
                 {
                     var lineId = item.RfqItemId ?? item.ItemId ?? Guid.Empty;
                     if (lineId == Guid.Empty)
-                        throw new HttpException(400, "Each delivery item must reference a contract item line.", OrderErrorCodes.ValidationError);
+                        throw new HttpException(400, "Mỗi dòng giao hàng cần chọn một sản phẩm thuộc hợp đồng. Hãy chọn sản phẩm cho dòng còn trống.", OrderErrorCodes.ValidationError);
 
                     if (item.Quantity <= 0)
-                        throw new HttpException(400, "Delivery item quantity must be greater than zero.", OrderErrorCodes.ValidationError);
+                        throw new HttpException(400, "Số lượng giao phải lớn hơn 0. Hãy nhập lại số lượng cho từng sản phẩm.", OrderErrorCodes.ValidationError);
 
                     if (contractLines.Count > 0 && !contractLines.Any(l => l.LineId == lineId))
-                        throw new HttpException(400, $"Contract item line '{lineId}' was not found in contract.", OrderErrorCodes.ValidationError);
+                        throw new HttpException(400, $"Sản phẩm này không thuộc hợp đồng đang chọn (mã dòng {lineId}). Hãy tải lại hợp đồng và chọn lại sản phẩm.", OrderErrorCodes.ValidationError);
                 }
 
                 var fulfillment = (await repository.GetContractFulfillmentAsync(request.ContractId.Value, cancellationToken)) ?? [];
@@ -175,7 +175,7 @@ public sealed class DeliveryService(
                         if (item.Quantity > fLine.RemainingQuantity)
                         {
                             throw new HttpException(409,
-                                $"Delivery quantity {item.Quantity} for '{fLine.ProductName}' exceeds the available contract balance ({fLine.RemainingQuantity} remaining).",
+                                $"Số lượng đợt này ({item.Quantity}) vượt số còn lại của '{fLine.ProductName}' ({fLine.RemainingQuantity}). Hãy nhập tối đa {fLine.RemainingQuantity}.",
                                 OrderErrorCodes.StateConflict);
                         }
                     }
@@ -277,7 +277,7 @@ public sealed class DeliveryService(
             throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
 
         if (delivery.OrderId.HasValue && request.Status == DeliveryStatus.Delivered)
-            throw new HttpException(409, "Direct order deliveries can only be marked delivered after customer receipt confirmation.", OrderErrorCodes.StateConflict);
+            throw new HttpException(409, "Chuyến giao của đơn đặt trực tiếp chỉ chuyển sang Đã giao sau khi khách xác nhận đã nhận hàng. Hãy chờ khách xác nhận.", OrderErrorCodes.StateConflict);
 
         ValidateStateTransition(delivery.Status, request.Status);
 
@@ -313,7 +313,7 @@ public sealed class DeliveryService(
             throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
 
         if (delivery.Status != DeliveryStatus.AwaitingCustomerConfirmation)
-            throw new HttpException(409, "The shipment must have delivery proof submitted before receipt can be confirmed.", OrderErrorCodes.StateConflict);
+            throw new HttpException(409, "Chuyến giao chưa có bằng chứng giao hàng nên chưa thể xác nhận đã nhận. Hãy chờ xưởng gửi ảnh bàn giao.", OrderErrorCodes.StateConflict);
 
         var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
         if (!proofs.Any(proof => proof.ProofType == ProofType.Delivery))
@@ -1102,6 +1102,6 @@ public sealed class DeliveryService(
         };
 
         if (!isValid)
-            throw new HttpException(400, $"Cannot transition delivery status from '{current}' to '{next}'.", OrderErrorCodes.StateConflict);
+            throw new HttpException(400, $"Không thể chuyển chuyến giao từ trạng thái '{current}' sang '{next}'. Hãy tải lại trang để xem trạng thái mới nhất.", OrderErrorCodes.StateConflict);
     }
 }

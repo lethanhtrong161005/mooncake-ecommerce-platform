@@ -8,6 +8,7 @@ using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
@@ -417,12 +418,27 @@ public sealed class DeliveryService(
             && delivery.ShareTokenExpiresAtUtc.Value > clock.UtcNow;
 
         if (hasActiveLink && !request.Reshare)
+        {
+            if (string.IsNullOrWhiteSpace(delivery.ShareCode))
+            {
+                delivery.ShareCode = await GenerateUniqueShareCodeAsync(cancellationToken);
+                delivery.UpdatedAt = clock.UtcNow;
+                delivery = await repository.UpdateAsync(delivery, cancellationToken);
+            }
+
             return DeliveryResponseHelper.ToShareLinkResponse(delivery, clock.UtcNow);
+        }
 
         delivery.ShareToken = GenerateShareToken();
+        delivery.ShareCode = await GenerateUniqueShareCodeAsync(cancellationToken);
         delivery.ShareTokenCreatedAtUtc = clock.UtcNow;
         delivery.ShareTokenExpiresAtUtc = clock.UtcNow.AddHours(request.ExpiresInHours);
         delivery.ShareTokenRevokedAtUtc = null;
+        if (request.Reshare)
+        {
+            delivery.DriverClaimedAt = null;
+        }
+
         delivery.UpdatedBy = userId;
         delivery.UpdatedAt = clock.UtcNow;
 
@@ -442,17 +458,199 @@ public sealed class DeliveryService(
         await repository.UpdateAsync(delivery, cancellationToken);
     }
 
+    public async Task<AssignDriverResponse> AssignDriverAsync(
+        Guid userId, Guid deliveryId, AssignDeliveryDriverRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverName))
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneRequired, OrderErrorCodes.ValidationError);
+
+        var normalizedPhone = PhoneNumberUtils.Normalize(request.DriverPhone);
+        if (!PhoneNumberUtils.IsValid(normalizedPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneInvalid, OrderErrorCodes.ValidationError);
+
+        var delivery = await GetManagedDeliveryAsync(userId, deliveryId, cancellationToken);
+        if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
+            throw new HttpException(409, DeliveryMessages.DeliveryCannotAcceptShareLink, OrderErrorCodes.StateConflict);
+
+        delivery.DriverName = request.DriverName.Trim();
+        delivery.DriverPhone = normalizedPhone;
+        delivery.VehiclePlate = string.IsNullOrWhiteSpace(request.VehiclePlate) ? null : request.VehiclePlate.Trim();
+        delivery.DriverClaimedAt = null;
+
+        delivery.ShareToken = GenerateShareToken();
+        delivery.ShareCode = await GenerateUniqueShareCodeAsync(cancellationToken);
+        delivery.ShareTokenCreatedAtUtc = clock.UtcNow;
+        delivery.ShareTokenExpiresAtUtc = clock.UtcNow.AddHours(24);
+        delivery.ShareTokenRevokedAtUtc = null;
+        delivery.UpdatedBy = userId;
+        delivery.UpdatedAt = clock.UtcNow;
+
+        var updated = await repository.UpdateAsync(delivery, cancellationToken);
+
+        if (notificationService is not null)
+        {
+            var customerUserId = await repository.GetCustomerUserIdForDeliveryAsync(delivery.Id, cancellationToken);
+            if (customerUserId.HasValue)
+            {
+                var plateText = string.IsNullOrWhiteSpace(updated.VehiclePlate) ? string.Empty : $" - Biển số: {updated.VehiclePlate}";
+                await notificationService.DispatchNotificationAsync(
+                    customerUserId.Value,
+                    "delivery.driver_assigned",
+                    "Chuyến giao hàng đã được gán tài xế",
+                    $"Chuyến giao {updated.DeliveryNumber} đã được gán cho tài xế {updated.DriverName} - SĐT: {updated.DriverPhone}{plateText}.",
+                    "Delivery",
+                    updated.Id,
+                    ct: cancellationToken);
+            }
+        }
+
+        return new AssignDriverResponse
+        {
+            Token = updated.ShareToken!,
+            ShareCode = updated.ShareCode!,
+            ExpiresAt = updated.ShareTokenExpiresAtUtc!.Value,
+            Driver = new DriverInfoDto
+            {
+                DriverName = updated.DriverName,
+                DriverPhone = updated.DriverPhone,
+                VehiclePlate = updated.VehiclePlate,
+                DriverClaimedAt = updated.DriverClaimedAt
+            }
+        };
+    }
+
+    public async Task RevokeDriverAssignmentAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var delivery = await GetManagedDeliveryAsync(userId, deliveryId, cancellationToken);
+        delivery.DriverName = null;
+        delivery.DriverPhone = null;
+        delivery.VehiclePlate = null;
+        delivery.DriverClaimedAt = null;
+        delivery.ShareTokenRevokedAtUtc = clock.UtcNow;
+        delivery.UpdatedBy = userId;
+        delivery.UpdatedAt = clock.UtcNow;
+
+        await repository.UpdateAsync(delivery, cancellationToken);
+    }
+
     public async Task<PublicDriverDeliveryResponse> GetPublicByTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
-        var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
-        var referenceCode = await repository.GetReferenceCodeAsync(delivery, cancellationToken);
-        var items = ((await repository.GetDeliveryItemsAsync(delivery.Id, cancellationToken)) ?? [])
-            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
-        var totalBatches = delivery.ContractId.HasValue
-            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
-            : (int?)null;
-        return DeliveryResponseHelper.ToPublicDriverResponse(delivery, proofs.Count, referenceCode, items, totalBatches);
+        return await BuildPublicDriverResponseAsync(delivery, cancellationToken);
+    }
+
+    public async Task<PublicDriverDeliveryResponse> GetPublicByShareCodeAsync(string shareCode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(shareCode))
+            throw new HttpException(404, DeliveryMessages.ShareLinkNotFound);
+
+        var delivery = await repository.GetByShareCodeAsync(shareCode.Trim(), cancellationToken)
+            ?? throw new HttpException(404, DeliveryMessages.ShareLinkNotFound);
+
+        if (delivery.ShareTokenRevokedAtUtc.HasValue)
+            throw new HttpException(404, DeliveryMessages.ShareLinkRevokedError, OrderErrorCodes.StateConflict);
+
+        if (!delivery.ShareTokenExpiresAtUtc.HasValue || delivery.ShareTokenExpiresAtUtc.Value <= clock.UtcNow)
+            throw new HttpException(404, DeliveryMessages.ShareLinkExpiredError, OrderErrorCodes.StateConflict);
+
+        return await BuildPublicDriverResponseAsync(delivery, cancellationToken);
+    }
+
+    public async Task<PublicDriverDeliveryResponse> ClaimTripAsync(
+        string token, ClaimDeliveryTripRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverName))
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.VehiclePlate))
+            throw new HttpException(400, DeliveryMessages.VehiclePlateRequired, OrderErrorCodes.ValidationError);
+
+        var normalizedPhone = PhoneNumberUtils.Normalize(request.DriverPhone);
+        if (!PhoneNumberUtils.IsValid(normalizedPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneInvalid, OrderErrorCodes.ValidationError);
+
+        var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
+            throw new HttpException(409, DeliveryMessages.DeliveryAlreadyCompleted, OrderErrorCodes.StateConflict);
+
+        if (delivery.DriverClaimedAt.HasValue)
+        {
+            var existingNormalized = PhoneNumberUtils.Normalize(delivery.DriverPhone ?? string.Empty);
+            if (!string.Equals(existingNormalized, normalizedPhone, StringComparison.Ordinal))
+            {
+                throw new HttpException(409, DeliveryMessages.DriverAlreadyClaimedConflict, OrderErrorCodes.StateConflict);
+            }
+
+            delivery.DriverName = request.DriverName.Trim();
+            delivery.VehiclePlate = request.VehiclePlate.Trim();
+            delivery.UpdatedAt = clock.UtcNow;
+            var updatedSame = await repository.UpdateAsync(delivery, cancellationToken);
+            return await BuildPublicDriverResponseAsync(updatedSame, cancellationToken);
+        }
+
+        delivery.DriverName = request.DriverName.Trim();
+        delivery.DriverPhone = normalizedPhone;
+        delivery.VehiclePlate = request.VehiclePlate.Trim();
+        delivery.DriverClaimedAt = clock.UtcNow;
+        delivery.UpdatedAt = clock.UtcNow;
+
+        var updated = await repository.UpdateAsync(delivery, cancellationToken);
+
+        await repository.AddWorkflowEventAsync(new WorkflowEvent
+        {
+            AggregateType = "Delivery",
+            AggregateId = updated.Id,
+            EventType = "DriverClaimed",
+            FromStatus = updated.Status.ToString(),
+            ToStatus = updated.Status.ToString(),
+            ActorUserId = updated.UpdatedBy ?? updated.CreatedBy,
+            Reason = $"Tài xế {updated.DriverName} – {updated.DriverPhone} – {updated.VehiclePlate} đã nhận chuyến"
+        }, cancellationToken);
+
+        if (notificationService is not null)
+        {
+            var supplierUserId = await repository.GetSupplierUserIdForDeliveryAsync(updated.Id, cancellationToken);
+            var customerUserId = await repository.GetCustomerUserIdForDeliveryAsync(updated.Id, cancellationToken);
+            var claimMessage = $"Tài xế {updated.DriverName} – {updated.DriverPhone} – {updated.VehiclePlate} đã nhận chuyến";
+
+            if (supplierUserId.HasValue)
+            {
+                await notificationService.DispatchNotificationAsync(
+                    supplierUserId.Value,
+                    "delivery.driver_claimed",
+                    "Tài xế đã nhận chuyến giao hàng",
+                    claimMessage,
+                    "Delivery",
+                    updated.Id,
+                    ct: cancellationToken);
+            }
+
+            if (customerUserId.HasValue)
+            {
+                await notificationService.DispatchNotificationAsync(
+                    customerUserId.Value,
+                    "delivery.driver_claimed",
+                    "Tài xế đã nhận chuyến giao hàng",
+                    claimMessage,
+                    "Delivery",
+                    updated.Id,
+                    ct: cancellationToken);
+            }
+        }
+
+        return await BuildPublicDriverResponseAsync(updated, cancellationToken);
     }
 
     public async Task EnsurePublicTokenSubmittableAsync(string token, CancellationToken cancellationToken = default)
@@ -460,11 +658,17 @@ public sealed class DeliveryService(
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
         if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
             throw new HttpException(409, DeliveryMessages.DeliveryAlreadyCompleted, OrderErrorCodes.StateConflict);
+
+        if (!delivery.DriverClaimedAt.HasValue)
+            throw new HttpException(409, DeliveryMessages.MustClaimTripFirst, OrderErrorCodes.StateConflict);
     }
 
     public async Task<DeliveryProofResponse> SubmitPublicProofAsync(string token, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default)
     {
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        if (!delivery.DriverClaimedAt.HasValue)
+            throw new HttpException(409, DeliveryMessages.MustClaimTripFirst, OrderErrorCodes.StateConflict);
+
         ValidatePublicProofRequest(request);
         var actorUserId = delivery.UpdatedBy ?? delivery.CreatedBy;
         return await CreateProofsAndAdvanceStatusAsync(delivery, actorUserId, request, cancellationToken);
@@ -645,6 +849,43 @@ public sealed class DeliveryService(
             throw new HttpException(410, DeliveryMessages.ShareLinkExpiredError, OrderErrorCodes.StateConflict);
 
         return delivery;
+    }
+
+    private async Task<string> GenerateUniqueShareCodeAsync(CancellationToken cancellationToken)
+    {
+        for (var i = 0; i < 10; i++)
+        {
+            var code = DeliveryCodeHelper.GenerateShareCode();
+            if (!await repository.IsShareCodeInUseAsync(code, clock.UtcNow, cancellationToken))
+            {
+                return code;
+            }
+        }
+
+        throw new InvalidOperationException("Failed to generate a unique share code.");
+    }
+
+    private async Task<PublicDriverDeliveryResponse> BuildPublicDriverResponseAsync(
+        Delivery delivery, CancellationToken cancellationToken)
+    {
+        var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
+        var referenceCode = await repository.GetReferenceCodeAsync(delivery, cancellationToken);
+        var items = ((await repository.GetDeliveryItemsAsync(delivery.Id, cancellationToken)) ?? [])
+            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
+        var totalBatches = delivery.ContractId.HasValue
+            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
+            : (int?)null;
+        var partyContextMap = await repository.GetPartyContextsAsync([delivery], cancellationToken);
+        DeliveryPartyContext? partyContext = null;
+        partyContextMap?.TryGetValue(delivery.Id, out partyContext);
+
+        return DeliveryResponseHelper.ToPublicDriverResponse(
+            delivery,
+            proofs.Count,
+            referenceCode,
+            items,
+            totalBatches,
+            partyContext);
     }
 
     private static string GenerateShareToken()

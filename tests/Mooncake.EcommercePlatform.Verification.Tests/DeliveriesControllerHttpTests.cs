@@ -635,6 +635,7 @@ public sealed class DeliveriesControllerHttpTests
         ToAddress = "Kho B",
         ShareToken = "valid-share-token",
         ShareTokenExpiresAtUtc = DateTime.UtcNow.AddHours(24),
+        DriverClaimedAt = DateTime.UtcNow,
         CreatedAt = DateTime.UtcNow
     };
 

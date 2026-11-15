@@ -123,6 +123,16 @@ public record DeliveryResponse
 
     public string? SupplierName { get; init; }
 
+    public string? DriverName { get; init; }
+
+    public string? DriverPhone { get; init; }
+
+    public string? VehiclePlate { get; init; }
+
+    public string? ShareCode { get; init; }
+
+    public DateTime? DriverClaimedAt { get; init; }
+
     public DateTime CreatedAt { get; init; }
 
     public DateTime? UpdatedAt { get; init; }
@@ -141,6 +151,8 @@ public record DeliveryShareLinkResponse
 
     public string? Token { get; init; }
 
+    public string? ShareCode { get; init; }
+
     public DateTime? CreatedAtUtc { get; init; }
 
     public DateTime? ExpiresAtUtc { get; init; }
@@ -152,6 +164,28 @@ public record DeliveryShareLinkResponse
     public bool IsExpired { get; init; }
 
     public bool IsRevoked { get; init; }
+}
+
+public record DriverInfoDto
+{
+    public string? DriverName { get; init; }
+
+    public string? DriverPhone { get; init; }
+
+    public string? VehiclePlate { get; init; }
+
+    public DateTime? DriverClaimedAt { get; init; }
+}
+
+public record AssignDriverResponse
+{
+    public string Token { get; init; } = string.Empty;
+
+    public string ShareCode { get; init; } = string.Empty;
+
+    public DateTime ExpiresAt { get; init; }
+
+    public DriverInfoDto Driver { get; init; } = new();
 }
 
 public record PublicDriverDeliveryResponse
@@ -195,5 +229,25 @@ public record PublicDriverDeliveryResponse
     public DateTime ExpiresAtUtc { get; init; }
 
     public bool CanSubmitProof { get; init; }
+
+    public string? Token { get; init; }
+
+    public string? ShareCode { get; init; }
+
+    public string? DriverName { get; init; }
+
+    public string? DriverPhone { get; init; }
+
+    public string? VehiclePlate { get; init; }
+
+    public DateTime? DriverClaimedAt { get; init; }
+
+    public string? OrderType { get; init; }
+
+    public string? OrderNumber { get; init; }
+
+    public string? ContractNumber { get; init; }
+
+    public string? RecipientCompanyName { get; init; }
 }
 

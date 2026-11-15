@@ -9,7 +9,8 @@ public sealed record DeliveryPartyContext(
     string? OrderNumber,
     string? ContractNumber,
     string? CustomerName,
-    string? SupplierName);
+    string? SupplierName,
+    string? CustomerCompanyName = null);
 
 public sealed record ContractLineInfo(
     Guid LineId,
@@ -59,6 +60,14 @@ public interface IDeliveryRepository
     Task<bool> CanManageOrderAsync(Guid orderId, Guid userId, CancellationToken cancellationToken = default);
 
     Task<Delivery?> GetByShareTokenAsync(string token, CancellationToken cancellationToken = default);
+
+    Task<Delivery?> GetByShareCodeAsync(string shareCode, CancellationToken cancellationToken = default);
+
+    Task<bool> IsShareCodeInUseAsync(string shareCode, DateTime utcNow, CancellationToken cancellationToken = default);
+
+    Task<Guid?> GetCustomerUserIdForDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default);
+
+    Task AddWorkflowEventAsync(WorkflowEvent workflowEvent, CancellationToken cancellationToken = default);
 
     Task<string?> GetReferenceCodeAsync(Delivery delivery, CancellationToken cancellationToken = default);
 

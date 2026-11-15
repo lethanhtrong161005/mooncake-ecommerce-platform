@@ -419,6 +419,7 @@ public sealed class DeliveryManagementTests
             DeliveryNumber = "DEL-202611-011",
             ShareToken = "active_driver_token",
             ShareTokenExpiresAtUtc = fixedNow.AddHours(24),
+            DriverClaimedAt = fixedNow,
             CreatedBy = userId
         };
 
@@ -508,6 +509,7 @@ public sealed class DeliveryManagementTests
             DeliveryNumber = "DEL-202611-012",
             ShareToken = "active_driver_token",
             ShareTokenExpiresAtUtc = fixedNow.AddHours(24),
+            DriverClaimedAt = fixedNow,
             CreatedBy = userId
         };
         var proofs = new List<DeliveryProof>();

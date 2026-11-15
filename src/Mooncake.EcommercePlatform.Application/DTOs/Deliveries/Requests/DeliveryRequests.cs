@@ -105,3 +105,21 @@ public record CarrierWebhookPayload
     public string? Notes { get; init; }
 }
 
+public record AssignDeliveryDriverRequest
+{
+    public string DriverName { get; init; } = string.Empty;
+
+    public string DriverPhone { get; init; } = string.Empty;
+
+    public string? VehiclePlate { get; init; }
+}
+
+public record ClaimDeliveryTripRequest
+{
+    public string DriverName { get; init; } = string.Empty;
+
+    public string DriverPhone { get; init; } = string.Empty;
+
+    public string VehiclePlate { get; init; } = string.Empty;
+}
+

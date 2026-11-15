@@ -210,7 +210,15 @@ public sealed record OrderDeliveryDisputeResponse(
     DateTime CreatedAtUtc,
     DateTime? ResolvedAtUtc,
     string? RefundBankSnapshotJson = null,
-    decimal? OrderPaidAmount = null);
+    decimal? OrderPaidAmount = null,
+    string? SupplierRebuttalNotes = null,
+    IReadOnlyList<string>? SupplierRebuttalEvidenceUrls = null,
+    DateTime? SupplierRebuttalAtUtc = null,
+    DateTime? RebuttalDeadlineAtUtc = null)
+{
+    public DateTime? SupplierRebuttalAt => SupplierRebuttalAtUtc;
+    public DateTime? RebuttalDeadlineAt => RebuttalDeadlineAtUtc;
+}
 
 /// <summary>Compact Proof-of-Delivery photo and shipment snapshot embedded on an order.</summary>
 public sealed record OrderDeliverySnapshotResponse(

@@ -514,7 +514,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         .ToListAsync(cancellationToken);
 
     var activeDisputes = await context.OrderDeliveryDisputes.AsNoTracking()
-        .Where(item => orderIds.Contains(item.OrderId) && !item.IsDeleted && item.Status == "Open")
+        .Where(item => orderIds.Contains(item.OrderId) && !item.IsDeleted && (item.Status == "Open" || item.Status == "AwaitingSupplierRebuttal"))
         .OrderByDescending(item => item.CreatedAt)
         .ToListAsync(cancellationToken);
 
@@ -1429,7 +1429,9 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       throw new HttpException(409, "Delivery issues can only be reported after the order has been shipped.", OrderErrorCodes.StateConflict);
 
     var existingOpen = await context.OrderDeliveryDisputes
-        .AnyAsync(item => item.OrderId == lockedOrder.Id && item.Status == "Open" && !item.IsDeleted, cancellationToken);
+        .AnyAsync(item => item.OrderId == lockedOrder.Id
+            && (item.Status == "Open" || item.Status == "AwaitingSupplierRebuttal")
+            && !item.IsDeleted, cancellationToken);
     if (existingOpen)
       throw new HttpException(409, "An open delivery dispute already exists for this order.", OrderErrorCodes.StateConflict);
 
@@ -1463,7 +1465,8 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       Description = request.Description.Trim(),
       EvidenceUrlsJson = request.EvidenceUrls is { Count: > 0 } ? JsonSerializer.Serialize(request.EvidenceUrls) : null,
       RefundBankSnapshotJson = SerializeCustomerBankSnapshot(request.RefundBankName, request.RefundAccountNumber, request.RefundAccountHolderName),
-      Status = "Open",
+      Status = "AwaitingSupplierRebuttal",
+      RebuttalDeadlineAt = now.AddHours(48),
       CreatedBy = customerId,
       CreatedAt = now,
       UpdatedAt = now
@@ -1510,7 +1513,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         UserId = supplierUserId,
         Type = "order.delivery_disputed",
         Title = "Delivery issue reported",
-        Content = $"Customer reported a delivery issue on order {lockedOrder.OrderNumber}. Payout is locked pending review.",
+        Content = $"Customer reported a delivery issue on order {lockedOrder.OrderNumber}. Payout is locked pending review. You have 48 hours to submit a rebuttal before admin review.",
         ReferenceType = OrderReferenceType,
         ReferenceId = lockedOrder.Id
       });
@@ -1526,12 +1529,22 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       Guid disputeId, Guid adminUserId, ResolveOrderDeliveryDisputeRequest request, CancellationToken cancellationToken = default)
   {
     await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-    var dispute = await context.OrderDeliveryDisputes.FromSqlInterpolated(
+    var dispute = await (context.Database.IsRelational()
+        ? context.OrderDeliveryDisputes.FromSqlInterpolated(
             $"SELECT * FROM order_delivery_disputes WHERE id = {disputeId} FOR UPDATE")
-        .SingleOrDefaultAsync(cancellationToken)
+            .SingleOrDefaultAsync(cancellationToken)
+        : context.OrderDeliveryDisputes.SingleOrDefaultAsync(d => d.Id == disputeId, cancellationToken))
         ?? throw new HttpException(404, "Delivery dispute was not found.");
-    if (dispute.Status != "Open")
+
+    if (dispute.Status is not ("Open" or "AwaitingSupplierRebuttal"))
       throw new HttpException(409, "Delivery dispute has already been resolved.", OrderErrorCodes.StateConflict);
+
+    var now = clock.UtcNow;
+    var hasRebuttal = dispute.SupplierRebuttalAt.HasValue || dispute.Status == "Open";
+    var isDeadlinePassed = dispute.RebuttalDeadlineAt.HasValue && now >= dispute.RebuttalDeadlineAt.Value;
+
+    if (!hasRebuttal && !isDeadlinePassed)
+      throw new HttpException(409, "Cannot resolve delivery dispute while awaiting supplier rebuttal within the 48-hour window.", OrderErrorCodes.StateConflict);
 
     var action = request.ResolutionAction.Trim();
     var isFullRefund = string.Equals(action, "FullRefund", StringComparison.OrdinalIgnoreCase)
@@ -1541,9 +1554,11 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     if (!isFullRefund && !isPartialRefund && !isReleasePayout)
       throw new HttpException(400, "Invalid dispute resolution action. Use ReleasePayout, FullRefund, or PartialRefund.", OrderErrorCodes.ValidationError);
 
-    var lockedOrder = await context.Orders.FromSqlInterpolated(
+    var lockedOrder = await (context.Database.IsRelational()
+        ? context.Orders.FromSqlInterpolated(
             $"SELECT * FROM orders WHERE id = {dispute.OrderId} FOR UPDATE")
-        .SingleAsync(cancellationToken);
+            .SingleAsync(cancellationToken)
+        : context.Orders.SingleAsync(o => o.Id == dispute.OrderId, cancellationToken));
 
     var refundableBalance = await GetOrderPaidBalanceAsync(lockedOrder.Id, cancellationToken);
     decimal refundAmount = 0m;
@@ -1566,7 +1581,6 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-    var now = clock.UtcNow;
     dispute.ResolutionNotes = request.Notes.Trim();
     dispute.ResolvedByAdminId = adminUserId;
     dispute.ResolvedAt = now;
@@ -1726,6 +1740,106 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     await transaction.CommitAsync(cancellationToken);
     var updatedPaid = await GetOrderPaidBalanceAsync(lockedOrder.Id, cancellationToken);
     return MapDispute(dispute, lockedOrder.OrderNumber, updatedPaid);
+  }
+
+  public async Task<OrderDeliveryDisputeResponse> SubmitDeliveryDisputeRebuttalAsync(
+      Guid supplierUserId,
+      Guid orderId,
+      Guid disputeId,
+      SubmitSupplierDeliveryDisputeRebuttalRequest request,
+      CancellationToken cancellationToken = default)
+  {
+    if (string.IsNullOrWhiteSpace(request.Notes))
+      throw new HttpException(400, "Rebuttal notes are required.", OrderErrorCodes.ValidationError);
+
+    context.ChangeTracker.Clear();
+    await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+    var dispute = await (context.Database.IsRelational()
+        ? context.OrderDeliveryDisputes.FromSqlInterpolated(
+            $"SELECT * FROM order_delivery_disputes WHERE id = {disputeId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken)
+        : context.OrderDeliveryDisputes.SingleOrDefaultAsync(d => d.Id == disputeId, cancellationToken))
+        ?? throw new HttpException(404, "Delivery dispute was not found.");
+
+    if (dispute.OrderId != orderId || dispute.IsDeleted)
+      throw new HttpException(404, "Delivery dispute was not found for this order.");
+
+    var lockedOrder = await (context.Database.IsRelational()
+        ? context.Orders.FromSqlInterpolated(
+            $"SELECT * FROM orders WHERE id = {orderId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken)
+        : context.Orders.SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken))
+        ?? throw new HttpException(404, B2BOrderingMessages.OrderNotFound);
+
+    var ownedShopIds = await GetOwnedShopIdsAsync(supplierUserId, cancellationToken);
+    if (!ownedShopIds.Contains(lockedOrder.ShopId))
+      throw new HttpException(403, "You do not have permission to respond to disputes for this shop.", OrderErrorCodes.TenantForbidden);
+
+    if (dispute.Status != "AwaitingSupplierRebuttal")
+      throw new HttpException(409, "Dispute is not awaiting supplier rebuttal.", OrderErrorCodes.StateConflict);
+
+    var now = clock.UtcNow;
+    if (dispute.RebuttalDeadlineAt.HasValue && now > dispute.RebuttalDeadlineAt.Value)
+      throw new HttpException(409, "The 48-hour rebuttal window for this delivery dispute has expired.", OrderErrorCodes.StateConflict);
+
+    dispute.Status = "Open";
+    dispute.SupplierRebuttalNotes = request.Notes.Trim();
+    dispute.SupplierRebuttalEvidenceUrlsJson = request.EvidenceUrls is { Count: > 0 }
+        ? JsonSerializer.Serialize(request.EvidenceUrls)
+        : null;
+    dispute.SupplierRebuttalAt = now;
+    dispute.UpdatedAt = now;
+    dispute.UpdatedBy = supplierUserId;
+
+    lockedOrder.Version += 1;
+    lockedOrder.UpdatedAt = now;
+    lockedOrder.UpdatedBy = supplierUserId;
+
+    context.WorkflowEvents.Add(new WorkflowEvent
+    {
+      AggregateType = OrderAggregateType,
+      AggregateId = lockedOrder.Id,
+      EventType = "OrderDeliveryDisputeRebutted",
+      FromStatus = "AwaitingSupplierRebuttal",
+      ToStatus = "Open",
+      ActorUserId = supplierUserId,
+      Reason = dispute.SupplierRebuttalNotes
+    });
+
+    context.Notifications.Add(new Notification
+    {
+      UserId = lockedOrder.CustomerId,
+      Type = "order.dispute_rebutted",
+      Title = "Supplier responded to delivery dispute",
+      Content = $"Supplier submitted a rebuttal for the delivery dispute on order {lockedOrder.OrderNumber}. Admin will review and resolve.",
+      ReferenceType = OrderReferenceType,
+      ReferenceId = lockedOrder.Id
+    });
+
+    var adminUserIds = await context.Users.AsNoTracking()
+        .Where(u => u.Role == UserRole.Admin && u.IsActive && !u.IsDeleted)
+        .Select(u => u.Id)
+        .ToListAsync(cancellationToken);
+
+    foreach (var adminId in adminUserIds)
+    {
+      context.Notifications.Add(new Notification
+      {
+        UserId = adminId,
+        Type = "order.dispute_rebutted",
+        Title = "Supplier submitted delivery dispute rebuttal",
+        Content = $"Supplier submitted a rebuttal for dispute on order {lockedOrder.OrderNumber}. The dispute is now open for review.",
+        ReferenceType = OrderReferenceType,
+        ReferenceId = lockedOrder.Id
+      });
+    }
+
+    await context.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    var paidAmount = await GetOrderPaidBalanceAsync(lockedOrder.Id, cancellationToken);
+    return MapDispute(dispute, lockedOrder.OrderNumber, paidAmount);
   }
 
   public async Task<OrderRefundCaseResponse> CreateRefundCaseAsync(
@@ -1956,7 +2070,9 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       throw new HttpException(409, "Payout can only be requested after the customer confirms delivery.", OrderErrorCodes.StateConflict);
 
     var hasOpenDispute = await context.OrderDeliveryDisputes
-        .AnyAsync(item => item.OrderId == lockedOrder.Id && item.Status == "Open" && !item.IsDeleted, cancellationToken);
+        .AnyAsync(item => item.OrderId == lockedOrder.Id
+            && (item.Status == "Open" || item.Status == "AwaitingSupplierRebuttal")
+            && !item.IsDeleted, cancellationToken);
     if (hasOpenDispute)
       throw new HttpException(409, "Payout is locked while a delivery dispute is open.", OrderErrorCodes.StateConflict);
 
@@ -3000,6 +3116,8 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         actions.Add("RespondCancellationRequest");
       if (order.Status == OrderStatus.Delivered && financialSummary.EligibleAmount > 0m && activeDispute is null)
         actions.Add("RequestSimulatedPayout");
+      if (activeDispute is { Status: "AwaitingSupplierRebuttal" })
+        actions.Add("SubmitDeliveryDisputeRebuttal");
     }
     else if (viewerIsAdmin)
     {
@@ -3071,10 +3189,18 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       catch { urls = []; }
     }
 
+    IReadOnlyList<string> rebuttalUrls = [];
+    if (!string.IsNullOrWhiteSpace(item.SupplierRebuttalEvidenceUrlsJson))
+    {
+      try { rebuttalUrls = JsonSerializer.Deserialize<List<string>>(item.SupplierRebuttalEvidenceUrlsJson) ?? []; }
+      catch { rebuttalUrls = []; }
+    }
+
     return new OrderDeliveryDisputeResponse(
         item.Id, item.OrderId, orderNumber, item.DeliveryId, item.IssueType, item.Description,
         urls, item.Status, item.ResolutionNotes, item.CreatedAt, item.ResolvedAt,
-        item.RefundBankSnapshotJson, paidAmount);
+        item.RefundBankSnapshotJson, paidAmount,
+        item.SupplierRebuttalNotes, rebuttalUrls, item.SupplierRebuttalAt, item.RebuttalDeadlineAt);
   }
 
   private static string EncodeCursor(DateTime createdAtUtc, Guid id)

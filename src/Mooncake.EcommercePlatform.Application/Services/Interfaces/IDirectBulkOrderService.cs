@@ -57,6 +57,10 @@ public interface IDirectBulkOrderService
     Task<OrderDeliveryDisputeResponse> ResolveDeliveryDisputeAsync(Guid adminUserId, Guid disputeId,
         ResolveOrderDeliveryDisputeRequest request, CancellationToken cancellationToken = default);
 
+    Task<OrderDeliveryDisputeResponse> SubmitDeliveryDisputeRebuttalAsync(
+        Guid supplierUserId, Guid orderId, Guid disputeId, SubmitSupplierDeliveryDisputeRebuttalRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<OrderRefundCaseResponse> RequestRefundAsync(Guid customerId, Guid orderId, CreateOrderRefundRequest request,
         CancellationToken cancellationToken = default);
 

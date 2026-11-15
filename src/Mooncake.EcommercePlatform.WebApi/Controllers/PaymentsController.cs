@@ -45,6 +45,13 @@ public sealed class PaymentsController(IPaymentService paymentService, IWebHostE
             "VNPay contract payment URL generated successfully.");
 
     [Authorize(Roles = "Customer")]
+    [HttpPost("contracts/{contractId:guid}/milestones/{milestoneId:guid}/cash-payment")]
+    public async Task<IActionResult> RecordCashMilestonePaymentAsync(Guid contractId, Guid milestoneId,
+        CancellationToken cancellationToken) =>
+        Success(await paymentService.RecordCashMilestonePaymentAsync(CurrentUserId, contractId, milestoneId, cancellationToken),
+            "Cash milestone payment recorded successfully.");
+
+    [Authorize(Roles = "Customer")]
     [HttpPost("orders/vnpay-url")]
     public async Task<IActionResult> CreateOrderVnPayUrlAsync([FromBody] CreateOrderVnPayUrlRequest request,
         CancellationToken cancellationToken) =>

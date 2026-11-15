@@ -10,6 +10,8 @@ public interface IPaymentService
     Task<PaymentResponse> CreateAsync(Guid customerId, string? idempotencyKey, CreatePaymentRequest request, CancellationToken cancellationToken = default);
     Task<VnPayUrlResponse> CreateVnPayUrlAsync(Guid customerId, CreateVnPayUrlRequest request,
         string? clientIpAddress, CancellationToken cancellationToken = default);
+    Task<PaymentResponse> RecordCashMilestonePaymentAsync(Guid customerId, Guid contractId, Guid milestoneId,
+        CancellationToken cancellationToken = default);
     Task<VnPayUrlResponse> CreateOrderVnPayUrlAsync(Guid customerId, CreateOrderVnPayUrlRequest request,
         string? clientIpAddress, CancellationToken cancellationToken = default);
     Task<VietQrPaymentResponse> CreateBankTransferAsync(Guid customerId, CreateBankTransferRequest request, CancellationToken cancellationToken = default);

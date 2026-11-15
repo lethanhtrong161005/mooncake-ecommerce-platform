@@ -1,21 +1,34 @@
 namespace Mooncake.EcommercePlatform.Verification.Tests;
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
+using Mooncake.EcommercePlatform.Application.DTOs.Files.Responses;
+using Mooncake.EcommercePlatform.Application.Services.Implementations;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
+using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
+using Mooncake.EcommercePlatform.Infrastructure.Services;
 using Mooncake.EcommercePlatform.WebApi.Controllers;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
+using SkiaSharp;
 using Xunit;
 
 public sealed class DeliveriesControllerHttpTests
@@ -29,8 +42,9 @@ public sealed class DeliveriesControllerHttpTests
     private static readonly Guid ProofId = Guid.NewGuid();
 
     private readonly Mock<IDeliveryService> deliveryService = new();
+    private readonly Mock<ICloudinaryStorageService> cloudinaryStorage = new();
 
-    private HttpClient CreateClient(string role = "Supplier")
+    private HttpClient CreateClient(string role = "Supplier", IDeliveryService? customDeliveryService = null)
     {
         var userId = role switch
         {
@@ -51,7 +65,39 @@ public sealed class DeliveriesControllerHttpTests
                 options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
             });
 
-        builder.Services.AddSingleton(deliveryService.Object);
+        builder.Services.AddSingleton(customDeliveryService ?? deliveryService.Object);
+        builder.Services.AddSingleton(cloudinaryStorage.Object);
+        builder.Services.AddSingleton<ILogoImageSanitizer, LogoImageSanitizer>();
+
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.AddPolicy(DeliveriesController.PublicDriverRatePolicy, context =>
+            {
+                var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                var token = context.Request.RouteValues.TryGetValue("token", out var routeVal)
+                    ? routeVal?.ToString() ?? string.Empty
+                    : string.Empty;
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    $"{ip}:{token}",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 20,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    });
+            });
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                var http = context.HttpContext;
+                http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                await http.Response.WriteAsJsonAsync(ResponseHelper.Error<object>(
+                    StatusCodes.Status429TooManyRequests, MessageConstant.TooManyAttempts,
+                    http.Request.Path.Value ?? string.Empty,
+                    http.Items["TraceId"]?.ToString() ?? string.Empty), cancellationToken);
+            };
+        });
+
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.AddProblemDetails();
 
@@ -75,6 +121,7 @@ public sealed class DeliveriesControllerHttpTests
         });
 
         app.UseAuthentication();
+        app.UseRateLimiter();
         app.UseAuthorization();
         app.MapControllers();
         app.StartAsync().GetAwaiter().GetResult();
@@ -379,5 +426,229 @@ public sealed class DeliveriesControllerHttpTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadAsStringAsync();
         Assert.Contains("true", json);
+    }
+
+    // =========================================================================
+    // FEATURE #BE12: DRIVER PUBLIC POD PHOTO SANITIZATION & RATE LIMITING
+    // =========================================================================
+
+    [Fact]
+    public async Task UploadPublicProofPhoto_NonImageFile_Returns400BadRequest()
+    {
+        deliveryService.Setup(s => s.EnsurePublicTokenSubmittableAsync("token123", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        using var client = CreateClient();
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("not an image file"));
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        content.Add(fileContent, "file", "malicious.txt");
+
+        var response = await client.PostAsync("/api/v1/deliveries/public/token123/proofs/upload-photo", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadPublicProofPhoto_CorruptImageBytes_Returns400BadRequest()
+    {
+        deliveryService.Setup(s => s.EnsurePublicTokenSubmittableAsync("token123", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        using var client = CreateClient();
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("fake png header and text"));
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        content.Add(fileContent, "file", "fake.png");
+
+        var response = await client.PostAsync("/api/v1/deliveries/public/token123/proofs/upload-photo", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadPublicProofPhoto_ValidImage_Returns200OkWithCloudinaryUrl()
+    {
+        deliveryService.Setup(s => s.EnsurePublicTokenSubmittableAsync("token123", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        cloudinaryStorage.Setup(c => c.UploadImageAsync(It.IsAny<Stream>(), It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CloudinaryUploadResponse("https://res.cloudinary.com/t8rh8x0i/image/upload/v12345/driver.jpg", "driver_123", "image", "upload", 1234));
+
+        using var client = CreateClient();
+        using var content = new MultipartFormDataContent();
+        var validPngBytes = CreatePngBytes(width: 50, height: 50);
+        var fileContent = new ByteArrayContent(validPngBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        content.Add(fileContent, "file", "driver.png");
+
+        var response = await client.PostAsync("/api/v1/deliveries/public/token123/proofs/upload-photo", content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.Contains("https://res.cloudinary.com", json);
+    }
+
+    [Fact]
+    public async Task SubmitPublicProof_ExternalPhotoUrl_Returns400BadRequest()
+    {
+        var mockRepo = new Mock<IDeliveryRepository>();
+        var mockClock = new Mock<IDateTimeProvider>();
+        mockClock.Setup(c => c.UtcNow).Returns(DateTime.UtcNow);
+        var delivery = CreateSampleDeliveryEntity();
+        mockRepo.Setup(r => r.GetByShareTokenAsync("valid-share-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+
+        var realDeliveryService = new DeliveryService(mockRepo.Object, mockClock.Object);
+        using var client = CreateClient("Supplier", realDeliveryService);
+
+        var request = new CreateDeliveryProofRequest
+        {
+            ProofType = ProofType.Delivery,
+            PhotoUrl = "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=800",
+            SignatureBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/deliveries/public/valid-share-token/proofs", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SubmitPublicProof_SignatureExceeding500Kb_Returns400BadRequest()
+    {
+        var mockRepo = new Mock<IDeliveryRepository>();
+        var mockClock = new Mock<IDateTimeProvider>();
+        mockClock.Setup(c => c.UtcNow).Returns(DateTime.UtcNow);
+        var delivery = CreateSampleDeliveryEntity();
+        mockRepo.Setup(r => r.GetByShareTokenAsync("valid-share-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+
+        var realDeliveryService = new DeliveryService(mockRepo.Object, mockClock.Object);
+        using var client = CreateClient("Supplier", realDeliveryService);
+
+        var largeSignatureBase64 = "data:image/png;base64," + Convert.ToBase64String(new byte[510 * 1024]);
+        var request = new CreateDeliveryProofRequest
+        {
+            ProofType = ProofType.Delivery,
+            PhotoUrl = "https://res.cloudinary.com/t8rh8x0i/image/upload/v12345/driver.png",
+            SignatureBase64 = largeSignatureBase64
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/deliveries/public/valid-share-token/proofs", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SubmitPublicProof_InvalidSignatureDataUrl_Returns400BadRequest()
+    {
+        var mockRepo = new Mock<IDeliveryRepository>();
+        var mockClock = new Mock<IDateTimeProvider>();
+        mockClock.Setup(c => c.UtcNow).Returns(DateTime.UtcNow);
+        var delivery = CreateSampleDeliveryEntity();
+        mockRepo.Setup(r => r.GetByShareTokenAsync("valid-share-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+
+        var realDeliveryService = new DeliveryService(mockRepo.Object, mockClock.Object);
+        using var client = CreateClient("Supplier", realDeliveryService);
+
+        var request = new CreateDeliveryProofRequest
+        {
+            ProofType = ProofType.Delivery,
+            PhotoUrl = "https://res.cloudinary.com/t8rh8x0i/image/upload/v12345/driver.png",
+            SignatureBase64 = "data:text/plain;base64,aGVsbG8="
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/deliveries/public/valid-share-token/proofs", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SubmitPublicProof_ValidCloudinaryPhotoAndSignature_Returns201Created()
+    {
+        var mockRepo = new Mock<IDeliveryRepository>();
+        var mockClock = new Mock<IDateTimeProvider>();
+        mockClock.Setup(c => c.UtcNow).Returns(DateTime.UtcNow);
+        var delivery = CreateSampleDeliveryEntity();
+        delivery.ContractId = null;
+        mockRepo.Setup(r => r.GetByShareTokenAsync("valid-share-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+        mockRepo.Setup(r => r.CreateProofAsync(It.IsAny<DeliveryProof>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DeliveryProof p, CancellationToken _) => p);
+        mockRepo.Setup(r => r.UpdateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+
+        var realDeliveryService = new DeliveryService(mockRepo.Object, mockClock.Object);
+        using var client = CreateClient("Supplier", realDeliveryService);
+
+        var request = new CreateDeliveryProofRequest
+        {
+            ProofType = ProofType.Delivery,
+            PhotoUrl = "https://res.cloudinary.com/t8rh8x0i/image/upload/v12345/driver.png",
+            SignatureBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/deliveries/public/valid-share-token/proofs", request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PublicEndpoints_RateLimit_Enforces20RequestsPerMinute()
+    {
+        deliveryService.Setup(s => s.GetPublicByTokenAsync("rl-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PublicDriverDeliveryResponse
+            {
+                DeliveryId = DeliveryId,
+                DeliveryNumber = "DEL-RL-001",
+                DeliveryType = DeliveryType.SelfArranged,
+                Status = DeliveryStatus.InTransit,
+                ScheduledDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                RecipientName = "Bác Hùng",
+                RecipientPhone = "0912345678",
+                FromAddress = "Kho A",
+                ToAddress = "Kho B"
+            });
+
+        using var client = CreateClient();
+        for (var i = 0; i < 20; i++)
+        {
+            var res = await client.GetAsync("/api/v1/deliveries/public/rl-token");
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        }
+
+        var blocked = await client.GetAsync("/api/v1/deliveries/public/rl-token");
+        Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
+    }
+
+    private static Delivery CreateSampleDeliveryEntity() => new()
+    {
+        Id = DeliveryId,
+        DeliveryNumber = "DEL-202610-001",
+        DeliveryType = DeliveryType.SelfArranged,
+        Status = DeliveryStatus.InTransit,
+        ScheduledDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+        RecipientName = "Bác Hùng",
+        RecipientPhone = "0912345678",
+        FromAddress = "Kho A",
+        ToAddress = "Kho B",
+        ShareToken = "valid-share-token",
+        ShareTokenExpiresAtUtc = DateTime.UtcNow.AddHours(24),
+        CreatedAt = DateTime.UtcNow
+    };
+
+    private static byte[] CreatePngBytes(int width = 100, int height = 100, bool withAlpha = true)
+    {
+        using var bitmap = new SKBitmap(new SKImageInfo(
+            width,
+            height,
+            SKColorType.Rgba8888,
+            withAlpha ? SKAlphaType.Premul : SKAlphaType.Opaque));
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(withAlpha ? new SKColor(255, 100, 50, 180) : SKColors.DarkGreen);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
     }
 }

@@ -3,11 +3,13 @@ namespace Mooncake.EcommercePlatform.WebApi.Controllers;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
+using Mooncake.EcommercePlatform.Infrastructure.Services;
 using Mooncake.EcommercePlatform.WebApi.Filters;
 
 /// <summary>Shipment scheduling, status updates, and Proof-of-Delivery endpoints.</summary>
@@ -16,9 +18,12 @@ using Mooncake.EcommercePlatform.WebApi.Filters;
 [OrderApi]
 public sealed class DeliveriesController(
     IDeliveryService deliveryService,
-    ICloudinaryStorageService? cloudinaryStorage = null) : BaseApiController
+    ICloudinaryStorageService? cloudinaryStorage = null,
+    ILogoImageSanitizer? imageSanitizer = null) : BaseApiController
 {
+    public const string PublicDriverRatePolicy = "public-driver-delivery";
     private const long MaxDriverPhotoBytes = 10 * 1024 * 1024;
+    private readonly ILogoImageSanitizer _imageSanitizer = imageSanitizer ?? new LogoImageSanitizer();
     [HttpGet]
     public async Task<IActionResult> GetMineAsync([FromQuery] DeliveryPageQueryRequest query,
         CancellationToken cancellationToken) =>
@@ -115,12 +120,14 @@ public sealed class DeliveriesController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(PublicDriverRatePolicy)]
     [HttpGet("public/{token}")]
     public async Task<IActionResult> GetPublicByTokenAsync(string token, CancellationToken cancellationToken) =>
         Success(await deliveryService.GetPublicByTokenAsync(token, cancellationToken),
             DeliveryMessages.DeliveryRetrieved);
 
     [AllowAnonymous]
+    [EnableRateLimiting(PublicDriverRatePolicy)]
     [HttpPost("public/{token}/proofs/upload-photo")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadPublicProofPhotoAsync(string token, IFormFile? file, CancellationToken cancellationToken)
@@ -137,11 +144,15 @@ public sealed class DeliveriesController(
             throw new HttpException(503, B2BOrderingMessages.LogoStorageUnavailable, OrderErrorCodes.FeatureDisabled);
 
         await using var stream = file.OpenReadStream();
-        var upload = await cloudinaryStorage.UploadImageAsync(stream, file.FileName, false, cancellationToken);
+        var (sanitizedBytes, fileName) = _imageSanitizer.Sanitize(stream, file.FileName, file.ContentType, MaxDriverPhotoBytes);
+
+        await using var sanitizedStream = new MemoryStream(sanitizedBytes);
+        var upload = await cloudinaryStorage.UploadImageAsync(sanitizedStream, fileName, false, cancellationToken);
         return Success(new { url = upload.Url, publicId = upload.PublicId }, DeliveryMessages.DriverPhotoUploaded);
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(PublicDriverRatePolicy)]
     [HttpPost("public/{token}/proofs")]
     public async Task<IActionResult> SubmitPublicProofAsync(string token,
         [FromBody] CreateDeliveryProofRequest request, CancellationToken cancellationToken)

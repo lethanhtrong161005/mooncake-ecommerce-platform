@@ -439,16 +439,100 @@ public sealed class DeliveryManagementTests
             ProofType = ProofType.Delivery,
             PhotoUrls =
             [
-                "https://storage.mooncake.vn/pod/1.jpg",
-                "https://storage.mooncake.vn/pod/2.jpg"
+                "https://res.cloudinary.com/mooncake/image/upload/pod/1.jpg",
+                "https://res.cloudinary.com/mooncake/image/upload/pod/2.jpg"
             ],
-            SignatureBase64 = "data:image/png;base64,AAA",
+            SignatureBase64 = "data:image/png;base64,AAAA",
             TakenBy = "Nguyễn Văn Tài"
         });
 
         Assert.NotNull(result);
         Assert.Equal(2, createdProofs.Count);
         Assert.Equal(DeliveryStatus.AwaitingCustomerConfirmation, delivery.Status);
+    }
+
+    [Fact]
+    public async Task SubmitPublicProofAsync_ValidImageDataUrl_IsAccepted()
+    {
+        var service = CreatePublicProofService(out var createdProofs);
+
+        var result = await service.SubmitPublicProofAsync("active_driver_token", new CreateDeliveryProofRequest
+        {
+            ProofType = ProofType.Delivery,
+            PhotoUrls = [CreateImageDataUrl()],
+            TakenBy = "Driver"
+        });
+
+        Assert.NotNull(result);
+        Assert.Single(createdProofs);
+    }
+
+    [Fact]
+    public async Task SubmitPublicProofAsync_NonImageDataUrl_ReturnsBadRequest()
+    {
+        var service = CreatePublicProofService(out _);
+        var notImage = "data:image/png;base64," + Convert.ToBase64String("not an image"u8.ToArray());
+        var wrongMime = "data:text/html;base64," + Convert.ToBase64String("<script>1</script>"u8.ToArray());
+
+        foreach (var photo in new[] { notImage, wrongMime })
+        {
+            var ex = await Assert.ThrowsAsync<HttpException>(() => service.SubmitPublicProofAsync(
+                "active_driver_token", new CreateDeliveryProofRequest { PhotoUrls = [photo] }));
+            Assert.Equal(400, ex.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task SubmitPublicProofAsync_ForeignHostOrTooManyPhotos_ReturnsBadRequest()
+    {
+        var service = CreatePublicProofService(out _);
+
+        var hostEx = await Assert.ThrowsAsync<HttpException>(() => service.SubmitPublicProofAsync(
+            "active_driver_token",
+            new CreateDeliveryProofRequest { PhotoUrls = ["https://evil.example.com/pod/1.jpg"] }));
+        Assert.Equal(400, hostEx.StatusCode);
+
+        var tooMany = Enumerable.Range(0, 6).Select(_ => CreateImageDataUrl()).ToList();
+        var countEx = await Assert.ThrowsAsync<HttpException>(() => service.SubmitPublicProofAsync(
+            "active_driver_token", new CreateDeliveryProofRequest { PhotoUrls = tooMany }));
+        Assert.Equal(400, countEx.StatusCode);
+    }
+
+    private DeliveryService CreatePublicProofService(out List<DeliveryProof> createdProofs)
+    {
+        var delivery = new Delivery
+        {
+            Id = deliveryId,
+            OrderId = Guid.NewGuid(),
+            Status = DeliveryStatus.InTransit,
+            DeliveryNumber = "DEL-202611-012",
+            ShareToken = "active_driver_token",
+            ShareTokenExpiresAtUtc = fixedNow.AddHours(24),
+            CreatedBy = userId
+        };
+        var proofs = new List<DeliveryProof>();
+        createdProofs = proofs;
+        repository.Setup(r => r.GetByShareTokenAsync("active_driver_token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+        repository.Setup(r => r.CreateProofAsync(It.IsAny<DeliveryProof>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DeliveryProof p, CancellationToken _) =>
+            {
+                proofs.Add(p);
+                return p;
+            });
+        repository.Setup(r => r.UpdateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Delivery d, CancellationToken _) => d);
+        return new DeliveryService(repository.Object, clock.Object, null, null,
+            new Mooncake.EcommercePlatform.Infrastructure.Services.LogoImageSanitizer());
+    }
+
+    private static string CreateImageDataUrl()
+    {
+        using var bitmap = new SkiaSharp.SKBitmap(16, 16);
+        bitmap.Erase(SkiaSharp.SKColors.Red);
+        using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Jpeg, 80);
+        return "data:image/jpeg;base64," + Convert.ToBase64String(data.ToArray());
     }
 
     [Fact]

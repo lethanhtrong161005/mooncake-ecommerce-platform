@@ -230,6 +230,8 @@ public record PublicDriverDeliveryResponse
 
     public bool CanSubmitProof { get; init; }
 
+    public bool RequiresClaim { get; init; }
+
     public string? Token { get; init; }
 
     public string? ShareCode { get; init; }

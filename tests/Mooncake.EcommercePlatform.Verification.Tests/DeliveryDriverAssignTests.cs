@@ -77,6 +77,76 @@ public sealed class DeliveryDriverAssignTests
     }
 
     [Fact]
+    public async Task GetPublicTrip_WhenUnclaimed_CanSubmitProofTrueAndRequiresClaimTrue()
+    {
+        var service = CreateService(out var delivery);
+        delivery.DriverClaimedAt = null;
+        delivery.Status = DeliveryStatus.InTransit;
+
+        var response = await service.GetPublicByTokenAsync("sample-token");
+
+        Assert.NotNull(response);
+        Assert.True(response.CanSubmitProof);
+        Assert.True(response.RequiresClaim);
+    }
+
+    [Fact]
+    public async Task GetPublicTrip_WhenClaimed_RequiresClaimFalse()
+    {
+        var service = CreateService(out var delivery);
+        delivery.DriverClaimedAt = fixedNow;
+        delivery.Status = DeliveryStatus.InTransit;
+
+        var response = await service.GetPublicByTokenAsync("sample-token");
+
+        Assert.NotNull(response);
+        Assert.True(response.CanSubmitProof);
+        Assert.False(response.RequiresClaim);
+    }
+
+    [Fact]
+    public async Task GetPublicTrip_WhenDelivered_CanSubmitProofFalse()
+    {
+        var service = CreateService(out var delivery);
+        delivery.DriverClaimedAt = fixedNow;
+        delivery.Status = DeliveryStatus.Delivered;
+
+        var response = await service.GetPublicByTokenAsync("sample-token");
+
+        Assert.NotNull(response);
+        Assert.False(response.CanSubmitProof);
+        Assert.False(response.RequiresClaim);
+    }
+
+    [Theory]
+    [InlineData(DeliveryStatus.InTransit, null, true, true)]
+    [InlineData(DeliveryStatus.Pending, null, true, true)]
+    [InlineData(DeliveryStatus.PickedUp, null, true, true)]
+    [InlineData(DeliveryStatus.InTransit, "2026-11-16T08:00:00Z", true, false)]
+    [InlineData(DeliveryStatus.Delivered, null, false, false)]
+    [InlineData(DeliveryStatus.Delivered, "2026-11-16T08:00:00Z", false, false)]
+    [InlineData(DeliveryStatus.Returned, null, false, false)]
+    [InlineData(DeliveryStatus.Returned, "2026-11-16T08:00:00Z", false, false)]
+    public void ToPublicDriverResponse_SetsCanSubmitProofAndRequiresClaim_Correctly(
+        DeliveryStatus status,
+        string? claimedAtString,
+        bool expectedCanSubmitProof,
+        bool expectedRequiresClaim)
+    {
+        var delivery = new Delivery
+        {
+            Id = DeliveryId,
+            Status = status,
+            DriverClaimedAt = claimedAtString is not null ? DateTime.Parse(claimedAtString).ToUniversalTime() : null
+        };
+
+        var response = Mooncake.EcommercePlatform.Application.Common.Helpers.DeliveryResponseHelper.ToPublicDriverResponse(delivery, 0);
+
+        Assert.Equal(expectedCanSubmitProof, response.CanSubmitProof);
+        Assert.Equal(expectedRequiresClaim, response.RequiresClaim);
+    }
+
+    [Fact]
     public async Task ClaimTrip_WhenFirstClaim_SavesDriverAndClaimedAtAndWorkflowEventAndNotifications()
     {
         var service = CreateService(out var delivery);
@@ -107,6 +177,7 @@ public sealed class DeliveryDriverAssignTests
         Assert.Equal("29A-12345", delivery.VehiclePlate);
         Assert.Equal(fixedNow, delivery.DriverClaimedAt);
         Assert.True(response.CanSubmitProof);
+        Assert.False(response.RequiresClaim);
 
         Assert.NotNull(recordedEvent);
         Assert.Equal("Delivery", recordedEvent!.AggregateType);
@@ -436,7 +507,9 @@ public sealed class DeliveryDriverAssignTests
             DeliveryId = DeliveryId,
             DeliveryNumber = "DEL-202611-001",
             Token = "code-token",
-            ShareCode = "CODE1234"
+            ShareCode = "CODE1234",
+            CanSubmitProof = true,
+            RequiresClaim = true
         };
 
         mockService.Setup(s => s.GetPublicByShareCodeAsync("CODE1234", It.IsAny<CancellationToken>()))
@@ -459,6 +532,10 @@ public sealed class DeliveryDriverAssignTests
         // Test GET public/code/{shareCode}
         var codeRes = await client.GetAsync("/api/v1/deliveries/public/code/CODE1234");
         Assert.Equal(HttpStatusCode.OK, codeRes.StatusCode);
+        var json = await codeRes.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var data = json.GetProperty("data");
+        Assert.True(data.GetProperty("canSubmitProof").GetBoolean());
+        Assert.True(data.GetProperty("requiresClaim").GetBoolean());
 
         // Test POST public/{token}/claim
         var claimRes = await client.PostAsJsonAsync("/api/v1/deliveries/public/sample-token/claim", new ClaimDeliveryTripRequest

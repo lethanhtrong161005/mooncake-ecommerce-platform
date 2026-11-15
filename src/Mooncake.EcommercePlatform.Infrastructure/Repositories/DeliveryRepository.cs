@@ -189,6 +189,47 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
         return await IsAdminAsync(userId, cancellationToken);
     }
 
+    public async Task<bool> CanConfirmDeliveryReceiptAsync(Guid deliveryId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var delivery = await context.Deliveries.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == deliveryId && !d.IsDeleted, cancellationToken);
+        if (delivery?.ContractId is Guid contractId)
+        {
+            return await context.Contracts.AsNoTracking().AnyAsync(contract =>
+                contract.Id == contractId && contract.CustomerId == userId && !contract.IsDeleted,
+                cancellationToken);
+        }
+
+        if (delivery?.OrderId is Guid orderId)
+        {
+            return await context.Orders.AsNoTracking().AnyAsync(order =>
+                order.Id == orderId && order.CustomerId == userId && !order.IsDeleted,
+                cancellationToken);
+        }
+
+        return false;
+    }
+
+    public async Task<Guid?> GetSupplierUserIdForDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var contractSupplierUserId = await (
+            from delivery in context.Deliveries.AsNoTracking()
+            join contract in context.Contracts.AsNoTracking() on delivery.ContractId equals contract.Id
+            join profile in context.SupplierProfiles.AsNoTracking() on contract.SupplierId equals profile.Id
+            where delivery.Id == deliveryId && !delivery.IsDeleted && !contract.IsDeleted && !profile.IsDeleted
+            select (Guid?)profile.UserId
+        ).FirstOrDefaultAsync(cancellationToken);
+        if (contractSupplierUserId.HasValue) return contractSupplierUserId;
+
+        return await (
+            from delivery in context.Deliveries.AsNoTracking()
+            join order in context.Orders.AsNoTracking() on delivery.OrderId equals order.Id
+            join shop in context.Shops.AsNoTracking() on order.ShopId equals shop.Id
+            where delivery.Id == deliveryId && !delivery.IsDeleted && !order.IsDeleted && !shop.IsDeleted
+            select (Guid?)shop.OwnerUserId
+        ).FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<bool> CanManageDeliveryAsync(Guid deliveryId, Guid userId, CancellationToken cancellationToken = default)
     {
         var delivery = await context.Deliveries.AsNoTracking()

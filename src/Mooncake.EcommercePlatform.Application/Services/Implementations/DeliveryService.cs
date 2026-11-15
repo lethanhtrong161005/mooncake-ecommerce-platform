@@ -17,7 +17,9 @@ using Mooncake.EcommercePlatform.Domain.Enums;
 /// <summary>Implements shipment scheduling, status tracking, and Proof-of-Delivery verification.</summary>
 public sealed class DeliveryService(
     IDeliveryRepository repository,
-    IDateTimeProvider clock) : IDeliveryService
+    IDateTimeProvider clock,
+    IContractRepository? contractRepository = null,
+    INotificationService? notificationService = null) : IDeliveryService
 {
     public async Task<PagedResult<DeliveryResponse>> GetMinePageAsync(Guid userId, bool isSupplier,
         DeliveryPageQueryRequest query, CancellationToken cancellationToken = default)
@@ -144,6 +146,23 @@ public sealed class DeliveryService(
         };
 
         var created = await repository.CreateAsync(delivery, cancellationToken);
+        if (created.ContractId.HasValue && contractRepository is not null && notificationService is not null)
+        {
+            var contract = await contractRepository.GetContractAsync(created.ContractId.Value, cancellationToken);
+            if (contract is not null)
+            {
+                await notificationService.DispatchNotificationAsync(
+                    contract.CustomerId,
+                    "delivery.created",
+                    "Xưởng đã tạo chuyến giao hàng",
+                    $"Chuyến giao {created.DeliveryNumber} cho hợp đồng {contract.ContractNumber} đã được tạo. Ngày dự kiến giao: {created.ScheduledDate:yyyy-MM-dd}.",
+                    "delivery",
+                    created.Id,
+                    "/#/giao-hang-pod",
+                    "high",
+                    cancellationToken);
+            }
+        }
         return DeliveryResponseHelper.ToResponse(created, 0);
     }
 
@@ -182,6 +201,43 @@ public sealed class DeliveryService(
         var updated = await repository.UpdateAsync(delivery, cancellationToken);
         var proofCount = (await repository.GetProofsAsync(deliveryId, cancellationToken)).Count;
         return DeliveryResponseHelper.ToResponse(updated, proofCount);
+    }
+
+    public async Task<DeliveryResponse> ConfirmReceiptAsync(Guid customerId, Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var delivery = await repository.GetByIdAsync(deliveryId, cancellationToken)
+            ?? throw new HttpException(404, DeliveryMessages.DeliveryNotFound);
+
+        if (!await repository.CanConfirmDeliveryReceiptAsync(deliveryId, customerId, cancellationToken))
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
+
+        if (delivery.Status != DeliveryStatus.AwaitingCustomerConfirmation)
+            throw new HttpException(409, "The shipment must have delivery proof submitted before receipt can be confirmed.", OrderErrorCodes.StateConflict);
+
+        var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
+        if (!proofs.Any(proof => proof.ProofType == ProofType.Delivery))
+            throw new HttpException(400, DeliveryMessages.ProofRequiredBeforeDelivered, OrderErrorCodes.DeliveryProofRequired);
+
+        delivery.Status = DeliveryStatus.Delivered;
+        delivery.ActualDeliveryDate = DateOnly.FromDateTime(clock.UtcNow);
+        delivery.UpdatedBy = customerId;
+        delivery.UpdatedAt = clock.UtcNow;
+        var updated = await repository.UpdateAsync(delivery, cancellationToken);
+        var supplierUserId = await repository.GetSupplierUserIdForDeliveryAsync(deliveryId, cancellationToken);
+        if (supplierUserId.HasValue && notificationService is not null)
+        {
+            await notificationService.DispatchNotificationAsync(
+                supplierUserId.Value,
+                "delivery.customer_confirmed",
+                "Khách hàng đã xác nhận nhận hàng",
+                $"Khách hàng đã xác nhận nhận chuyến giao {delivery.DeliveryNumber}.",
+                "delivery",
+                delivery.Id,
+                "/#/nha-cung-cap/quan-ly-giao-hang",
+                "high",
+                cancellationToken);
+        }
+        return DeliveryResponseHelper.ToResponse(updated, proofs.Count);
     }
 
     public async Task<DeliveryResponse> UpdateCarrierInfoAsync(Guid userId, Guid deliveryId, UpdateCarrierInfoRequest request, CancellationToken cancellationToken = default)
@@ -400,20 +456,27 @@ public sealed class DeliveryService(
 
         if (request.ProofType == ProofType.Delivery)
         {
-            if (delivery.OrderId.HasValue)
+            delivery.Status = DeliveryStatus.AwaitingCustomerConfirmation;
+            delivery.UpdatedBy = actorUserId;
+            delivery.UpdatedAt = clock.UtcNow;
+            await repository.UpdateAsync(delivery, cancellationToken);
+
+            if (delivery.ContractId.HasValue && contractRepository is not null && notificationService is not null)
             {
-                delivery.Status = DeliveryStatus.AwaitingCustomerConfirmation;
-                delivery.UpdatedBy = actorUserId;
-                delivery.UpdatedAt = clock.UtcNow;
-                await repository.UpdateAsync(delivery, cancellationToken);
-            }
-            else
-            {
-                delivery.Status = DeliveryStatus.Delivered;
-                delivery.ActualDeliveryDate = DateOnly.FromDateTime(clock.UtcNow);
-                delivery.UpdatedBy = actorUserId;
-                delivery.UpdatedAt = clock.UtcNow;
-                await repository.UpdateAsync(delivery, cancellationToken);
+                var contract = await contractRepository.GetContractAsync(delivery.ContractId.Value, cancellationToken);
+                if (contract is not null)
+                {
+                    await notificationService.DispatchNotificationAsync(
+                        contract.CustomerId,
+                        "delivery.proof_submitted",
+                        "Bằng chứng giao hàng đã sẵn sàng",
+                        $"Xưởng đã nộp bằng chứng cho chuyến {delivery.DeliveryNumber}. Vui lòng kiểm tra PoD và xác nhận đã nhận hàng.",
+                        "delivery",
+                        delivery.Id,
+                        "/#/giao-hang-pod",
+                        "high",
+                        cancellationToken);
+                }
             }
         }
         else if (request.ProofType == ProofType.Pickup && (delivery.Status == DeliveryStatus.Pending || delivery.Status == DeliveryStatus.Confirmed))

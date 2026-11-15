@@ -880,4 +880,122 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
 
     public Task<ContractDispute?> GetDisputeByIdAsync(Guid disputeId, CancellationToken cancellationToken = default) =>
         context.ContractDisputes.AsNoTracking().FirstOrDefaultAsync(d => d.Id == disputeId && !d.IsDeleted, cancellationToken);
+
+    private const int VietnamUtcOffsetHours = 7;
+    private const int MilestoneDeadlineBatchSize = 200;
+    private static readonly int[] MilestoneReminderDays = [7, 3, 1];
+    private const string MilestoneAggregateType = "ContractMilestone";
+    private const string MilestoneMarkedOverdueEvent = "MilestoneMarkedOverdue";
+    private const string MilestoneOverdueNotificationType = "contract.milestone.overdue";
+    private const string MilestoneReferenceType = "contract_milestone";
+    private const string MilestoneOverdueReason = "Milestone due date passed without completion.";
+
+    /// <inheritdoc />
+    public async Task<int> ProcessMilestoneDeadlinesAsync(CancellationToken cancellationToken = default)
+    {
+        var today = DateOnly.FromDateTime(clock.UtcNow.AddHours(VietnamUtcOffsetHours));
+        var openStatuses = new[] { MilestoneStatus.Pending, MilestoneStatus.InProgress };
+        var processed = 0;
+
+        var overdueIds = await (from milestone in context.ContractMilestones.AsNoTracking()
+                                join contract in context.Contracts.AsNoTracking() on milestone.ContractId equals contract.Id
+                                where !milestone.IsDeleted && !contract.IsDeleted && contract.Status == ContractStatus.Active
+                                      && !milestone.IsDeposit && milestone.DueDate != null && milestone.DueDate < today
+                                      && openStatuses.Contains(milestone.Status)
+                                orderby milestone.DueDate
+                                select milestone.Id).Take(MilestoneDeadlineBatchSize).ToListAsync(cancellationToken);
+        foreach (var milestoneId in overdueIds)
+            if (await MarkMilestoneOverdueAsync(milestoneId, today, openStatuses, cancellationToken)) processed++;
+
+        foreach (var days in MilestoneReminderDays)
+        {
+            var dueDate = today.AddDays(days);
+            var reminderIds = await (from milestone in context.ContractMilestones.AsNoTracking()
+                                     join contract in context.Contracts.AsNoTracking() on milestone.ContractId equals contract.Id
+                                     where !milestone.IsDeleted && !contract.IsDeleted && contract.Status == ContractStatus.Active
+                                           && !milestone.IsDeposit && milestone.DueDate == dueDate
+                                           && openStatuses.Contains(milestone.Status)
+                                     select milestone.Id).Take(MilestoneDeadlineBatchSize).ToListAsync(cancellationToken);
+            foreach (var milestoneId in reminderIds)
+                if (await SendMilestoneReminderAsync(milestoneId, days, dueDate, openStatuses, cancellationToken)) processed++;
+        }
+
+        return processed;
+    }
+
+    private async Task<ContractMilestone?> LockMilestoneAsync(Guid milestoneId, CancellationToken cancellationToken) =>
+        context.Database.IsRelational()
+            ? await context.ContractMilestones.FromSqlInterpolated(
+                    $"SELECT * FROM contract_milestones WHERE id = {milestoneId} FOR UPDATE SKIP LOCKED")
+                .SingleOrDefaultAsync(cancellationToken)
+            : await context.ContractMilestones.SingleOrDefaultAsync(item => item.Id == milestoneId, cancellationToken);
+
+    private async Task<bool> MarkMilestoneOverdueAsync(Guid milestoneId, DateOnly today, MilestoneStatus[] openStatuses,
+        CancellationToken cancellationToken)
+    {
+        context.ChangeTracker.Clear();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var milestone = await LockMilestoneAsync(milestoneId, cancellationToken);
+        if (milestone is null || milestone.IsDeleted || milestone.IsDeposit || milestone.DueDate is null
+            || milestone.DueDate >= today || !openStatuses.Contains(milestone.Status)) return false;
+
+        var contract = await context.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == milestone.ContractId && !item.IsDeleted && item.Status == ContractStatus.Active, cancellationToken);
+        if (contract is null) return false;
+
+        var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
+        var fromStatus = milestone.Status;
+        milestone.Status = MilestoneStatus.Overdue;
+        milestone.UpdatedAt = clock.UtcNow;
+        context.WorkflowEvents.Add(new WorkflowEvent
+        {
+            AggregateType = MilestoneAggregateType, AggregateId = milestone.Id, EventType = MilestoneMarkedOverdueEvent,
+            FromStatus = fromStatus.ToString(), ToStatus = MilestoneStatus.Overdue.ToString(),
+            Reason = MilestoneOverdueReason,
+            Metadata = JsonSerializer.Serialize(new { contractId = contract.Id, dueDate = milestone.DueDate })
+        });
+        var content = $"Milestone \"{milestone.Name}\" of contract {contract.ContractNumber} passed its due date ({milestone.DueDate:yyyy-MM-dd}) and is now overdue.";
+        foreach (var userId in new[] { supplierUserId, contract.CustomerId })
+        {
+            context.Notifications.Add(new Notification
+            {
+                UserId = userId, Type = MilestoneOverdueNotificationType, Title = "Milestone overdue", Content = content,
+                ReferenceType = MilestoneReferenceType, ReferenceId = milestone.Id
+            });
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> SendMilestoneReminderAsync(Guid milestoneId, int days, DateOnly dueDate,
+        MilestoneStatus[] openStatuses, CancellationToken cancellationToken)
+    {
+        context.ChangeTracker.Clear();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var milestone = await LockMilestoneAsync(milestoneId, cancellationToken);
+        if (milestone is null || milestone.IsDeleted || milestone.IsDeposit || milestone.DueDate != dueDate
+            || !openStatuses.Contains(milestone.Status)) return false;
+
+        var contract = await context.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == milestone.ContractId && !item.IsDeleted && item.Status == ContractStatus.Active, cancellationToken);
+        if (contract is null) return false;
+
+        var type = $"contract.milestone.due_t{days}";
+        var alreadySent = await context.Notifications.AsNoTracking()
+            .AnyAsync(item => item.Type == type && item.ReferenceId == milestone.Id && !item.IsDeleted, cancellationToken);
+        if (alreadySent) return false;
+
+        var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
+        context.Notifications.Add(new Notification
+        {
+            UserId = supplierUserId, Type = type, Title = "Milestone due soon",
+            Content = $"Milestone \"{milestone.Name}\" of contract {contract.ContractNumber} is due in {days} day(s) on {dueDate:yyyy-MM-dd}.",
+            ReferenceType = MilestoneReferenceType, ReferenceId = milestone.Id
+        });
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
 }

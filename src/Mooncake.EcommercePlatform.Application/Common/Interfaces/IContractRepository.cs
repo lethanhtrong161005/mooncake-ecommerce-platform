@@ -34,5 +34,7 @@ public interface IContractRepository
     Task<ContractDispute?> ResolveDisputeAsync(Guid contractId, string resolutionType, decimal refundAmount, string adminVerdict, Guid adminUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses.ContractDisputeListItemResponse>> ListDisputesAsync(string? status = null, CancellationToken cancellationToken = default);
     Task<ContractDispute?> GetDisputeByIdAsync(Guid disputeId, CancellationToken cancellationToken = default);
+    /// <summary>Marks overdue milestones of active contracts as Overdue and sends idempotent T-7/T-3/T-1 reminders. Returns the number of changes made.</summary>
+    Task<int> ProcessMilestoneDeadlinesAsync(CancellationToken cancellationToken = default);
 }
 

@@ -56,6 +56,12 @@ public sealed class DeliveriesController(
         return Success(result, DeliveryMessages.DeliveryStatusUpdated);
     }
 
+    [HttpPost("{id:guid}/confirm-receipt")]
+    [Authorize(Roles = "Customer")]
+    public async Task<IActionResult> ConfirmReceiptAsync(Guid id, CancellationToken cancellationToken) =>
+        Success(await deliveryService.ConfirmReceiptAsync(CurrentUserId, id, cancellationToken),
+            "Delivery receipt confirmed successfully.");
+
     [HttpPut("{id:guid}/carrier-info")]
     [Authorize(Roles = "Supplier,Admin")]
     public async Task<IActionResult> UpdateCarrierInfoAsync(Guid id, [FromBody] UpdateCarrierInfoRequest request, CancellationToken cancellationToken)

@@ -172,7 +172,7 @@ public sealed class DeliveryManagementTests
     }
 
     [Fact]
-    public async Task SubmitProofAsync_DeliveryPoD_WithPhotoAndSignature_UpdatesContractDeliveryToDelivered()
+    public async Task SubmitProofAsync_DeliveryPoD_WithPhotoAndSignature_WaitsForCustomerReceiptConfirmation()
     {
         var service = new DeliveryService(repository.Object, clock.Object);
         var delivery = new Delivery
@@ -212,7 +212,8 @@ public sealed class DeliveryManagementTests
         Assert.NotNull(result.TamperProofHash);
         Assert.Equal(64, result.TamperProofHash.Length);
         Assert.True(result.IsVerified);
-        Assert.Equal(DeliveryStatus.Delivered, delivery.Status);
+        Assert.Equal(DeliveryStatus.AwaitingCustomerConfirmation, delivery.Status);
+        Assert.Null(delivery.ActualDeliveryDate);
     }
 
     [Fact]

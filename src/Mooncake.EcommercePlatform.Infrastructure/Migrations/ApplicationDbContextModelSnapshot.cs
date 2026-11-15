@@ -2561,6 +2561,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
+                    b.Property<string>("RefundBankSnapshotJson")
+                        .HasColumnType("text")
+                        .HasColumnName("refund_bank_snapshot_json");
+
                     b.Property<string>("ResolutionNotes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -3015,6 +3019,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("CustomerBankSnapshotJson")
+                        .HasColumnType("text")
+                        .HasColumnName("customer_bank_snapshot_json");
+
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
@@ -3064,6 +3072,11 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
+
+                    b.Property<string>("TransferProofImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("transfer_proof_image_url");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -6014,6 +6027,11 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.Property<Guid>("SupplierUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("supplier_user_id");
+
+                    b.Property<string>("TransferProofImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("transfer_proof_image_url");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

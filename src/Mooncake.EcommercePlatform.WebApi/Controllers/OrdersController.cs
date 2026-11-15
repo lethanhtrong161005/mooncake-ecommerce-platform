@@ -3,6 +3,9 @@ namespace Mooncake.EcommercePlatform.WebApi.Controllers;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Orders.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.WebApi.Filters;
@@ -212,6 +215,25 @@ public sealed class OrdersController(IOrderService orderService) : BaseApiContro
         CancellationToken cancellationToken) =>
         Success(await enterpriseService.ConfirmDeliveryReceiptAsync(GetCurrentUserId(), orderId, request, cancellationToken),
             "Order delivery confirmed and funds unlocked to eligible balance.");
+
+    /// <summary>Uploads a customer delivery dispute evidence photo to Cloudinary.</summary>
+    [Authorize(Roles = "Customer")]
+    [HttpPost("disputes/upload-evidence")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadDisputeEvidenceAsync(IFormFile? file,
+        [FromServices] ICloudinaryStorageService? cloudinaryStorage, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            throw new HttpException(400, B2BOrderingMessages.LogoFileRequired, OrderErrorCodes.ValidationError);
+        if (file.Length > 10 * 1024 * 1024)
+            throw new HttpException(400, B2BOrderingMessages.LogoFileTooLarge, OrderErrorCodes.ValidationError);
+        if (cloudinaryStorage is null)
+            throw new HttpException(503, B2BOrderingMessages.LogoStorageUnavailable, OrderErrorCodes.FeatureDisabled);
+
+        await using var stream = file.OpenReadStream();
+        var upload = await cloudinaryStorage.UploadImageAsync(stream, file.FileName, false, cancellationToken);
+        return Success(new { url = upload.Url, publicId = upload.PublicId }, "Evidence photo uploaded successfully.");
+    }
 
     /// <summary>Reports a delivery issue (missing, damaged, or wrong items) and freezes payout eligibility.</summary>
     [Authorize(Roles = "Customer")]

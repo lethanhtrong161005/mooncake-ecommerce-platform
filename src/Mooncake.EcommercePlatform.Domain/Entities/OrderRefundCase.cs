@@ -32,5 +32,9 @@ public sealed class OrderRefundCase : BaseEntity
     public string? AdminNotes { get; set; }
 
     public string? RefundReferenceCode { get; set; }
+
+    public string? CustomerBankSnapshotJson { get; set; }
+
+    public string? TransferProofImageUrl { get; set; }
 }
 

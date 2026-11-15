@@ -3,6 +3,9 @@ namespace Mooncake.EcommercePlatform.WebApi.Controllers;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.Exceptions;
+using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Orders.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.WebApi.Filters;
@@ -13,6 +16,41 @@ using Mooncake.EcommercePlatform.WebApi.Filters;
 [Route("api/v1/admin/orders")]
 public sealed class AdminOrderOperationsController(IDirectBulkOrderService enterpriseService) : BaseApiController
 {
+    private const long MaxRefundProofBytes = 10 * 1024 * 1024;
+
+    /// <summary>Uploads a manual bank transfer proof receipt image for refund reconciliation.</summary>
+    [HttpPost("refund-proof/upload")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadRefundProofAsync(IFormFile? file,
+        [FromServices] ICloudinaryStorageService? cloudinaryStorage, CancellationToken cancellationToken)
+    {
+        var upload = await UploadProofImageCoreAsync(file, cloudinaryStorage, cancellationToken);
+        return Success(new { url = upload.Url, publicId = upload.PublicId }, "Refund transfer proof uploaded successfully.");
+    }
+
+    /// <summary>Uploads a manual bank transfer proof receipt image (PoD) for supplier payout reconciliation.</summary>
+    [HttpPost("payout-proof/upload")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadPayoutProofAsync(IFormFile? file,
+        [FromServices] ICloudinaryStorageService? cloudinaryStorage, CancellationToken cancellationToken)
+    {
+        var upload = await UploadProofImageCoreAsync(file, cloudinaryStorage, cancellationToken);
+        return Success(new { url = upload.Url, publicId = upload.PublicId }, "Payout transfer proof uploaded successfully.");
+    }
+
+    private static async Task<Mooncake.EcommercePlatform.Application.DTOs.Files.Responses.CloudinaryUploadResponse> UploadProofImageCoreAsync(
+        IFormFile? file, ICloudinaryStorageService? cloudinaryStorage, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            throw new HttpException(400, "Please select a transfer proof image file.", OrderErrorCodes.ValidationError);
+        if (file.Length > MaxRefundProofBytes)
+            throw new HttpException(400, "Transfer proof image size must not exceed 10MB.", OrderErrorCodes.ValidationError);
+        if (cloudinaryStorage is null)
+            throw new HttpException(503, B2BOrderingMessages.LogoStorageUnavailable, OrderErrorCodes.FeatureDisabled);
+
+        await using var stream = file.OpenReadStream();
+        return await cloudinaryStorage.UploadImageAsync(stream, file.FileName, false, cancellationToken);
+    }
     /// <summary>Returns all pending and recent Direct Bulk Order refund cases, simulated payout requests, and delivery disputes.</summary>
     [HttpGet("operations")]
     public async Task<IActionResult> GetOperationsOverviewAsync(CancellationToken cancellationToken) =>

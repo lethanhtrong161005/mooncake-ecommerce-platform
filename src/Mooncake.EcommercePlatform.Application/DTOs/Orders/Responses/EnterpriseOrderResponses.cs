@@ -156,7 +156,9 @@ public sealed record OrderRefundCaseResponse(
     DateTime CreatedAtUtc,
     DateTime? ProcessedAtUtc,
     string? AdminNotes,
-    string? RefundReferenceCode);
+    string? RefundReferenceCode,
+    string? CustomerBankSnapshotJson = null,
+    string? TransferProofImageUrl = null);
 
 /// <summary>Supplier settlement bank account details.</summary>
 public sealed record SupplierPayoutAccountResponse(
@@ -172,7 +174,7 @@ public sealed record SupplierPayoutAccountResponse(
     long Version,
     DateTime UpdatedAtUtc);
 
-/// <summary>Simulated supplier payout request for an eligible delivered order.</summary>
+/// <summary>Supplier payout request for an eligible delivered order.</summary>
 public sealed record SupplierPayoutRequestResponse(
     Guid Id,
     Guid OrderId,
@@ -185,7 +187,8 @@ public sealed record SupplierPayoutRequestResponse(
     DateTime CreatedAtUtc,
     DateTime? ProcessedAtUtc,
     string? AdminNotes,
-    string? PayoutReferenceCode);
+    string? PayoutReferenceCode,
+    string? TransferProofImageUrl = null);
 
 /// <summary>Delivery discrepancy or damage dispute reported by a customer.</summary>
 public sealed record OrderDeliveryDisputeResponse(
@@ -199,7 +202,9 @@ public sealed record OrderDeliveryDisputeResponse(
     string Status,
     string? ResolutionNotes,
     DateTime CreatedAtUtc,
-    DateTime? ResolvedAtUtc);
+    DateTime? ResolvedAtUtc,
+    string? RefundBankSnapshotJson = null,
+    decimal? OrderPaidAmount = null);
 
 /// <summary>Compact Proof-of-Delivery photo and shipment snapshot embedded on an order.</summary>
 public sealed record OrderDeliverySnapshotResponse(
@@ -246,6 +251,31 @@ public sealed record AdminOrderOperationsOverviewResponse(
     IReadOnlyList<SupplierPayoutRequestResponse> PayoutRequests,
     IReadOnlyList<OrderDeliveryDisputeResponse> DeliveryDisputes);
 
-public sealed record SupplierOrderDashboardSummaryResponse(int TotalOrders, int PendingOrders,
-    int ProcessingOrders, int PackagingOrders, decimal TotalRevenue);
+public sealed record SupplierRevenueTrendPointResponse(
+    string Key,
+    string Label,
+    decimal DirectOrderRevenue,
+    decimal ContractRevenue,
+    decimal PaidRevenue,
+    int OrderCount,
+    int ContractCount);
+
+public sealed record SupplierOrderDashboardSummaryResponse(
+    int TotalOrders,
+    int PendingOrders,
+    int ProcessingOrders,
+    int PackagingOrders,
+    decimal TotalRevenue,
+    decimal DirectOrderRevenue = 0m,
+    decimal DirectOrderPaidRevenue = 0m,
+    int ActiveDirectOrdersCount = 0,
+    decimal ContractRevenue = 0m,
+    decimal ContractPaidRevenue = 0m,
+    int ActiveContractsCount = 0,
+    int CompletedContractsCount = 0,
+    decimal RefundedAmount = 0m,
+    int DeliveredOrders = 0,
+    int CancelledOrders = 0,
+    IReadOnlyList<SupplierRevenueTrendPointResponse>? DailyTrend = null,
+    IReadOnlyList<SupplierRevenueTrendPointResponse>? MonthlyTrend = null);
 

@@ -19,6 +19,8 @@ public sealed class OrderDeliveryDispute : BaseEntity
 
     public string? EvidenceUrlsJson { get; set; }
 
+    public string? RefundBankSnapshotJson { get; set; }
+
     public string Status { get; set; } = "Open";
 
     public string? ResolutionNotes { get; set; }

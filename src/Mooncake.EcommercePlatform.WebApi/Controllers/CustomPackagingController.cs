@@ -8,6 +8,7 @@ using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Packaging.Requests;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
+using Mooncake.EcommercePlatform.Infrastructure.Services;
 using Mooncake.EcommercePlatform.WebApi.Filters;
 
 /// <summary>Customer and supplier custom packaging collaboration endpoints.</summary>
@@ -16,9 +17,11 @@ using Mooncake.EcommercePlatform.WebApi.Filters;
 [Route("api/v1/orders/{orderId:guid}/custom-packaging")]
 public sealed class CustomPackagingController(
     ICustomPackagingService service,
-    ICloudinaryStorageService? cloudinaryStorage = null) : BaseApiController
+    ICloudinaryStorageService? cloudinaryStorage = null,
+    ILogoImageSanitizer? logoSanitizer = null) : BaseApiController
 {
     private const long MaxLogoBytes = 10 * 1024 * 1024;
+    private readonly ILogoImageSanitizer _logoSanitizer = logoSanitizer ?? new LogoImageSanitizer();
 
     /// <summary>Uploads a customer corporate logo to Cloudinary for custom packaging.</summary>
     [Authorize(Roles = "Customer,Supplier,Admin")]
@@ -36,7 +39,10 @@ public sealed class CustomPackagingController(
             throw new HttpException(503, B2BOrderingMessages.LogoStorageUnavailable, OrderErrorCodes.FeatureDisabled);
 
         await using var stream = file.OpenReadStream();
-        var upload = await cloudinaryStorage.UploadImageAsync(stream, file.FileName, false, cancellationToken);
+        var (sanitizedBytes, fileName) = _logoSanitizer.Sanitize(stream, file.FileName, file.ContentType, MaxLogoBytes);
+
+        await using var sanitizedStream = new MemoryStream(sanitizedBytes);
+        var upload = await cloudinaryStorage.UploadImageAsync(sanitizedStream, fileName, false, cancellationToken);
         return Success(new { url = upload.Url, publicId = upload.PublicId }, B2BOrderingMessages.LogoUploaded);
     }
 

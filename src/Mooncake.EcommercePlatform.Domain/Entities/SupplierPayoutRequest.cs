@@ -30,5 +30,7 @@ public sealed class SupplierPayoutRequest : BaseEntity
     public string? AdminNotes { get; set; }
 
     public string? PayoutReferenceCode { get; set; }
+
+    public string? TransferProofImageUrl { get; set; }
 }
 

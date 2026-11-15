@@ -10,7 +10,7 @@ using Mooncake.EcommercePlatform.Application.Services.Interfaces;
 using Mooncake.EcommercePlatform.WebApi.Filters;
 using C = Mooncake.EcommercePlatform.Application.Common.Constant.ProductConstants;
 
-[ProductApi, Authorize, Route("api/v1/suppliers/me/products"), EnableRateLimiting(C.RatePolicy)]
+[ProductApi, Authorize(Roles = "Supplier"), Route("api/v1/suppliers/me/products"), EnableRateLimiting(C.RatePolicy)]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class SupplierProductsController(IProductCatalogService service) : BaseApiController
 {

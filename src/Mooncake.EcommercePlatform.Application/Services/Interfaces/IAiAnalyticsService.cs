@@ -16,6 +16,6 @@ public interface IAiAnalyticsService
 
     Task<AiAnalyticsReportResponse> GetReportDetailsAsync(Guid requestedBy, bool isAdmin, Guid reportId, CancellationToken cancellationToken = default);
 
-    Task<AiDashboardSummaryResponse> GetDashboardSummaryAsync(Guid? shopId, CancellationToken cancellationToken = default);
+    Task<AiDashboardSummaryResponse> GetDashboardSummaryAsync(Guid requestedBy, bool isAdmin, Guid? shopId, CancellationToken cancellationToken = default);
 }
 

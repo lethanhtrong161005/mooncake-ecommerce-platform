@@ -109,6 +109,7 @@ public static class DependencyInjection
         services.AddScoped<ICustomPackagingRepository, CustomPackagingRepository>();
         services.AddScoped<IPackagingTemplateRepository, PackagingTemplateRepository>();
         services.AddScoped<IPackagingTemplateImageProcessor, PackagingTemplateImageProcessor>();
+        services.AddScoped<ILogoImageSanitizer, LogoImageSanitizer>();
         services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRfqRepository, RfqRepository>();
@@ -118,6 +119,7 @@ public static class DependencyInjection
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<IAiConversationRepository, AiConversationRepository>();
         services.AddScoped<IAiAnalyticsReportRepository, AiAnalyticsReportRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
         services.AddHttpClient<IGeminiGateway, GeminiGateway>();

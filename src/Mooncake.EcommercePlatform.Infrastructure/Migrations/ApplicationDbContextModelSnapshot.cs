@@ -1745,6 +1745,20 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("delivery_type")
                         .HasColumnName("delivery_type");
 
+                    b.Property<DateTime?>("DriverClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("driver_claimed_at");
+
+                    b.Property<string>("DriverName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("driver_name");
+
+                    b.Property<string>("DriverPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("driver_phone");
+
                     b.Property<string>("FromAddress")
                         .HasColumnType("text")
                         .HasColumnName("from_address");
@@ -1776,6 +1790,11 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.Property<DateOnly?>("ScheduledDate")
                         .HasColumnType("date")
                         .HasColumnName("scheduled_date");
+
+                    b.Property<string>("ShareCode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("share_code");
 
                     b.Property<string>("ShareToken")
                         .HasMaxLength(128)
@@ -1817,6 +1836,11 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<string>("VehiclePlate")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("vehicle_plate");
+
                     b.HasKey("Id")
                         .HasName("deliveries_pkey");
 
@@ -1828,6 +1852,10 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "OrderId" }, "idx_del_order_id")
                         .HasFilter("(order_id IS NOT NULL)");
+
+                    b.HasIndex(new[] { "ShareCode" }, "idx_del_share_code")
+                        .IsUnique()
+                        .HasFilter("(share_code IS NOT NULL)");
 
                     b.HasIndex(new[] { "ShareToken" }, "idx_del_share_token")
                         .IsUnique()

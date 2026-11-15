@@ -46,5 +46,14 @@ public static class DeliveryMessages
     public const string ShareLinkExpiredError = "This delivery PoD share link has expired. Please request a new link from the supplier.";
     public const string DeliveryCannotAcceptShareLink = "Completed or returned deliveries cannot generate a new driver PoD link.";
     public const string DriverPhotoUploaded = "Driver PoD photo uploaded successfully.";
+    public const string DriverAssigned = "Driver assigned successfully.";
+    public const string DriverUnassigned = "Driver unassigned successfully.";
+    public const string DriverClaimed = "Driver claimed trip successfully.";
+    public const string DriverAlreadyClaimedConflict = "Chuyến đã có tài xế nhận";
+    public const string MustClaimTripFirst = "Hãy nhận chuyến trước";
+    public const string DriverNameRequired = "Driver name is required.";
+    public const string DriverPhoneRequired = "Driver phone is required.";
+    public const string DriverPhoneInvalid = "Driver phone must be a valid 10-digit Vietnamese mobile number.";
+    public const string VehiclePlateRequired = "Vehicle plate is required.";
 }
 

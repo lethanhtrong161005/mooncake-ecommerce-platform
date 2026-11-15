@@ -307,6 +307,50 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
         await context.Deliveries.AsNoTracking()
             .FirstOrDefaultAsync(d => d.ShareToken == token && !d.IsDeleted, cancellationToken);
 
+    public async Task<Delivery?> GetByShareCodeAsync(string shareCode, CancellationToken cancellationToken = default)
+    {
+        var upperCode = shareCode.ToUpperInvariant();
+        return await context.Deliveries.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.ShareCode != null && d.ShareCode.ToUpper() == upperCode && !d.IsDeleted, cancellationToken);
+    }
+
+    public async Task<bool> IsShareCodeInUseAsync(string shareCode, DateTime utcNow, CancellationToken cancellationToken = default)
+    {
+        var upperCode = shareCode.ToUpperInvariant();
+        return await context.Deliveries.AsNoTracking().AnyAsync(
+            d => d.ShareCode != null
+                 && d.ShareCode.ToUpper() == upperCode
+                 && !d.IsDeleted
+                 && !d.ShareTokenRevokedAtUtc.HasValue
+                 && d.ShareTokenExpiresAtUtc.HasValue
+                 && d.ShareTokenExpiresAtUtc.Value > utcNow,
+            cancellationToken);
+    }
+
+    public async Task<Guid?> GetCustomerUserIdForDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var contractCustomerId = await (
+            from delivery in context.Deliveries.AsNoTracking()
+            join contract in context.Contracts.AsNoTracking() on delivery.ContractId equals contract.Id
+            where delivery.Id == deliveryId && !delivery.IsDeleted && !contract.IsDeleted
+            select (Guid?)contract.CustomerId
+        ).FirstOrDefaultAsync(cancellationToken);
+        if (contractCustomerId.HasValue) return contractCustomerId;
+
+        return await (
+            from delivery in context.Deliveries.AsNoTracking()
+            join order in context.Orders.AsNoTracking() on delivery.OrderId equals order.Id
+            where delivery.Id == deliveryId && !delivery.IsDeleted && !order.IsDeleted
+            select (Guid?)order.CustomerId
+        ).FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task AddWorkflowEventAsync(WorkflowEvent workflowEvent, CancellationToken cancellationToken = default)
+    {
+        context.WorkflowEvents.Add(workflowEvent);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<string?> GetReferenceCodeAsync(Delivery delivery, CancellationToken cancellationToken = default)
     {
         if (delivery.OrderId.HasValue)
@@ -343,6 +387,8 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                 from o in context.Orders.AsNoTracking()
                 join c in context.Users.AsNoTracking() on o.CustomerId equals c.Id into customerJoin
                 from c in customerJoin.DefaultIfEmpty()
+                join cp in context.CustomerProfiles.AsNoTracking() on o.CustomerId equals cp.UserId into cpJoin
+                from cp in cpJoin.DefaultIfEmpty()
                 join s in context.Shops.AsNoTracking() on o.ShopId equals s.Id into shopJoin
                 from s in shopJoin.DefaultIfEmpty()
                 where orderIds.Contains(o.Id) && !o.IsDeleted
@@ -351,11 +397,12 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                     o.Id,
                     o.OrderNumber,
                     CustomerName = c != null ? (c.FullName ?? c.Email) : null,
+                    CustomerCompanyName = cp != null ? cp.CompanyName : null,
                     SupplierName = s != null ? s.Name : null
                 }
             ).ToDictionaryAsync(
                 x => x.Id,
-                x => new DeliveryPartyContext(x.OrderNumber, null, x.CustomerName, x.SupplierName),
+                x => new DeliveryPartyContext(x.OrderNumber, null, x.CustomerName, x.SupplierName, x.CustomerCompanyName),
                 cancellationToken);
 
         var contractIds = deliveries.Where(d => d.ContractId.HasValue).Select(d => d.ContractId!.Value).Distinct().ToArray();
@@ -365,6 +412,8 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                 from ct in context.Contracts.AsNoTracking()
                 join c in context.Users.AsNoTracking() on ct.CustomerId equals c.Id into customerJoin
                 from c in customerJoin.DefaultIfEmpty()
+                join cp in context.CustomerProfiles.AsNoTracking() on ct.CustomerId equals cp.UserId into cpJoin
+                from cp in cpJoin.DefaultIfEmpty()
                 join sp in context.SupplierProfiles.AsNoTracking() on ct.SupplierId equals sp.Id into spJoin
                 from sp in spJoin.DefaultIfEmpty()
                 where contractIds.Contains(ct.Id) && !ct.IsDeleted
@@ -373,11 +422,12 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                     ct.Id,
                     ct.ContractNumber,
                     CustomerName = c != null ? (c.FullName ?? c.Email) : null,
+                    CustomerCompanyName = cp != null ? cp.CompanyName : null,
                     SupplierName = sp != null ? sp.CompanyName : null
                 }
             ).ToDictionaryAsync(
                 x => x.Id,
-                x => new DeliveryPartyContext(null, x.ContractNumber, x.CustomerName, x.SupplierName),
+                x => new DeliveryPartyContext(null, x.ContractNumber, x.CustomerName, x.SupplierName, x.CustomerCompanyName),
                 cancellationToken);
 
         foreach (var delivery in deliveries)

@@ -37,6 +37,11 @@ public static class DeliveryResponseHelper
         OrderNumber = context?.OrderNumber,
         CustomerName = context?.CustomerName,
         SupplierName = context?.SupplierName,
+        DriverName = delivery.DriverName,
+        DriverPhone = delivery.DriverPhone,
+        VehiclePlate = delivery.VehiclePlate,
+        ShareCode = delivery.ShareCode,
+        DriverClaimedAt = delivery.DriverClaimedAt,
         CreatedAt = delivery.CreatedAt,
         UpdatedAt = delivery.UpdatedAt
     };
@@ -72,6 +77,11 @@ public static class DeliveryResponseHelper
         OrderNumber = context?.OrderNumber,
         CustomerName = context?.CustomerName,
         SupplierName = context?.SupplierName,
+        DriverName = delivery.DriverName,
+        DriverPhone = delivery.DriverPhone,
+        VehiclePlate = delivery.VehiclePlate,
+        ShareCode = delivery.ShareCode,
+        DriverClaimedAt = delivery.DriverClaimedAt,
         CreatedAt = delivery.CreatedAt,
         UpdatedAt = delivery.UpdatedAt
     };
@@ -119,6 +129,7 @@ public static class DeliveryResponseHelper
             DeliveryId = delivery.Id,
             DeliveryNumber = delivery.DeliveryNumber,
             Token = isActive ? delivery.ShareToken : null,
+            ShareCode = delivery.ShareCode,
             CreatedAtUtc = delivery.ShareTokenCreatedAtUtc,
             ExpiresAtUtc = delivery.ShareTokenExpiresAtUtc,
             RevokedAtUtc = delivery.ShareTokenRevokedAtUtc,
@@ -134,7 +145,8 @@ public static class DeliveryResponseHelper
         int proofCount,
         string? referenceCode = null,
         IReadOnlyList<DeliveryItemResponse>? items = null,
-        int? totalBatches = null) => new()
+        int? totalBatches = null,
+        DeliveryPartyContext? context = null) => new()
     {
         DeliveryId = delivery.Id,
         DeliveryNumber = delivery.DeliveryNumber,
@@ -157,5 +169,16 @@ public static class DeliveryResponseHelper
         ExpiresAtUtc = delivery.ShareTokenExpiresAtUtc ?? delivery.CreatedAt,
         CanSubmitProof = delivery.Status != Domain.Enums.DeliveryStatus.Delivered
                          && delivery.Status != Domain.Enums.DeliveryStatus.Returned
+                         && delivery.DriverClaimedAt.HasValue,
+        Token = delivery.ShareToken,
+        ShareCode = delivery.ShareCode,
+        DriverName = delivery.DriverName,
+        DriverPhone = delivery.DriverPhone,
+        VehiclePlate = delivery.VehiclePlate,
+        DriverClaimedAt = delivery.DriverClaimedAt,
+        OrderType = delivery.ContractId.HasValue ? "Contract" : "BulkOrder",
+        OrderNumber = context?.OrderNumber,
+        ContractNumber = context?.ContractNumber,
+        RecipientCompanyName = context?.CustomerCompanyName ?? context?.CustomerName ?? delivery.RecipientName
     };
 }

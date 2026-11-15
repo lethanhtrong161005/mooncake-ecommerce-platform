@@ -123,12 +123,42 @@ public sealed class DeliveriesController(
         return Success(new { deliveryId = id, revoked = true }, DeliveryMessages.ShareLinkRevoked);
     }
 
+    [HttpPut("{id:guid}/driver")]
+    [Authorize(Roles = "Supplier,Admin")]
+    public async Task<IActionResult> AssignDriverAsync(Guid id,
+        [FromBody] AssignDeliveryDriverRequest request, CancellationToken cancellationToken) =>
+        Success(await deliveryService.AssignDriverAsync(CurrentUserId, id, request, cancellationToken),
+            DeliveryMessages.DriverAssigned);
+
+    [HttpDelete("{id:guid}/driver")]
+    [Authorize(Roles = "Supplier,Admin")]
+    public async Task<IActionResult> RevokeDriverAssignmentAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await deliveryService.RevokeDriverAssignmentAsync(CurrentUserId, id, cancellationToken);
+        return Success(new { deliveryId = id, unassigned = true }, DeliveryMessages.DriverUnassigned);
+    }
+
     [AllowAnonymous]
     [EnableRateLimiting(PublicDriverRatePolicy)]
     [HttpGet("public/{token}")]
     public async Task<IActionResult> GetPublicByTokenAsync(string token, CancellationToken cancellationToken) =>
         Success(await deliveryService.GetPublicByTokenAsync(token, cancellationToken),
             DeliveryMessages.DeliveryRetrieved);
+
+    [AllowAnonymous]
+    [EnableRateLimiting(PublicDriverRatePolicy)]
+    [HttpGet("public/code/{shareCode}")]
+    public async Task<IActionResult> GetPublicByShareCodeAsync(string shareCode, CancellationToken cancellationToken) =>
+        Success(await deliveryService.GetPublicByShareCodeAsync(shareCode, cancellationToken),
+            DeliveryMessages.DeliveryRetrieved);
+
+    [AllowAnonymous]
+    [EnableRateLimiting(PublicDriverRatePolicy)]
+    [HttpPost("public/{token}/claim")]
+    public async Task<IActionResult> ClaimTripAsync(string token,
+        [FromBody] ClaimDeliveryTripRequest request, CancellationToken cancellationToken) =>
+        Success(await deliveryService.ClaimTripAsync(token, request, cancellationToken),
+            DeliveryMessages.DriverClaimed);
 
     [AllowAnonymous]
     [EnableRateLimiting(PublicDriverRatePolicy)]

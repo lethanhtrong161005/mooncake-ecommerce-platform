@@ -19,6 +19,10 @@ public static class OrderPolicyDefaults
     public const int DefaultPodReviewDeadlineHours = 48;
     public const int CustomerPodReviewSlaHours = DefaultPodReviewDeadlineHours;
 
+    public const string DeliveryAutoConfirmHoursKey = "orders.delivery_auto_confirm_hours";
+    public const int DefaultDeliveryAutoConfirmHours = 72;
+    public const int DeliveryAutoConfirmHours = DefaultDeliveryAutoConfirmHours;
+
     public const string PackagingReservationBusinessDaysKey = "orders.packaging_reservation_business_days";
     public const int DefaultPackagingReservationBusinessDays = 5;
     public const int MockupReservationBusinessDays = DefaultPackagingReservationBusinessDays;

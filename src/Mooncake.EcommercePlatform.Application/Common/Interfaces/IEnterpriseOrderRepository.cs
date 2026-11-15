@@ -105,5 +105,7 @@ public interface IEnterpriseOrderRepository
         CancellationToken cancellationToken = default);
 
     Task<int> ExpireOverdueOrdersAsync(CancellationToken cancellationToken = default);
+
+    Task<int> AutoConfirmDeliveredOrdersAsync(CancellationToken cancellationToken = default);
 }
 

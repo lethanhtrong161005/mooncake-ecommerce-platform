@@ -122,28 +122,19 @@ public sealed class AuthService(
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
         var user = await userRepository.GetByEmailAsync(NormalizeEmail(request.Email), cancellationToken);
-        if (user?.LockoutUntil is DateTime activeLockout && activeLockout > dateTimeProvider.UtcNow)
-            throw new HttpException(423, AccountLockedMessage);
+        EnsureNotLockedOut(user);
         if (user is null || string.IsNullOrEmpty(user.PasswordHash)
             || !passwordHasher.Verify(request.Password, user.PasswordHash))
         {
             if (user is not null)
             {
-                user.FailedLoginAttempts++;
-                if (user.FailedLoginAttempts >= MaxFailedAttempts)
-                {
-                    user.FailedLoginAttempts = 0;
-                    user.LockoutUntil = dateTimeProvider.UtcNow.Add(LockoutDuration);
-                }
-                await userRepository.UpdateAsync(user, cancellationToken);
+                await RecordFailedLoginAttemptAsync(user, cancellationToken);
             }
             throw new HttpException(401, InvalidCredentialsMessage);
         }
-        if (!user.IsActive) throw new HttpException(403, AccountInactiveMessage);
-        if (user.EmailVerifiedAt is null) throw new HttpException(403, VerificationRequiredMessage);
+        EnsureActiveAndVerified(user);
 
-        user.FailedLoginAttempts = 0;
-        user.LockoutUntil = null;
+        ResetLoginCounters(user);
         if (passwordHasher.NeedsRehash(user.PasswordHash)) user.PasswordHash = passwordHasher.Hash(request.Password);
         await userRepository.UpdateAsync(user, cancellationToken);
         return await CreateResponseAsync(user, null, null, cancellationToken);
@@ -348,17 +339,27 @@ public sealed class AuthService(
             throw new HttpException(400, MessageConstant.PasswordRequired);
 
         var user = await userRepository.GetByPhoneAsync(phone, cancellationToken);
-        if (user is null || user.IsDeleted || !user.IsActive ||
-            string.IsNullOrEmpty(user.PasswordHash) ||
-            !PasswordHashUtils.Verify(request.Password, user.PasswordHash, out var needsUpgrade))
-            throw new HttpException(401, MessageConstant.InvalidCredentials);
+        EnsureNotLockedOut(user);
 
+        if (user is null || user.IsDeleted || string.IsNullOrEmpty(user.PasswordHash) ||
+            !PasswordHashUtils.Verify(request.Password, user.PasswordHash, out var needsUpgrade))
+        {
+            if (user is not null && !user.IsDeleted)
+            {
+                await RecordFailedLoginAttemptAsync(user, cancellationToken);
+            }
+            throw new HttpException(401, MessageConstant.InvalidCredentials);
+        }
+
+        EnsureActiveAndVerified(user);
+
+        ResetLoginCounters(user);
         if (needsUpgrade)
         {
             user.PasswordHash = PasswordHashUtils.Hash(request.Password);
-            user.UpdatedAtUtc = dateTimeProvider.UtcNow;
-            await userRepository.UpdateAsync(user, cancellationToken);
         }
+        user.UpdatedAtUtc = dateTimeProvider.UtcNow;
+        await userRepository.UpdateAsync(user, cancellationToken);
 
         return await IssueAsync(user, cancellationToken);
     }
@@ -440,4 +441,33 @@ public sealed class AuthService(
     private static string CreateRefreshToken() =>
         Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(64));
 
+    private void EnsureNotLockedOut(User? user)
+    {
+        if (user?.LockoutUntil is DateTime activeLockout && activeLockout > dateTimeProvider.UtcNow && !user.IsDeleted)
+            throw new HttpException(423, AccountLockedMessage);
+    }
+
+    private async Task RecordFailedLoginAttemptAsync(User user, CancellationToken cancellationToken)
+    {
+        user.FailedLoginAttempts++;
+        if (user.FailedLoginAttempts >= MaxFailedAttempts)
+        {
+            user.FailedLoginAttempts = 0;
+            user.LockoutUntil = dateTimeProvider.UtcNow.Add(LockoutDuration);
+        }
+        user.UpdatedAtUtc = dateTimeProvider.UtcNow;
+        await userRepository.UpdateAsync(user, cancellationToken);
+    }
+
+    private static void EnsureActiveAndVerified(User user)
+    {
+        if (!user.IsActive) throw new HttpException(403, AccountInactiveMessage);
+        if (user.EmailVerifiedAt is null) throw new HttpException(403, VerificationRequiredMessage);
+    }
+
+    private static void ResetLoginCounters(User user)
+    {
+        user.FailedLoginAttempts = 0;
+        user.LockoutUntil = null;
+    }
 }

@@ -3,6 +3,7 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Mooncake.EcommercePlatform.Application.Common.Constant;
+using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Domain.Entities;

@@ -105,6 +105,9 @@ public sealed class ContractService(
             throw new HttpException(403, "Only the supplier can confirm this contract. The customer reviews the terms before payment.");
         if (await repository.HasSignedAsync(contract, userId, cancellationToken))
             return ToResponse(contract);
+        if (string.IsNullOrWhiteSpace(code))
+            throw new HttpException(400, "Signature verification code is required.");
+        await authService.VerifyContractSignatureOtpAsync(userId, contractId, code, cancellationToken);
         var signed = await repository.SignAsync(contractId, userId, ipAddress, userAgent, cancellationToken)
                      ?? throw new HttpException(409, "The contract state changed while supplier confirmation was being recorded. Refresh and try again.");
         return ToResponse(signed);
@@ -129,6 +132,11 @@ public sealed class ContractService(
             ?? throw new HttpException(404, "Milestone not found.");
         if (milestone.IsDeposit)
             throw new HttpException(400, "Deposit milestones cannot have progress submitted.");
+        if (milestone.Status != MilestoneStatus.Pending
+            && milestone.Status != MilestoneStatus.InProgress
+            && milestone.Status != MilestoneStatus.Failed
+            && milestone.Status != MilestoneStatus.Overdue)
+            throw new HttpException(409, "Milestone progress cannot be submitted for completed or pending-review milestones.");
 
         var updated = await repository.SubmitMilestoneProgressAsync(contractId, milestoneId, request.ProgressNotes, request.EvidenceUrls, userId, cancellationToken)
             ?? throw new HttpException(409, "Failed to submit milestone progress.");

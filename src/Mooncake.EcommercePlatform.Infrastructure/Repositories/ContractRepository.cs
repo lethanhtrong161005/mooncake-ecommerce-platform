@@ -332,6 +332,15 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             .FirstOrDefaultAsync(cancellationToken);
         if (milestone == null || milestone.ContractId != contractId || milestone.IsDeleted) return null;
 
+        if (milestone.Status != MilestoneStatus.Pending
+            && milestone.Status != MilestoneStatus.InProgress
+            && milestone.Status != MilestoneStatus.Failed
+            && milestone.Status != MilestoneStatus.Overdue)
+        {
+            throw new Mooncake.EcommercePlatform.Application.Common.Exceptions.HttpException(409, "Milestone progress cannot be submitted for completed or pending-review milestones.");
+        }
+
+        var fromStatus = milestone.Status;
         milestone.ProgressNotes = notes;
         milestone.EvidenceUrls = evidenceUrls != null && evidenceUrls.Count > 0 ? JsonSerializer.Serialize(evidenceUrls) : null;
         milestone.Status = MilestoneStatus.PendingReview;
@@ -344,7 +353,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             context.WorkflowEvents.Add(new WorkflowEvent
             {
                 AggregateType = "ContractMilestone", AggregateId = milestone.Id, EventType = "MilestoneProgressSubmitted",
-                FromStatus = MilestoneStatus.InProgress.ToString(), ToStatus = MilestoneStatus.PendingReview.ToString(), ActorUserId = actorUserId,
+                FromStatus = fromStatus.ToString(), ToStatus = MilestoneStatus.PendingReview.ToString(), ActorUserId = actorUserId,
                 Metadata = JsonSerializer.Serialize(new { notes })
             });
             context.Notifications.Add(new Notification

@@ -576,6 +576,20 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
                 order, baseResp.CustomPackaging, paymentSummary, financialSummary, deliverySnapshot,
                 pendingCancel, activeDispute, viewerUserId, viewerIsSupplier, viewerIsAdmin);
 
+            DateTime? autoConfirmAt = null;
+            if (order.Status == OrderStatus.Shipped && latestDelivery is not null)
+            {
+                var deliveryProofs = proofsByDelivery.GetValueOrDefault(latestDelivery.Id, []);
+                var earliestDeliveryProof = deliveryProofs
+                    .Where(p => p.ProofType == ProofType.Delivery && !p.IsDeleted)
+                    .OrderBy(p => p.CreatedAt)
+                    .FirstOrDefault();
+                if (earliestDeliveryProof is not null)
+                {
+                    autoConfirmAt = earliestDeliveryProof.CreatedAt.AddHours(OrderPolicyDefaults.DeliveryAutoConfirmHours);
+                }
+            }
+
             enriched.Add(baseResp with
             {
                 Version = order.Version,
@@ -588,6 +602,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
                 ProposedDeliveryDate = order.ProposedDeliveryDate,
                 DeliveryProposalReason = order.DeliveryProposalReason,
                 DeliveryApprovalDeadlineAtUtc = order.DeliveryApprovalDeadlineAt,
+                AutoConfirmAt = autoConfirmAt,
                 CancelledAtUtc = order.CancelledAt,
                 CancellationReason = order.CancellationReason,
                 PriceSnapshotVersion = order.PriceSnapshotVersion,
@@ -1056,9 +1071,11 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     {
         context.ChangeTracker.Clear();
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        var lockedOrder = await context.Orders.FromSqlInterpolated(
-                $"SELECT * FROM orders WHERE id = {order.Id} FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken);
+        var lockedOrder = context.Database.IsRelational()
+            ? await context.Orders.FromSqlInterpolated(
+                    $"SELECT * FROM orders WHERE id = {order.Id} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken)
+            : await context.Orders.SingleOrDefaultAsync(o => o.Id == order.Id, cancellationToken);
         if (lockedOrder is null || lockedOrder.IsDeleted || lockedOrder.CustomerId != customerId || lockedOrder.Status != OrderStatus.Shipped)
             return false;
 
@@ -1075,15 +1092,62 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         if (!hasDeliveryProof)
             throw new HttpException(409, "Cannot confirm receipt before Proof-of-Delivery photos are uploaded.", OrderErrorCodes.DeliveryProofRequired);
 
+        await ExecuteOrderDeliveryConfirmationCoreAsync(
+            lockedOrder, delivery, customerId, notes, isAutoConfirmed: false, cancellationToken);
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        order.Status = OrderStatus.Delivered;
+        order.Version = lockedOrder.Version;
+        return true;
+    }
+
+    private async Task RewardSupplierReputationOnDeliveryAsync(
+        Order lockedOrder, DateTime now, Guid actorUserId, CancellationToken cancellationToken)
+    {
+        var alreadyRewarded = await context.ReputationLogs
+            .AnyAsync(l => l.ReferenceId == lockedOrder.Id && l.ReferenceType == "Order" && !l.IsDeleted, cancellationToken);
+        if (alreadyRewarded)
+            return;
+
+        var shop = await context.Shops.FirstOrDefaultAsync(s => s.Id == lockedOrder.ShopId && !s.IsDeleted, cancellationToken);
+        if (shop is null)
+            return;
+
+        var supplier = await context.SupplierProfiles.FirstOrDefaultAsync(s => s.Id == shop.SupplierId && !s.IsDeleted, cancellationToken);
+        if (supplier is null)
+            return;
+
+        supplier.ReputationScore = Math.Max(0m, supplier.ReputationScore + 5m);
+        supplier.UpdatedAt = now;
+        supplier.UpdatedBy = actorUserId;
+
+        context.ReputationLogs.Add(new ReputationLog
+        {
+            Id = Guid.NewGuid(),
+            SupplierId = supplier.Id,
+            EventType = ReputationEvent.CompletedOnTime,
+            ScoreDelta = 5m,
+            Reason = $"Direct order {lockedOrder.OrderNumber} delivered successfully.",
+            ReferenceId = lockedOrder.Id,
+            ReferenceType = "Order",
+            CreatedAt = now,
+            CreatedBy = actorUserId
+        });
+    }
+
+    private async Task ExecuteOrderDeliveryConfirmationCoreAsync(
+        Order lockedOrder, Delivery delivery, Guid actorUserId, string? notes, bool isAutoConfirmed, CancellationToken cancellationToken)
+    {
         var now = clock.UtcNow;
         delivery.Status = DeliveryStatus.Delivered;
         delivery.ActualDeliveryDate = DateOnly.FromDateTime(now);
-        delivery.UpdatedBy = customerId;
+        delivery.UpdatedBy = actorUserId;
         delivery.UpdatedAt = now;
 
         lockedOrder.Status = OrderStatus.Delivered;
         lockedOrder.Version += 1;
-        lockedOrder.UpdatedBy = customerId;
+        lockedOrder.UpdatedBy = actorUserId;
         lockedOrder.UpdatedAt = now;
 
         await context.CustomPackagings
@@ -1091,10 +1155,13 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(item => item.Status, CustomPackagingStatus.Completed)
                 .SetProperty(item => item.UpdatedAt, now)
-                .SetProperty(item => item.UpdatedBy, customerId), cancellationToken);
+                .SetProperty(item => item.UpdatedBy, actorUserId), cancellationToken);
 
         // Unlock Held -> Eligible in simulated financial ledger!
-        await UnlockHeldBalanceToEligibleCoreAsync(lockedOrder, now, customerId, cancellationToken);
+        await UnlockHeldBalanceToEligibleCoreAsync(lockedOrder, now, actorUserId, cancellationToken);
+
+        // D26: Award +5 reputation to supplier idempotently
+        await RewardSupplierReputationOnDeliveryAsync(lockedOrder, now, actorUserId, cancellationToken);
 
         var supplierUserId = await GetSupplierUserIdByShopAsync(lockedOrder.ShopId, cancellationToken);
         context.WorkflowEvents.Add(new WorkflowEvent
@@ -1104,27 +1171,52 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
             EventType = "OrderDeliveryConfirmed",
             FromStatus = OrderStatus.Shipped.ToString(),
             ToStatus = OrderStatus.Delivered.ToString(),
-            ActorUserId = customerId,
+            ActorUserId = actorUserId,
             Reason = notes
         });
-        if (supplierUserId != Guid.Empty)
-        {
-            context.Notifications.Add(new Notification
-            {
-                UserId = supplierUserId,
-                Type = "order.delivered",
-                Title = "Customer confirmed order delivery",
-                Content = $"Order {lockedOrder.OrderNumber} was confirmed delivered. Funds are now eligible for simulated payout.",
-                ReferenceType = OrderReferenceType,
-                ReferenceId = lockedOrder.Id
-            });
-        }
 
-        await context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        order.Status = OrderStatus.Delivered;
-        order.Version = lockedOrder.Version;
-        return true;
+        if (isAutoConfirmed)
+        {
+            if (supplierUserId != Guid.Empty)
+            {
+                context.Notifications.Add(new Notification
+                {
+                    UserId = supplierUserId,
+                    Type = "order.delivered",
+                    Title = "Order delivery auto-confirmed",
+                    Content = $"Order {lockedOrder.OrderNumber} was automatically confirmed delivered after 72 hours. Funds are now eligible for simulated payout.",
+                    ReferenceType = OrderReferenceType,
+                    ReferenceId = lockedOrder.Id
+                });
+            }
+            if (lockedOrder.CustomerId != Guid.Empty)
+            {
+                context.Notifications.Add(new Notification
+                {
+                    UserId = lockedOrder.CustomerId,
+                    Type = "order.delivered",
+                    Title = "Order auto-confirmed",
+                    Content = $"Order {lockedOrder.OrderNumber} was automatically confirmed delivered after 72 hours.",
+                    ReferenceType = OrderReferenceType,
+                    ReferenceId = lockedOrder.Id
+                });
+            }
+        }
+        else
+        {
+            if (supplierUserId != Guid.Empty)
+            {
+                context.Notifications.Add(new Notification
+                {
+                    UserId = supplierUserId,
+                    Type = "order.delivered",
+                    Title = "Customer confirmed order delivery",
+                    Content = $"Order {lockedOrder.OrderNumber} was confirmed delivered. Funds are now eligible for simulated payout.",
+                    ReferenceType = OrderReferenceType,
+                    ReferenceId = lockedOrder.Id
+                });
+            }
+        }
     }
 
     public async Task<OrderDeliveryDisputeResponse> ReportDeliveryDisputeAsync(
@@ -1978,6 +2070,62 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         }
 
         return expiredCount;
+    }
+
+    public async Task<int> AutoConfirmDeliveredOrdersAsync(CancellationToken cancellationToken = default)
+    {
+        var now = clock.UtcNow;
+        var cutoff = now.AddHours(-OrderPolicyDefaults.DeliveryAutoConfirmHours);
+
+        var candidateIds = await (
+            from order in context.Orders.AsNoTracking()
+            where !order.IsDeleted && order.Status == OrderStatus.Shipped
+            join delivery in context.Deliveries.AsNoTracking() on order.Id equals delivery.OrderId
+            where !delivery.IsDeleted
+            join proof in context.DeliveryProofs.AsNoTracking() on delivery.Id equals proof.DeliveryId
+            where !proof.IsDeleted && proof.ProofType == ProofType.Delivery && proof.CreatedAt <= cutoff
+            select order.Id
+        ).Distinct().Take(50).ToListAsync(cancellationToken);
+
+        var confirmedCount = 0;
+        foreach (var candidateId in candidateIds)
+        {
+            context.ChangeTracker.Clear();
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var lockedOrder = context.Database.IsRelational()
+                ? await context.Orders.FromSqlInterpolated(
+                        $"SELECT * FROM orders WHERE id = {candidateId} FOR UPDATE SKIP LOCKED")
+                    .SingleOrDefaultAsync(cancellationToken)
+                : await context.Orders.SingleOrDefaultAsync(o => o.Id == candidateId, cancellationToken);
+            if (lockedOrder is null || lockedOrder.IsDeleted || lockedOrder.Status != OrderStatus.Shipped)
+                continue;
+
+            var hasOpenDispute = await context.OrderDeliveryDisputes.AsNoTracking()
+                .AnyAsync(item => item.OrderId == lockedOrder.Id && item.Status == "Open" && !item.IsDeleted, cancellationToken);
+            if (hasOpenDispute)
+                continue;
+
+            var delivery = await context.Deliveries
+                .Where(item => item.OrderId == lockedOrder.Id && !item.IsDeleted)
+                .OrderByDescending(item => item.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (delivery is null)
+                continue;
+
+            var hasDeliveryProof = await context.DeliveryProofs.AsNoTracking()
+                .AnyAsync(item => item.DeliveryId == delivery.Id && item.ProofType == ProofType.Delivery && !item.IsDeleted && item.CreatedAt <= cutoff, cancellationToken);
+            if (!hasDeliveryProof)
+                continue;
+
+            await ExecuteOrderDeliveryConfirmationCoreAsync(
+                lockedOrder, delivery, lockedOrder.CustomerId, "Tự xác nhận sau 72h", isAutoConfirmed: true, cancellationToken);
+
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            confirmedCount++;
+        }
+
+        return confirmedCount;
     }
 
     private void BuildInitialObligationsAndParts(Order order, Guid actorUserId, DateTime now, DateTime depositDeadline)

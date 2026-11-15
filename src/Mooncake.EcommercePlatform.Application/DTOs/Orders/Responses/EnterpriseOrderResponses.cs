@@ -140,7 +140,10 @@ public sealed record OrderCancellationRequestResponse(
     decimal ProposedRefundAmount,
     DateTime CreatedAtUtc,
     DateTime? ReviewedAtUtc,
-    string? ReviewNotes);
+    string? ReviewNotes,
+    decimal? SuggestedRefundAmount = null,
+    decimal? SuggestedRefundPercent = null,
+    string? SuggestionReason = null);
 
 /// <summary>Refund case state in sandbox simulation mode.</summary>
 public sealed record OrderRefundCaseResponse(
@@ -158,7 +161,10 @@ public sealed record OrderRefundCaseResponse(
     string? AdminNotes,
     string? RefundReferenceCode,
     string? CustomerBankSnapshotJson = null,
-    string? TransferProofImageUrl = null);
+    string? TransferProofImageUrl = null,
+    decimal? SuggestedRefundAmount = null,
+    decimal? SuggestedRefundPercent = null,
+    string? SuggestionReason = null);
 
 /// <summary>Supplier settlement bank account details.</summary>
 public sealed record SupplierPayoutAccountResponse(

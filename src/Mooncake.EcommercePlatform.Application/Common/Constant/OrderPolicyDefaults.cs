@@ -51,4 +51,10 @@ public static class OrderPolicyDefaults
     public const decimal MaxDepositPercent = 50m;
     public const decimal DefaultDepositPercent = 30m;
     public const decimal DefaultVatRatePercent = 8m;
+
+    /// <summary>Suggested refund percent when a Processing order with approved/in-production custom packaging is cancelled.</summary>
+    public const decimal InProductionCancelRefundPercent = 50m;
+
+    /// <summary>Suggested refund percent for every other cancellation.</summary>
+    public const decimal FullRefundPercent = 100m;
 }

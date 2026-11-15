@@ -172,7 +172,7 @@ public sealed class AiAnalyticsManagementTests
     }
 
     [Fact]
-    public async Task GetDashboardSummaryAsync_ReturnsAggregatedMetrics()
+    public async Task GetDashboardSummaryAsync_ReturnsAggregatedMetrics_ForAdmin()
     {
         reportRepo.Setup(r => r.GetDashboardSummaryMetricsAsync(It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AiDashboardSummaryResponse
@@ -187,12 +187,64 @@ public sealed class AiAnalyticsManagementTests
                 ActiveSuppliersCount = 12
             });
 
-        var summary = await analyticsService.GetDashboardSummaryAsync(null);
+        var summary = await analyticsService.GetDashboardSummaryAsync(requestedBy, true, null);
 
         Assert.NotNull(summary);
         Assert.Equal(48500000000m, summary.TotalGmv);
         Assert.Equal(142, summary.TotalOrders);
         Assert.Equal(98.2m, summary.OnTimeDeliveryRate);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_ThrowsNotFound_WhenSupplierHasNoShop()
+    {
+        reportRepo.Setup(r => r.FindShopIdByUserIdAsync(requestedBy, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid?)null);
+
+        var ex = await Assert.ThrowsAsync<HttpException>(() =>
+            analyticsService.GetDashboardSummaryAsync(requestedBy, false, null));
+
+        Assert.Equal(404, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_ThrowsForbidden_WhenSupplierAccessesOtherShop()
+    {
+        var ownShopId = Guid.NewGuid();
+        var otherShopId = Guid.NewGuid();
+
+        reportRepo.Setup(r => r.FindShopIdByUserIdAsync(requestedBy, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ownShopId);
+
+        var ex = await Assert.ThrowsAsync<HttpException>(() =>
+            analyticsService.GetDashboardSummaryAsync(requestedBy, false, otherShopId));
+
+        Assert.Equal(403, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_ReturnsOwnShopMetrics_WhenSupplierRequestsOwnShopOrNull()
+    {
+        var ownShopId = Guid.NewGuid();
+
+        reportRepo.Setup(r => r.FindShopIdByUserIdAsync(requestedBy, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ownShopId);
+        reportRepo.Setup(r => r.GetDashboardSummaryMetricsAsync(ownShopId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiDashboardSummaryResponse
+            {
+                TotalGmv = 12000000000m,
+                TotalOrders = 45
+            });
+
+        // Test with null shopId -> scopes to ownShopId
+        var summaryNull = await analyticsService.GetDashboardSummaryAsync(requestedBy, false, null);
+        Assert.NotNull(summaryNull);
+        Assert.Equal(12000000000m, summaryNull.TotalGmv);
+
+        // Test with explicit ownShopId -> succeeds
+        var summaryOwn = await analyticsService.GetDashboardSummaryAsync(requestedBy, false, ownShopId);
+        Assert.NotNull(summaryOwn);
+        Assert.Equal(12000000000m, summaryOwn.TotalGmv);
     }
 }
 

@@ -297,7 +297,7 @@ public sealed class AiControllersHttpTests
     [Fact]
     public async Task GetDashboardSummary_Returns200_ForAdmin()
     {
-        aiAnalyticsService.Setup(s => s.GetDashboardSummaryAsync(It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        aiAnalyticsService.Setup(s => s.GetDashboardSummaryAsync(AdminUserId, true, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AiDashboardSummaryResponse
             {
                 TotalGmv = 48500000000m,
@@ -324,5 +324,37 @@ public sealed class AiControllersHttpTests
         var response = await client.GetAsync("/api/v1/ai/analytics/dashboard-summary");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummary_Supplier_OtherShop_Returns403Forbidden()
+    {
+        var otherShopId = Guid.NewGuid();
+        aiAnalyticsService.Setup(s => s.GetDashboardSummaryAsync(SupplierUserId, false, otherShopId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Mooncake.EcommercePlatform.Application.Common.Exceptions.HttpException(403, "Access denied to other shop's metrics.", "ACCESS_DENIED"));
+
+        using var client = CreateClient("Supplier");
+        var response = await client.GetAsync($"/api/v1/ai/analytics/dashboard-summary?shopId={otherShopId}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummary_Supplier_OwnShop_Returns200()
+    {
+        var ownShopId = Guid.NewGuid();
+        aiAnalyticsService.Setup(s => s.GetDashboardSummaryAsync(SupplierUserId, false, ownShopId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiDashboardSummaryResponse
+            {
+                TotalGmv = 15000000000m,
+                TotalOrders = 50
+            });
+
+        using var client = CreateClient("Supplier");
+        var response = await client.GetAsync($"/api/v1/ai/analytics/dashboard-summary?shopId={ownShopId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("15000000000", body);
     }
 }

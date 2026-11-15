@@ -213,4 +213,12 @@ public class AiAnalyticsReportRepository : IAiAnalyticsReportRepository
             }
         };
     }
+
+    public async Task<Guid?> FindShopIdByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        return await (from s in _dbContext.Shops.AsNoTracking()
+                      where !s.IsDeleted && (s.OwnerUserId == userId || _dbContext.SupplierProfiles.Any(sp => sp.Id == s.SupplierId && sp.UserId == userId && !sp.IsDeleted))
+                      select (Guid?)s.Id)
+                      .FirstOrDefaultAsync(cancellationToken);
+    }
 }

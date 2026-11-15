@@ -40,7 +40,7 @@ public sealed class AiAnalyticsController(IAiAnalyticsService aiAnalyticsService
     [Authorize(Roles = "Admin,Supplier")]
     public async Task<IActionResult> GetDashboardSummaryAsync([FromQuery] Guid? shopId, CancellationToken ct)
     {
-        var result = await aiAnalyticsService.GetDashboardSummaryAsync(shopId, ct);
+        var result = await aiAnalyticsService.GetDashboardSummaryAsync(CurrentUserId, IsAdmin, shopId, ct);
         return Success(result, "Lấy tổng hợp chỉ số vận hành thời gian thực thành công.");
     }
 

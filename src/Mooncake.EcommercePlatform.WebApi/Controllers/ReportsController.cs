@@ -18,6 +18,7 @@ public sealed class ReportsController(
     IAiAnalyticsService aiAnalyticsService) : BaseApiController
 {
     [HttpGet("dashboard-metrics")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetDashboardMetricsAsync([FromQuery] string timeframe = "this_month", CancellationToken ct = default)
     {
         var ordersQuery = dbContext.Orders.AsNoTracking().Where(o => !o.IsDeleted);
@@ -59,6 +60,7 @@ public sealed class ReportsController(
     }
 
     [HttpGet("conversion-funnel")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetConversionFunnelAsync([FromQuery] string timeframe = "this_month", CancellationToken ct = default)
     {
         var rfqsCount = await dbContext.RequestForQuotations.AsNoTracking().CountAsync(r => !r.IsDeleted, ct);
@@ -92,6 +94,7 @@ public sealed class ReportsController(
     }
 
     [HttpGet("top-suppliers")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetTopSuppliersAsync(CancellationToken ct = default)
     {
         var suppliers = await (from profile in dbContext.SupplierProfiles.AsNoTracking()
@@ -113,6 +116,7 @@ public sealed class ReportsController(
     }
 
     [HttpPost("ai-summary")]
+    [Authorize(Roles = "Admin,Supplier")]
     public async Task<IActionResult> GenerateAiSummaryAsync([FromBody] GenerateAiAnalyticsReportRequest request, CancellationToken ct = default)
     {
         var result = await aiAnalyticsService.GenerateReportAsync(CurrentUserId, User.IsInRole("Admin"), request, ct);
@@ -120,6 +124,7 @@ public sealed class ReportsController(
     }
 
     [HttpGet("export")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ExportReportAsync([FromQuery] string format = "csv", CancellationToken ct = default)
     {
         var contracts = await dbContext.Contracts

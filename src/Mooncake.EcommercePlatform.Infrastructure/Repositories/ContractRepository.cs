@@ -140,16 +140,28 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var contract = await context.Contracts.FromSqlInterpolated($"SELECT * FROM contracts WHERE id = {contractId} FOR UPDATE")
             .FirstOrDefaultAsync(cancellationToken);
-        if (contract is null || contract.IsDeleted || contract.Status != ContractStatus.PendingSignature) return null;
+        if (contract is null || contract.IsDeleted) return null;
         var isCustomer = contract.CustomerId == actorUserId;
         var isSupplier = !isCustomer && await context.SupplierProfiles.AsNoTracking().AnyAsync(profile => profile.Id == contract.SupplierId
             && profile.UserId == actorUserId && !profile.IsDeleted, cancellationToken);
-        if (!isSupplier) return null;
+        if (!isCustomer && !isSupplier) return null;
+        if (isCustomer && contract.SignedByCustomerAt.HasValue) return contract;
+        if (isSupplier && contract.SignedBySupplierAt.HasValue) return contract;
+        if (contract.Status != ContractStatus.PendingSignature) return null;
+
         var now = clock.UtcNow;
-        if (contract.SignedBySupplierAt.HasValue) return contract;
-        contract.SignedBySupplierAt = now;
-        contract.SupplierSignatureIp = ipAddress;
-        contract.SupplierSignatureUserAgent = userAgent;
+        if (isCustomer)
+        {
+            contract.SignedByCustomerAt = now;
+            contract.CustomerSignatureIp = ipAddress;
+            contract.CustomerSignatureUserAgent = userAgent;
+        }
+        else
+        {
+            contract.SignedBySupplierAt = now;
+            contract.SupplierSignatureIp = ipAddress;
+            contract.SupplierSignatureUserAgent = userAgent;
+        }
         contract.UpdatedAt = now;
         contract.UpdatedBy = actorUserId;
         context.WorkflowEvents.Add(new WorkflowEvent
@@ -159,13 +171,45 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             ActorUserId = actorUserId,
             Metadata = JsonSerializer.Serialize(new
             {
+                party = isCustomer ? "Customer" : "Supplier",
                 ipAddress = ipAddress ?? "unknown",
                 userAgent = userAgent ?? "unknown"
             })
         });
-        if (contract.SignedBySupplierAt.HasValue)
+
+        var supplierUserId = isSupplier ? actorUserId : await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
+        if (isCustomer)
         {
-            var snapshot = $"{contract.ContractNumber}\n{contract.Title}\n{contract.TotalValue:0.00}\n{contract.DeliveryDeadline:yyyy-MM-dd}\n{contract.TermsAndConditions}";
+            if (supplierUserId != Guid.Empty)
+            {
+                context.Notifications.Add(new Notification
+                {
+                    UserId = supplierUserId,
+                    Type = "contract.party_signed",
+                    Title = "Customer signed the contract",
+                    Content = $"Customer signed contract {contract.ContractNumber}.",
+                    ReferenceType = "contract",
+                    ReferenceId = contract.Id
+                });
+            }
+        }
+        else
+        {
+            context.Notifications.Add(new Notification
+            {
+                UserId = contract.CustomerId,
+                Type = "contract.party_signed",
+                Title = "Supplier signed the contract",
+                Content = $"Supplier signed contract {contract.ContractNumber}.",
+                ReferenceType = "contract",
+                ReferenceId = contract.Id
+            });
+        }
+
+        var bothSigned = contract.SignedByCustomerAt.HasValue && contract.SignedBySupplierAt.HasValue;
+        if (bothSigned)
+        {
+            var snapshot = $"{contract.ContractNumber}\n{contract.Title}\n{contract.TotalValue:0.00}\n{contract.DeliveryDeadline:yyyy-MM-dd}\n{contract.TermsAndConditions}\n{contract.SignedByCustomerAt:O}\n{contract.CustomerSignatureIp}\n{contract.SignedBySupplierAt:O}\n{contract.SupplierSignatureIp}";
             contract.SignedDocumentSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot)));
             var totalValue = contract.TotalValue ?? 0m;
             var depositRule = await context.ContractDepositRules.AsNoTracking()
@@ -228,13 +272,15 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                     Content = $"Pay {depositAmount:0.00} VND by {payment.ExpiresAt:O} to activate the contract. Use {payment.PaymentNumber} as the transfer reference.",
                     ReferenceType = "contract", ReferenceId = contract.Id
                 });
-                var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
-                context.Notifications.Add(new Notification
+                if (supplierUserId != Guid.Empty)
                 {
-                    UserId = supplierUserId, Type = "contract.deposit_required", Title = "Waiting for contract deposit",
-                    Content = "The customer must pay the mandatory deposit before the contract can become active.",
-                    ReferenceType = "contract", ReferenceId = contract.Id
-                });
+                    context.Notifications.Add(new Notification
+                    {
+                        UserId = supplierUserId, Type = "contract.deposit_required", Title = "Waiting for contract deposit",
+                        Content = "The customer must pay the mandatory deposit before the contract can become active.",
+                        ReferenceType = "contract", ReferenceId = contract.Id
+                    });
+                }
             }
             else
             {
@@ -253,12 +299,6 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                 Metadata = JsonSerializer.Serialize(new { signedDocumentSha256 = contract.SignedDocumentSha256 })
             });
         }
-        context.Notifications.Add(new Notification
-        {
-            UserId = contract.CustomerId, Type = "contract.supplier_confirmed", Title = "Supplier confirmed the contract",
-            Content = $"Supplier confirmed contract {contract.ContractNumber}. Review the contract terms and pay the M1 deposit to activate it.",
-            ReferenceType = "contract", ReferenceId = contract.Id
-        });
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return contract;

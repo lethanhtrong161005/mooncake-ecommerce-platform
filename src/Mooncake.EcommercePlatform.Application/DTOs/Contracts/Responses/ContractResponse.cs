@@ -23,4 +23,9 @@ public sealed record ContractResponse(
     Guid? SupplierId = null,
     string? CustomerName = null,
     string? CustomerPhone = null,
-    string? SupplierAddress = null);
+    string? SupplierAddress = null)
+{
+    public bool IsSignedByCustomer => SignedByCustomerAt.HasValue;
+
+    public bool IsSignedBySupplier => SignedBySupplierAt.HasValue;
+}

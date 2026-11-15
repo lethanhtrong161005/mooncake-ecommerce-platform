@@ -18,6 +18,8 @@ public class CustomPackagingRevision : BaseEntity
 
     public decimal DesignFee { get; set; }
 
+    public decimal RevisionSurcharge { get; set; }
+
     public CustomPackagingStatus Status { get; set; } = CustomPackagingStatus.DesignReview;
 
     public Guid? SubmittedByUserId { get; set; }

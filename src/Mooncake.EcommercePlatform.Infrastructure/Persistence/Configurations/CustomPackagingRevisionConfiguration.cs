@@ -15,6 +15,7 @@ public class CustomPackagingRevisionConfiguration : IEntityTypeConfiguration<Cus
         builder.HasIndex(e => new { e.CustomPackagingId, e.RevisionNumber }).IsUnique();
         builder.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
         builder.Property(e => e.DesignFee).HasPrecision(12, 2).HasDefaultValue(0);
+        builder.Property(e => e.RevisionSurcharge).HasPrecision(12, 2).HasDefaultValue(0);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30);
         builder.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
         builder.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");

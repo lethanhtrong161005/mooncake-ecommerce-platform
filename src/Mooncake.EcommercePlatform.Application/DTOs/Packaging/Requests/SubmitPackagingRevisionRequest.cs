@@ -14,4 +14,7 @@ public sealed record SubmitPackagingRevisionRequest
 
     [Range(0, 100_000_000, ErrorMessage = "Design fee must be non-negative.")]
     public decimal DesignFee { get; init; }
+
+    [Range(0, 100_000_000, ErrorMessage = "Revision surcharge must be non-negative.")]
+    public decimal RevisionSurcharge { get; init; }
 }

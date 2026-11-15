@@ -15,7 +15,10 @@ public sealed record CustomPackagingResponse(
     string? Notes,
     CustomPackagingStatus Status,
     DateTime CreatedAtUtc,
-    IReadOnlyList<CustomPackagingRevisionResponse> Revisions);
+    IReadOnlyList<CustomPackagingRevisionResponse> Revisions,
+    int FreeRevisionsUsed = 0,
+    int FreeRevisionsLimit = 3,
+    decimal RevisionSurcharge = 0m);
 
 /// <summary>One supplier mockup revision and its customer review state.</summary>
 public sealed record CustomPackagingRevisionResponse(
@@ -27,4 +30,5 @@ public sealed record CustomPackagingRevisionResponse(
     decimal DesignFee,
     CustomPackagingStatus Status,
     DateTime SubmittedAtUtc,
-    DateTime? ReviewedAtUtc);
+    DateTime? ReviewedAtUtc,
+    decimal RevisionSurcharge = 0m);

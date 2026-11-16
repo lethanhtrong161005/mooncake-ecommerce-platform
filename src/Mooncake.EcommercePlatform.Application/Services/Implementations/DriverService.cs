@@ -123,15 +123,16 @@ public class DriverService(
         var responses = new List<PublicDriverDeliveryResponse>(tripsPage.Items.Count);
         foreach (var delivery in tripsPage.Items)
         {
-            if (string.IsNullOrWhiteSpace(delivery.ShareToken) ||
-                delivery.ShareTokenRevokedAtUtc.HasValue ||
-                !delivery.ShareTokenExpiresAtUtc.HasValue ||
-                delivery.ShareTokenExpiresAtUtc.Value <= clock.UtcNow)
+            // Refresh an expired link only for trips still in progress; never reopen a link the supplier revoked.
+            if (!delivery.ShareTokenRevokedAtUtc.HasValue &&
+                IsActiveTrip(delivery.Status) &&
+                (string.IsNullOrWhiteSpace(delivery.ShareToken) ||
+                 !delivery.ShareTokenExpiresAtUtc.HasValue ||
+                 delivery.ShareTokenExpiresAtUtc.Value <= clock.UtcNow))
             {
                 delivery.ShareToken = DriverHelper.GenerateShareToken();
                 delivery.ShareTokenCreatedAtUtc = clock.UtcNow;
                 delivery.ShareTokenExpiresAtUtc = clock.UtcNow.AddHours(24);
-                delivery.ShareTokenRevokedAtUtc = null;
                 await deliveryRepository.UpdateAsync(delivery, cancellationToken);
             }
 
@@ -174,6 +175,19 @@ public class DriverService(
 
         var driverPhone = PhoneNumberUtils.Normalize(driverProfile.Phone);
 
+        // A logged-in driver may only claim a trip whose share link is still open, or one the supplier
+        // assigned to this driver's phone. A link the supplier revoked can never be claimed or reopened.
+        if (delivery.ShareTokenRevokedAtUtc.HasValue)
+            throw new HttpException(409, DeliveryMessages.ShareLinkRevokedError, OrderErrorCodes.StateConflict);
+
+        var assignedToThisDriver = string.Equals(
+            PhoneNumberUtils.Normalize(delivery.DriverPhone ?? string.Empty), driverPhone, StringComparison.Ordinal);
+        var linkOpen = !string.IsNullOrWhiteSpace(delivery.ShareToken)
+            && delivery.ShareTokenExpiresAtUtc.HasValue
+            && delivery.ShareTokenExpiresAtUtc.Value > clock.UtcNow;
+        if (!linkOpen && !assignedToThisDriver)
+            throw new HttpException(409, DeliveryMessages.ShareLinkExpiredError, OrderErrorCodes.StateConflict);
+
         if (delivery.DriverClaimedAt.HasValue)
         {
             var existingPhone = PhoneNumberUtils.Normalize(delivery.DriverPhone ?? string.Empty);
@@ -204,15 +218,11 @@ public class DriverService(
         delivery.DriverClaimedAt = clock.UtcNow;
         delivery.UpdatedAt = clock.UtcNow;
 
-        if (string.IsNullOrWhiteSpace(delivery.ShareToken) ||
-            delivery.ShareTokenRevokedAtUtc.HasValue ||
-            !delivery.ShareTokenExpiresAtUtc.HasValue ||
-            delivery.ShareTokenExpiresAtUtc.Value <= clock.UtcNow)
+        if (!linkOpen)
         {
             delivery.ShareToken = DriverHelper.GenerateShareToken();
             delivery.ShareTokenCreatedAtUtc = clock.UtcNow;
             delivery.ShareTokenExpiresAtUtc = clock.UtcNow.AddHours(24);
-            delivery.ShareTokenRevokedAtUtc = null;
         }
 
         var updated = await deliveryRepository.UpdateAsync(delivery, cancellationToken);
@@ -298,4 +308,7 @@ public class DriverService(
 
         return DriverHelper.ToProfileResponse(updated);
     }
+
+    private static bool IsActiveTrip(DeliveryStatus status) =>
+        status is not (DeliveryStatus.Delivered or DeliveryStatus.Returned or DeliveryStatus.Failed);
 }

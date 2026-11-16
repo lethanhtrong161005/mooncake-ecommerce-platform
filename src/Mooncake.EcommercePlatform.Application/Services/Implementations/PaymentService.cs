@@ -167,6 +167,15 @@ public sealed class PaymentService(IPaymentRepository repository, IAdminPlatform
                 clock.UtcNow));
     }
 
+    public async Task<PaymentResponse> RecordCashMilestonePaymentAsync(Guid customerId, Guid contractId,
+        Guid milestoneId, CancellationToken cancellationToken = default)
+    {
+        var payment = await repository.RecordCashMilestonePaymentAsync(customerId, contractId, milestoneId, cancellationToken)
+            ?? throw new HttpException(409, "Cash payment cannot be recorded for this milestone. Check its status and delivery requirements.",
+                OrderErrorCodes.StateConflict);
+        return ToResponse(payment);
+    }
+
     public async Task<VietQrPaymentResponse> CreateBankTransferAsync(Guid customerId, CreateBankTransferRequest request, CancellationToken cancellationToken = default)
     {
         var isOrderPayment = request.OrderId.HasValue && !request.ContractId.HasValue && !request.MilestoneId.HasValue;

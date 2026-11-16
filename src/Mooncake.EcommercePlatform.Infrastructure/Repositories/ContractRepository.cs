@@ -185,7 +185,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                 var milestone1 = new ContractMilestone
                 {
                     Id = Guid.NewGuid(), ContractId = contract.Id, SequenceNumber = 1, Name = "Đặt cọc kích hoạt hợp đồng (M1)",
-                    Description = "Mandatory deposit required to activate the contract.", IsDeposit = true,
+                    Description = "Khoản đặt cọc bắt buộc để kích hoạt hợp đồng.", IsDeposit = true,
                     Amount = depositAmount, Percentage = depositPercentage,
                     DueDate = DateOnly.FromDateTime(now.AddHours(deadlineHours)), Status = MilestoneStatus.AwaitingPayment,
                     CreatedBy = actorUserId

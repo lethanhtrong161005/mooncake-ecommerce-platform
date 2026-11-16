@@ -28,6 +28,7 @@ public interface IRfqRepository
     Task<bool> HasAnyBidAsync(Guid rfqId, CancellationToken cancellationToken = default);
     Task<bool> IsActiveSupplierAsync(Guid supplierProfileId, CancellationToken cancellationToken = default);
     Task<bool> CreateRfqAsync(RequestForQuotation rfq, IReadOnlyList<RfqItem> items, CancellationToken cancellationToken = default);
+    Task<bool> UpdateRfqAsync(RequestForQuotation rfq, IReadOnlyList<RfqItem> items, CancellationToken cancellationToken = default);
     Task SaveRfqAsync(RequestForQuotation rfq, CancellationToken cancellationToken = default);
     Task AddInvitationsAsync(IReadOnlyList<RfqInvitation> invitations, CancellationToken cancellationToken = default);
     Task SaveInvitationAsync(RfqInvitation invitation, CancellationToken cancellationToken = default);

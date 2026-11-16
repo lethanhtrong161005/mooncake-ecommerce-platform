@@ -5448,7 +5448,7 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_shop_slug", "slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(slug) BETWEEN 3 AND 80");
 
-                            t.HasCheckConstraint("ck_shop_suspension", "(status = 'Suspended' AND pre_suspension_status IN ('Active','Inactive') AND suspended_at_utc IS NOT NULL AND suspended_by_user_id IS NOT NULL AND length(suspension_reason) >= 10) OR (status <> 'Suspended' AND pre_suspension_status IS NULL AND suspended_at_utc IS NULL AND suspended_by_user_id IS NULL AND suspension_reason IS NULL)");
+                            t.HasCheckConstraint("ck_shop_suspension", "(status = 'Suspended' AND pre_suspension_status IN ('Active','Inactive') AND suspended_at_utc IS NOT NULL AND (suspended_by_user_id IS NOT NULL OR suspension_reason = 'Giấy ATTP hết hạn') AND length(suspension_reason) >= 10) OR (status <> 'Suspended' AND pre_suspension_status IS NULL AND suspended_at_utc IS NULL AND suspended_by_user_id IS NULL AND suspension_reason IS NULL)");
 
                             t.HasCheckConstraint("ck_shop_version", "version > 0");
                         });

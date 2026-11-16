@@ -117,8 +117,10 @@ public sealed partial class ShopPostgresTests(PostgresVerificationFixture fixtur
             var category = new Category { Id = Guid.NewGuid(), Name = "Mooncakes" }; setup.Categories.Add(category);
             var product = new Product { Id = Guid.NewGuid(), ShopId = shopId, CategoryId = category.Id, Name = "Test Product", BasePrice = 100, MinOrderQty = 1 };
             setup.Products.Add(product);
-            setup.ProductVariants.AddRange(new ProductVariant { ProductId = product.Id, Name = "Cheap other filling", Sku = Guid.NewGuid().ToString(), Filling = "Other", PriceAdjustment = -50, StockQty = 10 },
-                new ProductVariant { ProductId = product.Id, Name = "Required filling", Sku = Guid.NewGuid().ToString(), Filling = "Lotus", PriceAdjustment = 50, StockQty = 10 });
+            var sku1 = Guid.NewGuid().ToString("N");
+            var sku2 = Guid.NewGuid().ToString("N");
+            setup.ProductVariants.AddRange(new ProductVariant { ProductId = product.Id, ShopId = shopId, Name = "Cheap other filling", Sku = sku1, NormalizedSku = sku1.ToUpperInvariant(), Filling = "Other", PriceAdjustment = -50, StockQty = 10 },
+                new ProductVariant { ProductId = product.Id, ShopId = shopId, Name = "Required filling", Sku = sku2, NormalizedSku = sku2.ToUpperInvariant(), Filling = "Lotus", PriceAdjustment = 50, StockQty = 10 });
             await setup.SaveChangesAsync();
         }
         await using var read = fixture.Create();

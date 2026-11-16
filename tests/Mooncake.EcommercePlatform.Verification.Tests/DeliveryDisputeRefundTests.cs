@@ -41,6 +41,7 @@ using Xunit;
 using Xunit.Abstractions;
 
 /// <summary>Unit and PostgreSQL integration tests for PoD delivery dispute resolution, customer bank snapshots, and manual refund proof uploads.</summary>
+[Collection("DirectBulkOrderIntegration")]
 public sealed class DeliveryDisputeRefundTests(ITestOutputHelper output)
 {
     private const string SampleEvidenceUrl = "https://res.cloudinary.com/demo/image/upload/v1/disputes/damaged_boxes.jpg";
@@ -702,11 +703,18 @@ public sealed class DeliveryDisputeRefundTests(ITestOutputHelper output)
                         RefundAccountHolderName = "NGUYEN VAN A"
                     });
 
-                Assert.Equal("Open", dispute.Status);
+                Assert.Equal("AwaitingSupplierRebuttal", dispute.Status);
                 Assert.Equal(ctx1.PaidAmount, dispute.OrderPaidAmount);
                 Assert.NotNull(dispute.RefundBankSnapshotJson);
                 Assert.Contains("Vietcombank", dispute.RefundBankSnapshotJson);
                 Assert.Contains("0071000888999", dispute.RefundBankSnapshotJson);
+
+                await st.EnterpriseService.SubmitDeliveryDisputeRebuttalAsync(supA.Id, ctx1.OrderId, dispute.Id,
+                    new SubmitSupplierDeliveryDisputeRebuttalRequest
+                    {
+                        Notes = "Xuong da dong goi dung quy cach theo bien ban ban giao.",
+                        EvidenceUrls = [SampleEvidenceUrl]
+                    });
 
                 // Validation guard checks
                 await Assert.ThrowsAsync<HttpException>(() =>
@@ -780,6 +788,13 @@ public sealed class DeliveryDisputeRefundTests(ITestOutputHelper output)
                         RefundAccountHolderName = "TRAN THI B"
                     });
 
+                await st.EnterpriseService.SubmitDeliveryDisputeRebuttalAsync(supA.Id, ctx2.OrderId, dispute.Id,
+                    new SubmitSupplierDeliveryDisputeRebuttalRequest
+                    {
+                        Notes = "Xuong xac nhan don hang bi thieu va dong y voi khieu nai.",
+                        EvidenceUrls = [SampleEvidenceUrl]
+                    });
+
                 var resolved = await st.EnterpriseService.ResolveDeliveryDisputeAsync(admin.Id, dispute.Id,
                     new ResolveOrderDeliveryDisputeRequest
                     {
@@ -845,6 +860,13 @@ public sealed class DeliveryDisputeRefundTests(ITestOutputHelper output)
                         RefundAccountHolderName = "LE VAN C"
                     });
 
+                await st.EnterpriseService.SubmitDeliveryDisputeRebuttalAsync(supA.Id, ctx3.OrderId, dispute.Id,
+                    new SubmitSupplierDeliveryDisputeRebuttalRequest
+                    {
+                        Notes = "Xuong dong y hoan 25% va hoa giai.",
+                        EvidenceUrls = [SampleEvidenceUrl]
+                    });
+
                 var resolved = await st.EnterpriseService.ResolveDeliveryDisputeAsync(admin.Id, dispute.Id,
                     new ResolveOrderDeliveryDisputeRequest
                     {
@@ -896,6 +918,13 @@ public sealed class DeliveryDisputeRefundTests(ITestOutputHelper output)
                         DeliveryId = ctx4.DeliveryId,
                         IssueType = "WrongItems",
                         Description = "Kiem tra nham nhan hop banh, sau do xac nhan dung chung loai."
+                    });
+
+                await st.EnterpriseService.SubmitDeliveryDisputeRebuttalAsync(supA.Id, ctx4.OrderId, dispute.Id,
+                    new SubmitSupplierDeliveryDisputeRebuttalRequest
+                    {
+                        Notes = "PoD xac nhan da giao du va dung hang.",
+                        EvidenceUrls = [SampleEvidenceUrl]
                     });
 
                 var resolved = await st.EnterpriseService.ResolveDeliveryDisputeAsync(admin.Id, dispute.Id,

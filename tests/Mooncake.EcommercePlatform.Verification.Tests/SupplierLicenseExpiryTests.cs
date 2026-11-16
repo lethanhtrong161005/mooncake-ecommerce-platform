@@ -180,6 +180,7 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
             Id = Guid.NewGuid(),
             OwnerUserId = seed.SupplierUser.Id,
             SupplierProfileId = seed.Profile.Id,
+            UploadOperationId = Guid.NewGuid(),
             DocumentType = SupplierVerificationConstants.FoodSafety,
             ReviewStatus = "Approved",
             ExpiresOn = TodayVn.AddDays(30),
@@ -191,6 +192,7 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
             Id = Guid.NewGuid(),
             OwnerUserId = seed.SupplierUser.Id,
             SupplierProfileId = seed.Profile.Id,
+            UploadOperationId = Guid.NewGuid(),
             DocumentType = SupplierVerificationConstants.FoodSafety,
             ReviewStatus = "Approved",
             ExpiresOn = TodayVn.AddDays(45),
@@ -226,6 +228,7 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
             Id = Guid.NewGuid(),
             OwnerUserId = seed.SupplierUser.Id,
             SupplierProfileId = seed.Profile.Id,
+            UploadOperationId = Guid.NewGuid(),
             DocumentType = SupplierVerificationConstants.FoodSafety,
             ReviewStatus = "Approved",
             ExpiresOn = TodayVn.AddDays(-1), // Expired yesterday
@@ -276,6 +279,7 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
             Id = Guid.NewGuid(),
             OwnerUserId = seed.SupplierUser.Id,
             SupplierProfileId = seed.Profile.Id,
+            UploadOperationId = Guid.NewGuid(),
             DocumentType = SupplierVerificationConstants.FoodSafety,
             ReviewStatus = "Approved",
             ExpiresOn = TodayVn.AddDays(-2),
@@ -287,6 +291,7 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
             Id = Guid.NewGuid(),
             OwnerUserId = seed.SupplierUser.Id,
             SupplierProfileId = seed.Profile.Id,
+            UploadOperationId = Guid.NewGuid(),
             DocumentType = SupplierVerificationConstants.FoodSafety,
             ReviewStatus = "Approved",
             ExpiresOn = TodayVn.AddDays(90),
@@ -313,6 +318,7 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
 
         // Set shop to suspended due to expired license
         seed.Shop.Status = ShopStatus.Suspended;
+        seed.Shop.PreSuspensionStatus = ShopStatus.Active;
         seed.Shop.SuspensionReason = "Giấy ATTP hết hạn";
         seed.Shop.SuspendedByUserId = null;
         seed.Shop.SuspendedAtUtc = FixedNowUtc.AddDays(-1);
@@ -338,6 +344,7 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
 
         // Set shop to suspended by admin for policy violation
         seed.Shop.Status = ShopStatus.Suspended;
+        seed.Shop.PreSuspensionStatus = ShopStatus.Active;
         seed.Shop.SuspensionReason = "Violated marketplace policy";
         seed.Shop.SuspendedByUserId = seed.AdminUser.Id;
         seed.Shop.SuspendedAtUtc = FixedNowUtc.AddDays(-1);
@@ -386,11 +393,15 @@ public sealed class SupplierLicenseExpiryTests(PostgresVerificationFixture fixtu
         };
         db.SupplierProfiles.Add(profile);
 
+        var (templateId, revisionId) = await ShopTestHelper.EnsurePublishedTemplateRevisionAsync(db, FixedNowUtc);
+
         var shop = new Shop
         {
             Id = Guid.NewGuid(),
             OwnerUserId = supplierUser.Id,
             SupplierId = profile.Id,
+            TemplateId = templateId,
+            TemplateRevisionId = revisionId,
             Name = "Mooncake Gourmet Shop",
             Slug = $"shop-{Guid.NewGuid():N}"[..16],
             Status = ShopStatus.Active,

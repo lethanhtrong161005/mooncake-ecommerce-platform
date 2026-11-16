@@ -462,7 +462,7 @@ public sealed class AuthService(
     private static void EnsureActiveAndVerified(User user)
     {
         if (!user.IsActive) throw new HttpException(403, AccountInactiveMessage);
-        if (user.EmailVerifiedAt is null) throw new HttpException(403, VerificationRequiredMessage);
+        if (user.Role != UserRole.Driver && user.EmailVerifiedAt is null) throw new HttpException(403, VerificationRequiredMessage);
     }
 
     private static void ResetLoginCounters(User user)

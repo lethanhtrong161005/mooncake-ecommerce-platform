@@ -179,7 +179,7 @@ public sealed class PostgresVerificationTests(PostgresVerificationFixture fixtur
                 await baseline.SaveChangesAsync();
             }
             await using var current = legacy.Create();
-            await current.Database.MigrateAsync();
+            await current.GetService<IMigrator>().MigrateAsync("20261024035322_SupplierVerificationWorkflow");
             var imported = await current.SupplierProfiles.SingleAsync(x => x.Id == profile.Id);
             Assert.Equal(profile.Id, imported.CurrentSubmissionId);
             Assert.Equal(SupplierVerificationStatus.Verified, imported.VerificationStatus);

@@ -15,6 +15,11 @@ public sealed class RfqsController(IRfqService rfqService) : BaseApiController
         Created(await rfqService.CreateAsync(CurrentUserId, request, cancellationToken), "RFQ created successfully.");
 
     [Authorize(Roles = "Customer")]
+    [HttpPut("{rfqId:guid}")]
+    public async Task<IActionResult> UpdateAsync(Guid rfqId, [FromBody] CreateRfqRequest request, CancellationToken cancellationToken) =>
+        Success(await rfqService.UpdateAsync(CurrentUserId, rfqId, request, cancellationToken), "RFQ updated successfully.");
+
+    [Authorize(Roles = "Customer")]
     [HttpGet("mine")]
     public async Task<IActionResult> GetMineAsync([FromQuery] RfqPageQueryRequest query, CancellationToken cancellationToken) =>
         Success<object>(Request.Query.ContainsKey("page")

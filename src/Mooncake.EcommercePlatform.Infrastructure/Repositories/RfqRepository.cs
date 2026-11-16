@@ -170,6 +170,24 @@ public sealed class RfqRepository(ApplicationDbContext context) : IRfqRepository
         return true;
     }
 
+    public async Task<bool> UpdateRfqAsync(RequestForQuotation rfq, IReadOnlyList<RfqItem> items, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (await context.Bids.AnyAsync(bid => bid.RfqId == rfq.Id && !bid.IsDeleted, cancellationToken)) return false;
+        var currentItems = await context.RfqItems.Where(item => item.RfqId == rfq.Id && !item.IsDeleted).ToListAsync(cancellationToken);
+        foreach (var item in currentItems) item.IsDeleted = true;
+        foreach (var item in items)
+        {
+            item.Id = Guid.NewGuid();
+            item.RfqId = rfq.Id;
+        }
+        rfq.UpdatedAt = DateTime.UtcNow;
+        context.RfqItems.AddRange(items);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task SaveRfqAsync(RequestForQuotation rfq, CancellationToken cancellationToken = default)
     {
         var entry = context.Entry(rfq);

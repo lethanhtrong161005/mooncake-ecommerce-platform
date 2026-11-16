@@ -9,6 +9,7 @@ using Mooncake.EcommercePlatform.Application.DTOs.Contracts.Responses;
 public interface IRfqService
 {
     Task<RfqResponse> CreateAsync(Guid customerUserId, CreateRfqRequest request, CancellationToken cancellationToken = default);
+    Task<RfqResponse> UpdateAsync(Guid customerUserId, Guid rfqId, CreateRfqRequest request, CancellationToken cancellationToken = default);
     Task<RfqResponse> PublishAsync(Guid customerUserId, Guid rfqId, CancellationToken cancellationToken = default);
     Task CancelAsync(Guid customerUserId, Guid rfqId, string reason, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RfqResponse>> GetMineAsync(Guid customerUserId, CancellationToken cancellationToken = default);

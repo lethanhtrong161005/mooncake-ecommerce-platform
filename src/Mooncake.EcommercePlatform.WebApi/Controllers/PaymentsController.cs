@@ -12,7 +12,10 @@ using Mooncake.EcommercePlatform.WebApi.Filters;
 [Route("api/v1/payments")]
 [Authorize]
 [OrderApi]
-public sealed class PaymentsController(IPaymentService paymentService, IWebHostEnvironment environment) : BaseApiController
+public sealed class PaymentsController(
+    IPaymentService paymentService,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : BaseApiController
 {
     [Authorize(Roles = "Customer")]
     [HttpPost]
@@ -80,7 +83,7 @@ public sealed class PaymentsController(IPaymentService paymentService, IWebHostE
         var parameters = Request.Query.ToDictionary(item => item.Key, item => item.Value.ToString(),
             StringComparer.Ordinal);
         var result = await paymentService.VerifyReturnCallbackAsync(parameters, cancellationToken,
-            confirmPaymentFromReturn: environment.IsDevelopment());
+            confirmPaymentFromReturn: ShouldConfirmPaymentFromReturn());
         return Success(result, "VNPay return callback verified successfully.");
     }
 
@@ -108,6 +111,21 @@ public sealed class PaymentsController(IPaymentService paymentService, IWebHostE
     [HttpPost("{paymentId:guid}/refund")]
     public async Task<IActionResult> RefundAsync(Guid paymentId, [FromBody] RefundPaymentRequest request, CancellationToken cancellationToken) =>
         Success(await paymentService.RefundAsync(paymentId, CurrentUserId, request.Reason, HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken), "Payment refund recorded.");
+
+    private bool ShouldConfirmPaymentFromReturn()
+    {
+        var configured = configuration.GetValue<bool?>("VnPay:ConfirmPaymentOnReturn");
+        if (configured.HasValue)
+            return configured.Value;
+
+        if (environment.IsDevelopment() || environment.IsStaging())
+            return true;
+
+        var baseUrl = configuration["VnPay:BaseUrl"];
+        return !string.IsNullOrWhiteSpace(baseUrl)
+            && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+            && uri.Host.Equals("sandbox.vnpayment.vn", StringComparison.OrdinalIgnoreCase);
+    }
 
     private Guid CurrentUserId => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
         ? userId : throw new UnauthorizedAccessException("A valid user identity is required.");

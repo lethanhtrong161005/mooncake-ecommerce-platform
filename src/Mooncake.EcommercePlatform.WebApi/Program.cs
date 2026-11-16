@@ -24,6 +24,9 @@ builder.Services.AddSingleton<IRecurringJob, AuthMaintenanceJob>();
 builder.Services.AddSingleton<IRecurringJob, RfqDeadlineJob>();
 builder.Services.AddSingleton<IRecurringJob, PaymentExpiryJob>();
 builder.Services.AddSingleton<IRecurringJob, OrderExpiryJob>();
+builder.Services.AddSingleton<IRecurringJob, OrderDeliveryAutoConfirmJob>();
+builder.Services.AddSingleton<IRecurringJob, ContractMilestoneOverdueJob>();
+builder.Services.AddSingleton<IRecurringJob, SupplierLicenseExpiryJob>();
 builder.Services.AddHostedService<RecurringJobRunner>();
 
 var app = builder.Build();

@@ -97,7 +97,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       {
         var normalizedCode = incoming.RegionCode.Trim().ToUpperInvariant();
         if (!incomingCodes.Add(normalizedCode))
-          throw new HttpException(400, $"Duplicate shipping region code '{normalizedCode}'.", OrderErrorCodes.ValidationError);
+          throw new HttpException(400, $"Mã khu vực giao hàng '{normalizedCode}' đã tồn tại. Hãy dùng mã khác.", OrderErrorCodes.ValidationError);
 
         var match = existingRates.FirstOrDefault(item => string.Equals(item.RegionCode, normalizedCode, StringComparison.OrdinalIgnoreCase));
         if (match is null)
@@ -514,7 +514,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         .ToListAsync(cancellationToken);
 
     var activeDisputes = await context.OrderDeliveryDisputes.AsNoTracking()
-        .Where(item => orderIds.Contains(item.OrderId) && !item.IsDeleted && item.Status == "Open")
+        .Where(item => orderIds.Contains(item.OrderId) && !item.IsDeleted && (item.Status == "Open" || item.Status == "AwaitingSupplierRebuttal"))
         .OrderByDescending(item => item.CreatedAt)
         .ToListAsync(cancellationToken);
 
@@ -570,11 +570,29 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
               proofsByDelivery.GetValueOrDefault(latestDelivery.Id, []).Count,
               proofsByDelivery.GetValueOrDefault(latestDelivery.Id, [])
                   .Select(p => new OrderDeliveryProofPhotoResponse(p.Id, p.ProofType, p.PhotoUrl, p.TakenBy, p.TakenAt ?? p.CreatedAt, p.Notes))
-                  .ToList());
+                  .ToList(),
+              latestDelivery.DriverName,
+              latestDelivery.DriverPhone,
+              latestDelivery.VehiclePlate,
+              latestDelivery.DriverClaimedAt);
 
       var allowedActions = ComputeAllowedActions(
           order, baseResp.CustomPackaging, paymentSummary, financialSummary, deliverySnapshot,
           pendingCancel, activeDispute, viewerUserId, viewerIsSupplier, viewerIsAdmin);
+
+      DateTime? autoConfirmAt = null;
+      if (order.Status == OrderStatus.Shipped && latestDelivery is not null)
+      {
+        var deliveryProofs = proofsByDelivery.GetValueOrDefault(latestDelivery.Id, []);
+        var earliestDeliveryProof = deliveryProofs
+            .Where(p => p.ProofType == ProofType.Delivery && !p.IsDeleted)
+            .OrderBy(p => p.CreatedAt)
+            .FirstOrDefault();
+        if (earliestDeliveryProof is not null)
+        {
+          autoConfirmAt = earliestDeliveryProof.CreatedAt.AddHours(OrderPolicyDefaults.DeliveryAutoConfirmHours);
+        }
+      }
 
       enriched.Add(baseResp with
       {
@@ -588,6 +606,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         ProposedDeliveryDate = order.ProposedDeliveryDate,
         DeliveryProposalReason = order.DeliveryProposalReason,
         DeliveryApprovalDeadlineAtUtc = order.DeliveryApprovalDeadlineAt,
+        AutoConfirmAt = autoConfirmAt,
         CancelledAtUtc = order.CancelledAt,
         CancellationReason = order.CancellationReason,
         PriceSnapshotVersion = order.PriceSnapshotVersion,
@@ -1069,16 +1088,16 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     if (lockedOrder is null || lockedOrder.IsDeleted)
       throw new HttpException(404, B2BOrderingMessages.OrderNotFound);
     if (request.ExpectedVersion.HasValue && lockedOrder.Version != request.ExpectedVersion.Value)
-      throw new HttpException(409, "Order version changed concurrently. Refresh and try again.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Đơn hàng vừa được cập nhật ở nơi khác. Hãy tải lại trang và thử lại.", OrderErrorCodes.StateConflict);
 
     // Matrix 10.10: Shipped / Delivered / Cancelled / Expired cannot submit cancellation requests
     if (lockedOrder.Status is OrderStatus.Shipped or OrderStatus.Delivered or OrderStatus.Cancelled or OrderStatus.Expired)
-      throw new HttpException(409, $"Orders in status '{lockedOrder.Status}' cannot be cancelled.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, $"Đơn ở trạng thái '{lockedOrder.Status}' không thể hủy. Hãy liên hệ hỗ trợ nếu cần thay đổi.", OrderErrorCodes.StateConflict);
 
     var hasOpenCancel = await context.OrderCancellationRequests
         .AnyAsync(item => item.OrderId == lockedOrder.Id && item.Status == "Pending" && !item.IsDeleted, cancellationToken);
     if (hasOpenCancel)
-      throw new HttpException(409, "A cancellation request is already pending for this order.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Đơn này đã có yêu cầu hủy đang chờ phản hồi. Hãy chờ kết quả trước khi gửi yêu cầu mới.", OrderErrorCodes.StateConflict);
 
     var paidAmount = await context.Payments
         .Where(item => item.OrderId == lockedOrder.Id && item.Status == PaymentStatus.Completed && !item.IsDeleted)
@@ -1087,6 +1106,13 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     var now = clock.UtcNow;
     var reason = request.Reason.Trim();
     var supplierUserId = await GetSupplierUserIdByShopAsync(lockedOrder.ShopId, cancellationToken);
+
+    // D24: default refund suggestion (50% for Processing with approved/in-production custom packaging, else 100%).
+    var packagingStatusForSuggestion = await context.CustomPackagings.AsNoTracking()
+        .Where(item => item.OrderId == lockedOrder.Id && !item.IsDeleted)
+        .Select(item => (CustomPackagingStatus?)item.Status)
+        .FirstOrDefaultAsync(cancellationToken);
+    var suggestion = OrderRefundSuggestionHelper.Suggest(lockedOrder.Status, packagingStatusForSuggestion, paidAmount);
 
     // Matrix 10.10:
     // 1) Pending or AwaitingCustomerDeliveryApproval, OR Confirmed with 0 paid and Customer/Supplier cancels before production:
@@ -1105,7 +1131,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       OrderStatusSnapshot = lockedOrder.Status.ToString(),
       Reason = reason,
       Status = autoApprove ? "AutoApproved" : "Pending",
-      ProposedRefundAmount = paidAmount,
+      ProposedRefundAmount = suggestion.Amount,
       ReviewedByUserId = autoApprove ? actorUserId : null,
       ReviewedAt = autoApprove ? now : null,
       ReviewNotes = autoApprove ? "Automatically approved under Direct Bulk Order policy matrix." : null,
@@ -1117,7 +1143,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
     if (autoApprove)
     {
-      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelEntity.Id, actorUserId, reason, paidAmount, now, cancellationToken);
+      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelEntity.Id, actorUserId, reason, paidAmount, now, cancellationToken, suggestion.Amount);
     }
     else
     {
@@ -1155,7 +1181,12 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
     await context.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
-    return (MapCancelRequest(cancelEntity), lockedOrder.Status);
+    return (MapCancelRequest(cancelEntity) with
+    {
+      SuggestedRefundAmount = suggestion.Amount,
+      SuggestedRefundPercent = suggestion.Percent,
+      SuggestionReason = suggestion.Reason
+    }, lockedOrder.Status);
   }
 
   public async Task<(OrderCancellationRequestResponse Request, OrderStatus UpdatedOrderStatus)> RespondCancellationRequestAsync(
@@ -1171,15 +1202,15 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
             $"SELECT * FROM order_cancellation_requests WHERE id = {requestId} FOR UPDATE")
         .SingleOrDefaultAsync(cancellationToken);
     if (lockedOrder is null || cancelReq is null || cancelReq.OrderId != lockedOrder.Id || cancelReq.Status != "Pending")
-      throw new HttpException(409, "No pending cancellation request was found for this order.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Đơn này không có yêu cầu hủy nào đang chờ. Hãy tải lại trang để xem mới nhất.", OrderErrorCodes.StateConflict);
 
     if (!isAdmin)
     {
       var requestedBySupplier = string.Equals(cancelReq.RequestedByRole, "Supplier", StringComparison.OrdinalIgnoreCase);
       if (requestedBySupplier && isSupplier)
-        throw new HttpException(403, "Only the customer or an administrator can respond to a supplier cancellation request.", OrderErrorCodes.TenantForbidden);
+        throw new HttpException(403, "Chỉ khách hàng hoặc quản trị viên mới phản hồi được yêu cầu hủy của xưởng.", OrderErrorCodes.TenantForbidden);
       if (!requestedBySupplier && !isSupplier)
-        throw new HttpException(403, "Only the supplier or an administrator can respond to a customer cancellation request.", OrderErrorCodes.TenantForbidden);
+        throw new HttpException(403, "Chỉ xưởng hoặc quản trị viên mới phản hồi được yêu cầu hủy của khách.", OrderErrorCodes.TenantForbidden);
     }
 
     var now = clock.UtcNow;
@@ -1195,7 +1226,8 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       var paidAmount = await context.Payments
           .Where(item => item.OrderId == lockedOrder.Id && item.Status == PaymentStatus.Completed && !item.IsDeleted)
           .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelReq.Id, actorUserId, cancelReq.Reason, paidAmount, now, cancellationToken);
+      await ExecuteOrderCancellationCoreAsync(lockedOrder, cancelReq.Id, actorUserId, cancelReq.Reason, paidAmount, now, cancellationToken,
+          Math.Min(paidAmount, cancelReq.ProposedRefundAmount));
     }
     else
     {
@@ -1239,9 +1271,11 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
   {
     context.ChangeTracker.Clear();
     await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-    var lockedOrder = await context.Orders.FromSqlInterpolated(
-            $"SELECT * FROM orders WHERE id = {order.Id} FOR UPDATE")
-        .SingleOrDefaultAsync(cancellationToken);
+    var lockedOrder = context.Database.IsRelational()
+        ? await context.Orders.FromSqlInterpolated(
+                $"SELECT * FROM orders WHERE id = {order.Id} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken)
+        : await context.Orders.SingleOrDefaultAsync(o => o.Id == order.Id, cancellationToken);
     if (lockedOrder is null || lockedOrder.IsDeleted || lockedOrder.CustomerId != customerId || lockedOrder.Status != OrderStatus.Shipped)
       return false;
 
@@ -1251,22 +1285,69 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
     var delivery = await deliveryQuery.OrderByDescending(item => item.CreatedAt).FirstOrDefaultAsync(cancellationToken);
     if (delivery is null)
-      throw new HttpException(409, "Cannot confirm receipt before the supplier creates a shipment and uploads Proof-of-Delivery photos.", OrderErrorCodes.DeliveryProofRequired);
+      throw new HttpException(409, "Chưa thể xác nhận đã nhận hàng vì xưởng chưa tạo chuyến giao và tải ảnh bàn giao. Hãy chờ xưởng gửi bằng chứng giao hàng.", OrderErrorCodes.DeliveryProofRequired);
 
     var hasDeliveryProof = await context.DeliveryProofs.AsNoTracking()
         .AnyAsync(item => item.DeliveryId == delivery.Id && item.ProofType == ProofType.Delivery && !item.IsDeleted, cancellationToken);
     if (!hasDeliveryProof)
-      throw new HttpException(409, "Cannot confirm receipt before Proof-of-Delivery photos are uploaded.", OrderErrorCodes.DeliveryProofRequired);
+      throw new HttpException(409, "Chưa thể xác nhận đã nhận hàng vì chưa có ảnh bàn giao. Hãy chờ xưởng tải ảnh lên.", OrderErrorCodes.DeliveryProofRequired);
 
+    await ExecuteOrderDeliveryConfirmationCoreAsync(
+        lockedOrder, delivery, customerId, notes, isAutoConfirmed: false, cancellationToken);
+
+    await context.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+    order.Status = OrderStatus.Delivered;
+    order.Version = lockedOrder.Version;
+    return true;
+  }
+
+  private async Task RewardSupplierReputationOnDeliveryAsync(
+      Order lockedOrder, DateTime now, Guid actorUserId, CancellationToken cancellationToken)
+  {
+    var alreadyRewarded = await context.ReputationLogs
+        .AnyAsync(l => l.ReferenceId == lockedOrder.Id && l.ReferenceType == "Order" && !l.IsDeleted, cancellationToken);
+    if (alreadyRewarded)
+      return;
+
+    var shop = await context.Shops.FirstOrDefaultAsync(s => s.Id == lockedOrder.ShopId && !s.IsDeleted, cancellationToken);
+    if (shop is null)
+      return;
+
+    var supplier = await context.SupplierProfiles.FirstOrDefaultAsync(s => s.Id == shop.SupplierId && !s.IsDeleted, cancellationToken);
+    if (supplier is null)
+      return;
+
+    supplier.ReputationScore = Math.Max(0m, supplier.ReputationScore + 5m);
+    supplier.UpdatedAt = now;
+    supplier.UpdatedBy = actorUserId;
+
+    context.ReputationLogs.Add(new ReputationLog
+    {
+      Id = Guid.NewGuid(),
+      SupplierId = supplier.Id,
+      EventType = ReputationEvent.CompletedOnTime,
+      ScoreDelta = 5m,
+      Reason = $"Direct order {lockedOrder.OrderNumber} delivered successfully.",
+      ReferenceId = lockedOrder.Id,
+      ReferenceType = "Order",
+      CreatedAt = now,
+      CreatedBy = actorUserId
+    });
+  }
+
+  private async Task ExecuteOrderDeliveryConfirmationCoreAsync(
+      Order lockedOrder, Delivery delivery, Guid actorUserId, string? notes, bool isAutoConfirmed, CancellationToken cancellationToken)
+  {
     var now = clock.UtcNow;
     delivery.Status = DeliveryStatus.Delivered;
     delivery.ActualDeliveryDate = DateOnly.FromDateTime(now);
-    delivery.UpdatedBy = customerId;
+    delivery.UpdatedBy = actorUserId;
     delivery.UpdatedAt = now;
 
     lockedOrder.Status = OrderStatus.Delivered;
     lockedOrder.Version += 1;
-    lockedOrder.UpdatedBy = customerId;
+    lockedOrder.UpdatedBy = actorUserId;
     lockedOrder.UpdatedAt = now;
 
     await context.CustomPackagings
@@ -1274,10 +1355,13 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         .ExecuteUpdateAsync(setters => setters
             .SetProperty(item => item.Status, CustomPackagingStatus.Completed)
             .SetProperty(item => item.UpdatedAt, now)
-            .SetProperty(item => item.UpdatedBy, customerId), cancellationToken);
+            .SetProperty(item => item.UpdatedBy, actorUserId), cancellationToken);
 
     // Unlock Held -> Eligible in simulated financial ledger!
-    await UnlockHeldBalanceToEligibleCoreAsync(lockedOrder, now, customerId, cancellationToken);
+    await UnlockHeldBalanceToEligibleCoreAsync(lockedOrder, now, actorUserId, cancellationToken);
+
+    // D26: Award +5 reputation to supplier idempotently
+    await RewardSupplierReputationOnDeliveryAsync(lockedOrder, now, actorUserId, cancellationToken);
 
     var supplierUserId = await GetSupplierUserIdByShopAsync(lockedOrder.ShopId, cancellationToken);
     context.WorkflowEvents.Add(new WorkflowEvent
@@ -1287,27 +1371,52 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       EventType = "OrderDeliveryConfirmed",
       FromStatus = OrderStatus.Shipped.ToString(),
       ToStatus = OrderStatus.Delivered.ToString(),
-      ActorUserId = customerId,
+      ActorUserId = actorUserId,
       Reason = notes
     });
-    if (supplierUserId != Guid.Empty)
-    {
-      context.Notifications.Add(new Notification
-      {
-        UserId = supplierUserId,
-        Type = "order.delivered",
-        Title = "Customer confirmed order delivery",
-        Content = $"Order {lockedOrder.OrderNumber} was confirmed delivered. Funds are now eligible for simulated payout.",
-        ReferenceType = OrderReferenceType,
-        ReferenceId = lockedOrder.Id
-      });
-    }
 
-    await context.SaveChangesAsync(cancellationToken);
-    await transaction.CommitAsync(cancellationToken);
-    order.Status = OrderStatus.Delivered;
-    order.Version = lockedOrder.Version;
-    return true;
+    if (isAutoConfirmed)
+    {
+      if (supplierUserId != Guid.Empty)
+      {
+        context.Notifications.Add(new Notification
+        {
+          UserId = supplierUserId,
+          Type = "order.delivered",
+          Title = "Order delivery auto-confirmed",
+          Content = $"Order {lockedOrder.OrderNumber} was automatically confirmed delivered after 72 hours. Funds are now eligible for simulated payout.",
+          ReferenceType = OrderReferenceType,
+          ReferenceId = lockedOrder.Id
+        });
+      }
+      if (lockedOrder.CustomerId != Guid.Empty)
+      {
+        context.Notifications.Add(new Notification
+        {
+          UserId = lockedOrder.CustomerId,
+          Type = "order.delivered",
+          Title = "Order auto-confirmed",
+          Content = $"Order {lockedOrder.OrderNumber} was automatically confirmed delivered after 72 hours.",
+          ReferenceType = OrderReferenceType,
+          ReferenceId = lockedOrder.Id
+        });
+      }
+    }
+    else
+    {
+      if (supplierUserId != Guid.Empty)
+      {
+        context.Notifications.Add(new Notification
+        {
+          UserId = supplierUserId,
+          Type = "order.delivered",
+          Title = "Customer confirmed order delivery",
+          Content = $"Order {lockedOrder.OrderNumber} was confirmed delivered. Funds are now eligible for simulated payout.",
+          ReferenceType = OrderReferenceType,
+          ReferenceId = lockedOrder.Id
+        });
+      }
+    }
   }
 
   public async Task<OrderDeliveryDisputeResponse> ReportDeliveryDisputeAsync(
@@ -1321,12 +1430,14 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     if (lockedOrder is null || lockedOrder.IsDeleted || lockedOrder.CustomerId != customerId)
       throw new HttpException(404, B2BOrderingMessages.OrderNotFound, OrderErrorCodes.TenantForbidden);
     if (lockedOrder.Status is not (OrderStatus.Shipped or OrderStatus.Delivered))
-      throw new HttpException(409, "Delivery issues can only be reported after the order has been shipped.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Chỉ báo cáo được sự cố giao hàng sau khi đơn đã được giao đi. Hãy thử lại khi đơn đang giao.", OrderErrorCodes.StateConflict);
 
     var existingOpen = await context.OrderDeliveryDisputes
-        .AnyAsync(item => item.OrderId == lockedOrder.Id && item.Status == "Open" && !item.IsDeleted, cancellationToken);
+        .AnyAsync(item => item.OrderId == lockedOrder.Id
+            && (item.Status == "Open" || item.Status == "AwaitingSupplierRebuttal")
+            && !item.IsDeleted, cancellationToken);
     if (existingOpen)
-      throw new HttpException(409, "An open delivery dispute already exists for this order.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Đơn này đã có khiếu nại giao hàng đang xử lý. Hãy chờ kết quả xử lý.", OrderErrorCodes.StateConflict);
 
     var delivery = await context.Deliveries
         .Where(item => item.OrderId == lockedOrder.Id && !item.IsDeleted)
@@ -1358,7 +1469,8 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       Description = request.Description.Trim(),
       EvidenceUrlsJson = request.EvidenceUrls is { Count: > 0 } ? JsonSerializer.Serialize(request.EvidenceUrls) : null,
       RefundBankSnapshotJson = SerializeCustomerBankSnapshot(request.RefundBankName, request.RefundAccountNumber, request.RefundAccountHolderName),
-      Status = "Open",
+      Status = "AwaitingSupplierRebuttal",
+      RebuttalDeadlineAt = now.AddHours(48),
       CreatedBy = customerId,
       CreatedAt = now,
       UpdatedAt = now
@@ -1405,7 +1517,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         UserId = supplierUserId,
         Type = "order.delivery_disputed",
         Title = "Delivery issue reported",
-        Content = $"Customer reported a delivery issue on order {lockedOrder.OrderNumber}. Payout is locked pending review.",
+        Content = $"Customer reported a delivery issue on order {lockedOrder.OrderNumber}. Payout is locked pending review. You have 48 hours to submit a rebuttal before admin review.",
         ReferenceType = OrderReferenceType,
         ReferenceId = lockedOrder.Id
       });
@@ -1421,12 +1533,22 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       Guid disputeId, Guid adminUserId, ResolveOrderDeliveryDisputeRequest request, CancellationToken cancellationToken = default)
   {
     await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-    var dispute = await context.OrderDeliveryDisputes.FromSqlInterpolated(
+    var dispute = await (context.Database.IsRelational()
+        ? context.OrderDeliveryDisputes.FromSqlInterpolated(
             $"SELECT * FROM order_delivery_disputes WHERE id = {disputeId} FOR UPDATE")
-        .SingleOrDefaultAsync(cancellationToken)
-        ?? throw new HttpException(404, "Delivery dispute was not found.");
-    if (dispute.Status != "Open")
-      throw new HttpException(409, "Delivery dispute has already been resolved.", OrderErrorCodes.StateConflict);
+            .SingleOrDefaultAsync(cancellationToken)
+        : context.OrderDeliveryDisputes.SingleOrDefaultAsync(d => d.Id == disputeId, cancellationToken))
+        ?? throw new HttpException(404, "Không tìm thấy khiếu nại giao hàng. Hãy tải lại trang và thử lại.");
+
+    if (dispute.Status is not ("Open" or "AwaitingSupplierRebuttal"))
+      throw new HttpException(409, "Khiếu nại giao hàng này đã được xử lý xong.", OrderErrorCodes.StateConflict);
+
+    var now = clock.UtcNow;
+    var hasRebuttal = dispute.SupplierRebuttalAt.HasValue || dispute.Status == "Open";
+    var isDeadlinePassed = dispute.RebuttalDeadlineAt.HasValue && now >= dispute.RebuttalDeadlineAt.Value;
+
+    if (!hasRebuttal && !isDeadlinePassed)
+      throw new HttpException(409, "Chưa thể phân xử: xưởng còn trong hạn phản biện 48 giờ. Hãy chờ xưởng phản biện hoặc hết hạn rồi xử lý.", OrderErrorCodes.StateConflict);
 
     var action = request.ResolutionAction.Trim();
     var isFullRefund = string.Equals(action, "FullRefund", StringComparison.OrdinalIgnoreCase)
@@ -1434,20 +1556,22 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     var isPartialRefund = string.Equals(action, "PartialRefund", StringComparison.OrdinalIgnoreCase);
     var isReleasePayout = string.Equals(action, "ReleasePayout", StringComparison.OrdinalIgnoreCase);
     if (!isFullRefund && !isPartialRefund && !isReleasePayout)
-      throw new HttpException(400, "Invalid dispute resolution action. Use ReleasePayout, FullRefund, or PartialRefund.", OrderErrorCodes.ValidationError);
+      throw new HttpException(400, "Hướng xử lý khiếu nại chưa hợp lệ. Hãy chọn một trong: ReleasePayout, FullRefund hoặc PartialRefund.", OrderErrorCodes.ValidationError);
 
-    var lockedOrder = await context.Orders.FromSqlInterpolated(
+    var lockedOrder = await (context.Database.IsRelational()
+        ? context.Orders.FromSqlInterpolated(
             $"SELECT * FROM orders WHERE id = {dispute.OrderId} FOR UPDATE")
-        .SingleAsync(cancellationToken);
+            .SingleAsync(cancellationToken)
+        : context.Orders.SingleAsync(o => o.Id == dispute.OrderId, cancellationToken));
 
     var refundableBalance = await GetOrderPaidBalanceAsync(lockedOrder.Id, cancellationToken);
     decimal refundAmount = 0m;
     if (isPartialRefund)
     {
       if (!request.RefundAmount.HasValue || request.RefundAmount.Value <= 0m)
-        throw new HttpException(400, "Partial refund requires a positive refund amount.", OrderErrorCodes.ValidationError);
+        throw new HttpException(400, "Hoàn tiền một phần cần số tiền lớn hơn 0. Hãy nhập số tiền hoàn.", OrderErrorCodes.ValidationError);
       if (request.RefundAmount.Value > refundableBalance)
-        throw new HttpException(409, $"Refund amount cannot exceed refundable paid balance ({refundableBalance:N0} VND).", OrderErrorCodes.StateConflict);
+        throw new HttpException(409, $"Số tiền hoàn vượt số có thể hoàn ({refundableBalance:N0} VND). Hãy nhập tối đa {refundableBalance:N0} VND.", OrderErrorCodes.StateConflict);
       refundAmount = decimal.Round(request.RefundAmount.Value, 2, MidpointRounding.AwayFromZero);
     }
     else if (isFullRefund)
@@ -1461,7 +1585,6 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-    var now = clock.UtcNow;
     dispute.ResolutionNotes = request.Notes.Trim();
     dispute.ResolvedByAdminId = adminUserId;
     dispute.ResolvedAt = now;
@@ -1623,6 +1746,106 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     return MapDispute(dispute, lockedOrder.OrderNumber, updatedPaid);
   }
 
+  public async Task<OrderDeliveryDisputeResponse> SubmitDeliveryDisputeRebuttalAsync(
+      Guid supplierUserId,
+      Guid orderId,
+      Guid disputeId,
+      SubmitSupplierDeliveryDisputeRebuttalRequest request,
+      CancellationToken cancellationToken = default)
+  {
+    if (string.IsNullOrWhiteSpace(request.Notes))
+      throw new HttpException(400, "Hãy nhập nội dung phản biện để gửi cho quản trị viên.", OrderErrorCodes.ValidationError);
+
+    context.ChangeTracker.Clear();
+    await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+    var dispute = await (context.Database.IsRelational()
+        ? context.OrderDeliveryDisputes.FromSqlInterpolated(
+            $"SELECT * FROM order_delivery_disputes WHERE id = {disputeId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken)
+        : context.OrderDeliveryDisputes.SingleOrDefaultAsync(d => d.Id == disputeId, cancellationToken))
+        ?? throw new HttpException(404, "Không tìm thấy khiếu nại giao hàng. Hãy tải lại trang và thử lại.");
+
+    if (dispute.OrderId != orderId || dispute.IsDeleted)
+      throw new HttpException(404, "Đơn này không có khiếu nại giao hàng được chọn. Hãy tải lại trang và thử lại.");
+
+    var lockedOrder = await (context.Database.IsRelational()
+        ? context.Orders.FromSqlInterpolated(
+            $"SELECT * FROM orders WHERE id = {orderId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken)
+        : context.Orders.SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken))
+        ?? throw new HttpException(404, B2BOrderingMessages.OrderNotFound);
+
+    var ownedShopIds = await GetOwnedShopIdsAsync(supplierUserId, cancellationToken);
+    if (!ownedShopIds.Contains(lockedOrder.ShopId))
+      throw new HttpException(403, "Tài khoản của bạn chưa có quyền phản hồi khiếu nại của cửa hàng này. Hãy dùng tài khoản của xưởng sở hữu đơn.", OrderErrorCodes.TenantForbidden);
+
+    if (dispute.Status != "AwaitingSupplierRebuttal")
+      throw new HttpException(409, "Khiếu nại này không ở bước chờ xưởng phản biện. Hãy tải lại trang để xem trạng thái mới nhất.", OrderErrorCodes.StateConflict);
+
+    var now = clock.UtcNow;
+    if (dispute.RebuttalDeadlineAt.HasValue && now > dispute.RebuttalDeadlineAt.Value)
+      throw new HttpException(409, "Đã hết hạn phản biện 48 giờ cho khiếu nại này. Hãy liên hệ quản trị viên nếu cần bổ sung thông tin.", OrderErrorCodes.StateConflict);
+
+    dispute.Status = "Open";
+    dispute.SupplierRebuttalNotes = request.Notes.Trim();
+    dispute.SupplierRebuttalEvidenceUrlsJson = request.EvidenceUrls is { Count: > 0 }
+        ? JsonSerializer.Serialize(request.EvidenceUrls)
+        : null;
+    dispute.SupplierRebuttalAt = now;
+    dispute.UpdatedAt = now;
+    dispute.UpdatedBy = supplierUserId;
+
+    lockedOrder.Version += 1;
+    lockedOrder.UpdatedAt = now;
+    lockedOrder.UpdatedBy = supplierUserId;
+
+    context.WorkflowEvents.Add(new WorkflowEvent
+    {
+      AggregateType = OrderAggregateType,
+      AggregateId = lockedOrder.Id,
+      EventType = "OrderDeliveryDisputeRebutted",
+      FromStatus = "AwaitingSupplierRebuttal",
+      ToStatus = "Open",
+      ActorUserId = supplierUserId,
+      Reason = dispute.SupplierRebuttalNotes
+    });
+
+    context.Notifications.Add(new Notification
+    {
+      UserId = lockedOrder.CustomerId,
+      Type = "order.dispute_rebutted",
+      Title = "Supplier responded to delivery dispute",
+      Content = $"Supplier submitted a rebuttal for the delivery dispute on order {lockedOrder.OrderNumber}. Admin will review and resolve.",
+      ReferenceType = OrderReferenceType,
+      ReferenceId = lockedOrder.Id
+    });
+
+    var adminUserIds = await context.Users.AsNoTracking()
+        .Where(u => u.Role == UserRole.Admin && u.IsActive && !u.IsDeleted)
+        .Select(u => u.Id)
+        .ToListAsync(cancellationToken);
+
+    foreach (var adminId in adminUserIds)
+    {
+      context.Notifications.Add(new Notification
+      {
+        UserId = adminId,
+        Type = "order.dispute_rebutted",
+        Title = "Supplier submitted delivery dispute rebuttal",
+        Content = $"Supplier submitted a rebuttal for dispute on order {lockedOrder.OrderNumber}. The dispute is now open for review.",
+        ReferenceType = OrderReferenceType,
+        ReferenceId = lockedOrder.Id
+      });
+    }
+
+    await context.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    var paidAmount = await GetOrderPaidBalanceAsync(lockedOrder.Id, cancellationToken);
+    return MapDispute(dispute, lockedOrder.OrderNumber, paidAmount);
+  }
+
   public async Task<OrderRefundCaseResponse> CreateRefundCaseAsync(
       Order order, Guid customerId, CreateOrderRefundRequest request, CancellationToken cancellationToken = default)
   {
@@ -1632,7 +1855,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         .SingleOrDefaultAsync(cancellationToken)
         ?? throw new HttpException(404, B2BOrderingMessages.OrderNotFound);
     if (lockedOrder.Status is not (OrderStatus.Cancelled or OrderStatus.Expired or OrderStatus.Disputed))
-      throw new HttpException(409, "Refund claims are only available for cancelled, expired, or disputed orders.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Chỉ yêu cầu hoàn tiền được với đơn đã hủy, hết hạn hoặc đang khiếu nại. Hãy kiểm tra trạng thái đơn.", OrderErrorCodes.StateConflict);
 
     var paidAmount = await context.Payments
         .Where(item => item.OrderId == lockedOrder.Id && item.Status == PaymentStatus.Completed && !item.IsDeleted)
@@ -1643,7 +1866,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
     var refundable = Math.Max(0m, paidAmount - existingRefundedOrPending);
     if (refundable <= 0m)
-      throw new HttpException(409, "No refundable paid balance remains on this order.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Đơn này không còn số tiền đã thanh toán để hoàn.", OrderErrorCodes.StateConflict);
 
     var requestedAmount = request.RequestedAmount.HasValue
         ? Math.Min(refundable, decimal.Round(request.RequestedAmount.Value, 2, MidpointRounding.AwayFromZero))
@@ -1697,9 +1920,9 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     var refundCase = await context.OrderRefundCases.FromSqlInterpolated(
             $"SELECT * FROM order_refund_cases WHERE id = {refundCaseId} FOR UPDATE")
         .SingleOrDefaultAsync(cancellationToken)
-        ?? throw new HttpException(404, "Refund case was not found.");
+        ?? throw new HttpException(404, "Không tìm thấy yêu cầu hoàn tiền. Hãy tải lại trang và thử lại.");
     if (refundCase.Status is not ("Pending" or "Processing"))
-      throw new HttpException(409, "Refund case has already been processed.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Yêu cầu hoàn tiền này đã được xử lý xong.", OrderErrorCodes.StateConflict);
 
     var lockedOrder = await context.Orders.FromSqlInterpolated(
             $"SELECT * FROM orders WHERE id = {refundCase.OrderId} FOR UPDATE")
@@ -1848,12 +2071,14 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         ?? throw new HttpException(404, B2BOrderingMessages.OrderNotFound);
 
     if (lockedOrder.Status != OrderStatus.Delivered)
-      throw new HttpException(409, "Payout can only be requested after the customer confirms delivery.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Chỉ yêu cầu giải ngân được sau khi khách xác nhận đã nhận hàng. Hãy chờ khách xác nhận (hoặc hệ thống tự xác nhận sau 72 giờ).", OrderErrorCodes.StateConflict);
 
     var hasOpenDispute = await context.OrderDeliveryDisputes
-        .AnyAsync(item => item.OrderId == lockedOrder.Id && item.Status == "Open" && !item.IsDeleted, cancellationToken);
+        .AnyAsync(item => item.OrderId == lockedOrder.Id
+            && (item.Status == "Open" || item.Status == "AwaitingSupplierRebuttal")
+            && !item.IsDeleted, cancellationToken);
     if (hasOpenDispute)
-      throw new HttpException(409, "Payout is locked while a delivery dispute is open.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Giải ngân tạm khóa vì đơn đang có khiếu nại giao hàng. Hãy chờ khiếu nại được xử lý.", OrderErrorCodes.StateConflict);
 
     var hasInlineBank = !string.IsNullOrWhiteSpace(request.BankName)
         || !string.IsNullOrWhiteSpace(request.AccountNumber)
@@ -1871,7 +2096,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     if (payoutAccount is null)
     {
       if (!hasInlineBank)
-        throw new HttpException(422, "Configure or provide a supplier payout bank account before requesting disbursement.", OrderErrorCodes.ValidationError);
+        throw new HttpException(422, "Chưa có tài khoản ngân hàng nhận tiền. Hãy thêm tài khoản ngân hàng của xưởng rồi yêu cầu giải ngân lại.", OrderErrorCodes.ValidationError);
 
       payoutAccount = new SupplierPayoutAccount
       {
@@ -1902,7 +2127,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
     var balances = ComputeBalancesFromLedger(ledger, payouts);
     if (balances.Eligible <= 0m)
-      throw new HttpException(409, "No eligible balance is available for payout on this order.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Đơn này chưa có số tiền đủ điều kiện giải ngân.", OrderErrorCodes.StateConflict);
 
     var snapshotBankName = hasInlineBank ? request.BankName!.Trim() : payoutAccount.BankName;
     var snapshotBankCode = hasInlineBank
@@ -1968,9 +2193,9 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     var payoutReq = await context.SupplierPayoutRequests.FromSqlInterpolated(
             $"SELECT * FROM supplier_payout_requests WHERE id = {payoutRequestId} FOR UPDATE")
         .SingleOrDefaultAsync(cancellationToken)
-        ?? throw new HttpException(404, "Payout request was not found.");
+        ?? throw new HttpException(404, "Không tìm thấy yêu cầu giải ngân. Hãy tải lại trang và thử lại.");
     if (payoutReq.Status != "Pending")
-      throw new HttpException(409, "Payout request has already been processed.", OrderErrorCodes.StateConflict);
+      throw new HttpException(409, "Yêu cầu giải ngân này đã được xử lý xong.", OrderErrorCodes.StateConflict);
 
     var lockedOrder = await context.Orders.FromSqlInterpolated(
             $"SELECT * FROM orders WHERE id = {payoutReq.OrderId} FOR UPDATE")
@@ -2287,6 +2512,68 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     return expiredCount;
   }
 
+  public async Task<int> AutoConfirmDeliveredOrdersAsync(CancellationToken cancellationToken = default)
+  {
+    var now = clock.UtcNow;
+    var cutoff = now.AddHours(-OrderPolicyDefaults.DeliveryAutoConfirmHours);
+
+    var candidateIds = await (
+        from order in context.Orders.AsNoTracking()
+        where !order.IsDeleted && order.Status == OrderStatus.Shipped
+        join delivery in context.Deliveries.AsNoTracking() on order.Id equals delivery.OrderId
+        where !delivery.IsDeleted
+        join proof in context.DeliveryProofs.AsNoTracking() on delivery.Id equals proof.DeliveryId
+        where !proof.IsDeleted && proof.ProofType == ProofType.Delivery && proof.CreatedAt <= cutoff
+        where !context.OrderDeliveryDisputes.Any(dispute =>
+            dispute.OrderId == order.Id &&
+            !dispute.IsDeleted &&
+            (dispute.Status == null || (!dispute.Status.StartsWith("Resolved") && dispute.Status != "Closed")))
+        select order.Id
+    ).Distinct().Take(50).ToListAsync(cancellationToken);
+
+    var confirmedCount = 0;
+    foreach (var candidateId in candidateIds)
+    {
+      context.ChangeTracker.Clear();
+      await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+      var lockedOrder = context.Database.IsRelational()
+          ? await context.Orders.FromSqlInterpolated(
+                  $"SELECT * FROM orders WHERE id = {candidateId} FOR UPDATE SKIP LOCKED")
+              .SingleOrDefaultAsync(cancellationToken)
+          : await context.Orders.SingleOrDefaultAsync(o => o.Id == candidateId, cancellationToken);
+      if (lockedOrder is null || lockedOrder.IsDeleted || lockedOrder.Status != OrderStatus.Shipped)
+        continue;
+
+      var hasUnresolvedDispute = await context.OrderDeliveryDisputes.AsNoTracking()
+          .AnyAsync(item => item.OrderId == lockedOrder.Id &&
+              !item.IsDeleted &&
+              (item.Status == null || (!item.Status.StartsWith("Resolved") && item.Status != "Closed")), cancellationToken);
+      if (hasUnresolvedDispute)
+        continue;
+
+      var delivery = await context.Deliveries
+          .Where(item => item.OrderId == lockedOrder.Id && !item.IsDeleted)
+          .OrderByDescending(item => item.CreatedAt)
+          .FirstOrDefaultAsync(cancellationToken);
+      if (delivery is null)
+        continue;
+
+      var hasDeliveryProof = await context.DeliveryProofs.AsNoTracking()
+          .AnyAsync(item => item.DeliveryId == delivery.Id && item.ProofType == ProofType.Delivery && !item.IsDeleted && item.CreatedAt <= cutoff, cancellationToken);
+      if (!hasDeliveryProof)
+        continue;
+
+      await ExecuteOrderDeliveryConfirmationCoreAsync(
+          lockedOrder, delivery, lockedOrder.CustomerId, "Tự xác nhận sau 72h", isAutoConfirmed: true, cancellationToken);
+
+      await context.SaveChangesAsync(cancellationToken);
+      await transaction.CommitAsync(cancellationToken);
+      confirmedCount++;
+    }
+
+    return confirmedCount;
+  }
+
   private void BuildInitialObligationsAndParts(Order order, Guid actorUserId, DateTime now, DateTime depositDeadline)
   {
     var depositApplies = order.DepositRequiredSnapshot && order.DepositPercentSnapshot is >= 10m and <= 50m;
@@ -2354,8 +2641,9 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
 
   private async Task ExecuteOrderCancellationCoreAsync(
       Order lockedOrder, Guid? cancelRequestId, Guid actorUserId, string reason, decimal paidAmount,
-      DateTime now, CancellationToken cancellationToken)
+      DateTime now, CancellationToken cancellationToken, decimal? refundAmount = null)
   {
+    var suggestedRefund = refundAmount ?? paidAmount;
     var previousStatus = lockedOrder.Status;
     lockedOrder.Status = OrderStatus.Cancelled;
     lockedOrder.CancelledAt = now;
@@ -2383,7 +2671,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
           ShopId = lockedOrder.ShopId,
           CancellationRequestId = cancelRequestId,
           CaseNumber = $"RFD-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
-          RequestedAmount = paidAmount,
+          RequestedAmount = suggestedRefund,
           ApprovedAmount = 0m,
           Reason = $"Automatic refund case after order cancellation: {reason}",
           Status = "Pending",
@@ -2403,7 +2691,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
           EntryType = "ReservedForRefund",
           BalanceBucket = "Held",
           Amount = 0m,
-          Description = $"Refund case {refundCase.CaseNumber} queued ({paidAmount:N0} VND) after order cancellation.",
+          Description = $"Refund case {refundCase.CaseNumber} queued ({suggestedRefund:N0} VND) after order cancellation.",
           IdempotencyKey = $"cancel-refund:{lockedOrder.Id}",
           CreatedBy = actorUserId,
           CreatedAt = now,
@@ -2649,7 +2937,7 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
     if (bank.Length == 0 && number.Length == 0 && holder.Length == 0)
       return null;
     if (bank.Length == 0 || number.Length == 0 || holder.Length == 0)
-      throw new HttpException(400, "Please provide complete bank name, account number, and account holder name.", OrderErrorCodes.ValidationError);
+      throw new HttpException(400, "Hãy nhập đầy đủ tên ngân hàng, số tài khoản và tên chủ tài khoản.", OrderErrorCodes.ValidationError);
 
     return JsonSerializer.Serialize(new
     {
@@ -2832,6 +3120,8 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
         actions.Add("RespondCancellationRequest");
       if (order.Status == OrderStatus.Delivered && financialSummary.EligibleAmount > 0m && activeDispute is null)
         actions.Add("RequestSimulatedPayout");
+      if (activeDispute is { Status: "AwaitingSupplierRebuttal" })
+        actions.Add("SubmitDeliveryDisputeRebuttal");
     }
     else if (viewerIsAdmin)
     {
@@ -2903,10 +3193,18 @@ public sealed class EnterpriseOrderRepository(ApplicationDbContext context, IDat
       catch { urls = []; }
     }
 
+    IReadOnlyList<string> rebuttalUrls = [];
+    if (!string.IsNullOrWhiteSpace(item.SupplierRebuttalEvidenceUrlsJson))
+    {
+      try { rebuttalUrls = JsonSerializer.Deserialize<List<string>>(item.SupplierRebuttalEvidenceUrlsJson) ?? []; }
+      catch { rebuttalUrls = []; }
+    }
+
     return new OrderDeliveryDisputeResponse(
         item.Id, item.OrderId, orderNumber, item.DeliveryId, item.IssueType, item.Description,
         urls, item.Status, item.ResolutionNotes, item.CreatedAt, item.ResolvedAt,
-        item.RefundBankSnapshotJson, paidAmount);
+        item.RefundBankSnapshotJson, paidAmount,
+        item.SupplierRebuttalNotes, rebuttalUrls, item.SupplierRebuttalAt, item.RebuttalDeadlineAt);
   }
 
   private static string EncodeCursor(DateTime createdAtUtc, Guid id)

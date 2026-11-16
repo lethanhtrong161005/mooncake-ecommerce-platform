@@ -8,7 +8,12 @@ using Mooncake.EcommercePlatform.Domain.Entities;
 public static class DeliveryResponseHelper
 {
     /// <summary>Maps a delivery entity and its proof count to a summary response.</summary>
-    public static DeliveryResponse ToResponse(Delivery delivery, int proofCount, DeliveryPartyContext? context = null) => new()
+    public static DeliveryResponse ToResponse(
+        Delivery delivery,
+        int proofCount,
+        DeliveryPartyContext? context = null,
+        IReadOnlyList<DeliveryItemResponse>? items = null,
+        int? totalBatches = null) => new()
     {
         Id = delivery.Id,
         ContractId = delivery.ContractId,
@@ -24,18 +29,30 @@ public static class DeliveryResponseHelper
         RecipientPhone = delivery.RecipientPhone,
         TrackingCode = delivery.TrackingCode,
         Notes = delivery.Notes,
+        BatchNumber = delivery.BatchNumber,
+        TotalBatches = totalBatches,
+        Items = items ?? Array.Empty<DeliveryItemResponse>(),
         ProofCount = proofCount,
         ContractNumber = context?.ContractNumber,
         OrderNumber = context?.OrderNumber,
         CustomerName = context?.CustomerName,
         SupplierName = context?.SupplierName,
+        DriverName = delivery.DriverName,
+        DriverPhone = delivery.DriverPhone,
+        VehiclePlate = delivery.VehiclePlate,
+        ShareCode = delivery.ShareCode,
+        DriverClaimedAt = delivery.DriverClaimedAt,
         CreatedAt = delivery.CreatedAt,
         UpdatedAt = delivery.UpdatedAt
     };
 
     /// <summary>Maps a delivery entity and its proof list to a detail response.</summary>
     public static DeliveryDetailResponse ToDetailResponse(
-        Delivery delivery, IReadOnlyList<DeliveryProofResponse> proofs, DeliveryPartyContext? context = null) => new()
+        Delivery delivery,
+        IReadOnlyList<DeliveryProofResponse> proofs,
+        DeliveryPartyContext? context = null,
+        IReadOnlyList<DeliveryItemResponse>? items = null,
+        int? totalBatches = null) => new()
     {
         Id = delivery.Id,
         ContractId = delivery.ContractId,
@@ -51,12 +68,20 @@ public static class DeliveryResponseHelper
         RecipientPhone = delivery.RecipientPhone,
         TrackingCode = delivery.TrackingCode,
         Notes = delivery.Notes,
+        BatchNumber = delivery.BatchNumber,
+        TotalBatches = totalBatches,
+        Items = items ?? Array.Empty<DeliveryItemResponse>(),
         ProofCount = proofs.Count,
         Proofs = proofs,
         ContractNumber = context?.ContractNumber,
         OrderNumber = context?.OrderNumber,
         CustomerName = context?.CustomerName,
         SupplierName = context?.SupplierName,
+        DriverName = delivery.DriverName,
+        DriverPhone = delivery.DriverPhone,
+        VehiclePlate = delivery.VehiclePlate,
+        ShareCode = delivery.ShareCode,
+        DriverClaimedAt = delivery.DriverClaimedAt,
         CreatedAt = delivery.CreatedAt,
         UpdatedAt = delivery.UpdatedAt
     };
@@ -79,6 +104,18 @@ public static class DeliveryResponseHelper
         CreatedAt = proof.CreatedAt
     };
 
+    /// <summary>Maps a delivery item entity to an item response.</summary>
+    public static DeliveryItemResponse ToItemResponse(DeliveryItem item) => new()
+    {
+        Id = item.Id,
+        DeliveryId = item.DeliveryId,
+        OrderItemId = item.OrderItemId,
+        RfqItemId = item.RfqItemId,
+        ProductName = item.ProductName,
+        Unit = item.Unit,
+        Quantity = item.Quantity
+    };
+
     /// <summary>Maps delivery share token state to a supplier share-link status response.</summary>
     public static DeliveryShareLinkResponse ToShareLinkResponse(Delivery delivery, DateTime utcNow)
     {
@@ -92,6 +129,7 @@ public static class DeliveryResponseHelper
             DeliveryId = delivery.Id,
             DeliveryNumber = delivery.DeliveryNumber,
             Token = isActive ? delivery.ShareToken : null,
+            ShareCode = delivery.ShareCode,
             CreatedAtUtc = delivery.ShareTokenCreatedAtUtc,
             ExpiresAtUtc = delivery.ShareTokenExpiresAtUtc,
             RevokedAtUtc = delivery.ShareTokenRevokedAtUtc,
@@ -103,26 +141,49 @@ public static class DeliveryResponseHelper
 
     /// <summary>Maps a delivery entity to an anonymous field driver PoD payload.</summary>
     public static PublicDriverDeliveryResponse ToPublicDriverResponse(
-        Delivery delivery, int proofCount, string? referenceCode = null) => new()
+        Delivery delivery,
+        int proofCount,
+        string? referenceCode = null,
+        IReadOnlyList<DeliveryItemResponse>? items = null,
+        int? totalBatches = null,
+        DeliveryPartyContext? context = null)
     {
-        DeliveryId = delivery.Id,
-        DeliveryNumber = delivery.DeliveryNumber,
-        DeliveryType = delivery.DeliveryType,
-        Status = delivery.Status,
-        ScheduledDate = delivery.ScheduledDate,
-        ActualDeliveryDate = delivery.ActualDeliveryDate,
-        FromAddress = delivery.FromAddress,
-        ToAddress = delivery.ToAddress,
-        RecipientName = delivery.RecipientName,
-        RecipientPhone = delivery.RecipientPhone,
-        TrackingCode = delivery.TrackingCode,
-        Notes = delivery.Notes,
-        ReferenceCode = referenceCode,
-        RequiresSignature = delivery.ContractId.HasValue,
-        ProofCount = proofCount,
-        ExpiresAtUtc = delivery.ShareTokenExpiresAtUtc ?? delivery.CreatedAt,
-        CanSubmitProof = delivery.Status != Domain.Enums.DeliveryStatus.Delivered
-                         && delivery.Status != Domain.Enums.DeliveryStatus.Returned
-    };
-}
+        var canSubmitProof = delivery.Status != Domain.Enums.DeliveryStatus.Delivered
+                             && delivery.Status != Domain.Enums.DeliveryStatus.Returned;
 
+        return new()
+        {
+            DeliveryId = delivery.Id,
+            DeliveryNumber = delivery.DeliveryNumber,
+            DeliveryType = delivery.DeliveryType,
+            Status = delivery.Status,
+            ScheduledDate = delivery.ScheduledDate,
+            ActualDeliveryDate = delivery.ActualDeliveryDate,
+            FromAddress = delivery.FromAddress,
+            ToAddress = delivery.ToAddress,
+            RecipientName = delivery.RecipientName,
+            RecipientPhone = delivery.RecipientPhone,
+            TrackingCode = delivery.TrackingCode,
+            Notes = delivery.Notes,
+            BatchNumber = delivery.BatchNumber,
+            TotalBatches = totalBatches,
+            Items = items ?? Array.Empty<DeliveryItemResponse>(),
+            ReferenceCode = referenceCode,
+            RequiresSignature = delivery.ContractId.HasValue,
+            ProofCount = proofCount,
+            ExpiresAtUtc = delivery.ShareTokenExpiresAtUtc ?? delivery.CreatedAt,
+            CanSubmitProof = canSubmitProof,
+            RequiresClaim = canSubmitProof && !delivery.DriverClaimedAt.HasValue,
+            Token = delivery.ShareToken,
+            ShareCode = delivery.ShareCode,
+            DriverName = delivery.DriverName,
+            DriverPhone = delivery.DriverPhone,
+            VehiclePlate = delivery.VehiclePlate,
+            DriverClaimedAt = delivery.DriverClaimedAt,
+            OrderType = delivery.ContractId.HasValue ? "Contract" : "BulkOrder",
+            OrderNumber = context?.OrderNumber,
+            ContractNumber = context?.ContractNumber,
+            RecipientCompanyName = context?.CustomerCompanyName ?? context?.CustomerName ?? delivery.RecipientName
+        };
+    }
+}

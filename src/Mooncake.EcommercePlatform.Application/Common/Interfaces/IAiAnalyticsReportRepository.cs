@@ -25,4 +25,6 @@ public interface IAiAnalyticsReportRepository
     Task<AiReportMetricsSummaryDto> AggregateMetricsAsync(DateTime from, DateTime to, Guid? shopId, CancellationToken cancellationToken = default);
 
     Task<AiDashboardSummaryResponse> GetDashboardSummaryMetricsAsync(Guid? shopId, CancellationToken cancellationToken = default);
+
+    Task<Guid?> FindShopIdByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
 }

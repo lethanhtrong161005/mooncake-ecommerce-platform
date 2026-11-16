@@ -202,11 +202,36 @@ public sealed class ContractsControllerHttpTests
     [Fact]
     public async Task SignAsync_Returns400_WhenOtpIsInvalid()
     {
+        contractService.Setup(s => s.SignAsync(CustomerId, ContractId, "12", true,
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Mooncake.EcommercePlatform.Application.Common.Exceptions.HttpException(400, "Invalid OTP code."));
+
         using var client = CreateClient("Customer");
         var invalid = new SignContractRequest { OtpCode = "12", ConfirmTerms = true }; // RegularExpression 6 digits
         var response = await client.PostAsJsonAsync($"/api/v1/contracts/{ContractId}/sign", invalid);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SignAsync_Supplier_Returns200_WhenValidOtpProvided()
+    {
+        var contract = new ContractResponse(
+            ContractId, "HD-2026-TEST01", null, "Hợp đồng Cung cấp Quà tặng", 100000000m,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)), null, ContractStatus.PendingSignature,
+            null, DateTime.UtcNow, null);
+
+        contractService.Setup(s => s.SignAsync(SupplierId, ContractId, "123456", true,
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(contract);
+
+        using var client = CreateClient("Supplier");
+        var request = new SignContractRequest { OtpCode = "123456", ConfirmTerms = true };
+        var response = await client.PostAsJsonAsync($"/api/v1/contracts/{ContractId}/sign", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.Contains("PendingSignature", json);
     }
 
     // =========================================================================

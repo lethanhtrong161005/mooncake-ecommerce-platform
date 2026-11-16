@@ -12,6 +12,7 @@ using Mooncake.EcommercePlatform.Application.Common.Constant;
 using Mooncake.EcommercePlatform.Application.Common.Options;
 using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Infrastructure;
+using Mooncake.EcommercePlatform.WebApi.Controllers;
 using Mooncake.EcommercePlatform.WebApi.Middleware;
 
 /// <summary>Registers HTTP, authentication, and application services for the Web API.</summary>
@@ -226,6 +227,22 @@ public static class WebApiServiceCollectionExtensions
                     QueueLimit = 0,
                     AutoReplenishment = true
                 }));
+            options.AddPolicy(DeliveriesController.PublicDriverRatePolicy, context =>
+            {
+                var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                var token = context.Request.RouteValues.TryGetValue("token", out var routeVal)
+                    ? routeVal?.ToString() ?? string.Empty
+                    : string.Empty;
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    $"{ip}:{token}",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 20,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    });
+            });
             options.OnRejected = async (context, cancellationToken) =>
             {
                 var http = context.HttpContext;

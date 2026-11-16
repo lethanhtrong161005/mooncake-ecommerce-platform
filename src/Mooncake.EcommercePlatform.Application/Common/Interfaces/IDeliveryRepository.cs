@@ -2,14 +2,21 @@ namespace Mooncake.EcommercePlatform.Application.Common.Interfaces;
 
 using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
-
+using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
 using Mooncake.EcommercePlatform.Domain.Entities;
 
 public sealed record DeliveryPartyContext(
     string? OrderNumber,
     string? ContractNumber,
     string? CustomerName,
-    string? SupplierName);
+    string? SupplierName,
+    string? CustomerCompanyName = null);
+
+public sealed record ContractLineInfo(
+    Guid LineId,
+    string ProductName,
+    string? Unit,
+    int Quantity);
 
 /// <summary>Persistence operations for shipments and Proof-of-Delivery records.</summary>
 public interface IDeliveryRepository
@@ -54,8 +61,38 @@ public interface IDeliveryRepository
 
     Task<Delivery?> GetByShareTokenAsync(string token, CancellationToken cancellationToken = default);
 
+    Task<Delivery?> GetByShareCodeAsync(string shareCode, CancellationToken cancellationToken = default);
+
+    Task<bool> IsShareCodeInUseAsync(string shareCode, DateTime utcNow, CancellationToken cancellationToken = default);
+
+    Task<Guid?> GetCustomerUserIdForDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default);
+
+    Task AddWorkflowEventAsync(WorkflowEvent workflowEvent, CancellationToken cancellationToken = default);
+
     Task<string?> GetReferenceCodeAsync(Delivery delivery, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyDictionary<Guid, DeliveryPartyContext>?> GetPartyContextsAsync(
         IReadOnlyCollection<Delivery> deliveries, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DeliveryItem>> GetDeliveryItemsAsync(Guid deliveryId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<DeliveryItem>>?> GetDeliveryItemsMapAsync(
+        IReadOnlyCollection<Guid> deliveryIds, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, int>?> GetContractTotalBatchesMapAsync(
+        IReadOnlyCollection<Guid> contractIds, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DeliveryItem>> CreateDeliveryItemsAsync(
+        IReadOnlyCollection<DeliveryItem> items, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DeliveryItem>> SnapshotOrderItemsAsync(
+        Guid deliveryId, Guid orderId, Guid userId, CancellationToken cancellationToken = default);
+
+    Task<int> GetNextBatchNumberForContractAsync(Guid contractId, CancellationToken cancellationToken = default);
+
+    Task<int> GetTotalBatchesForContractAsync(Guid contractId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ContractLineInfo>> GetContractLinesAsync(Guid contractId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ContractFulfillmentLineResponse>> GetContractFulfillmentAsync(Guid contractId, CancellationToken cancellationToken = default);
 }

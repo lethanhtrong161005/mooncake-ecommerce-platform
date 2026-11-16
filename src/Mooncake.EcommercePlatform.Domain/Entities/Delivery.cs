@@ -32,6 +32,18 @@ public class Delivery : BaseEntity
 
     public DeliveryStatus Status { get; set; } = DeliveryStatus.Pending;
 
+    public int? BatchNumber { get; set; }
+
+    public string? DriverName { get; set; }
+
+    public string? DriverPhone { get; set; }
+
+    public string? VehiclePlate { get; set; }
+
+    public string? ShareCode { get; set; }
+
+    public DateTime? DriverClaimedAt { get; set; }
+
     public string? ShareToken { get; set; }
 
     public DateTime? ShareTokenCreatedAtUtc { get; set; }

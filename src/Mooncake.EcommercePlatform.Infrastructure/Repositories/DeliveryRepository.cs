@@ -5,6 +5,7 @@ using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
+using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
 using Mooncake.EcommercePlatform.Domain.Entities;
 using Mooncake.EcommercePlatform.Domain.Enums;
 using Mooncake.EcommercePlatform.Infrastructure.Persistence;
@@ -306,6 +307,50 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
         await context.Deliveries.AsNoTracking()
             .FirstOrDefaultAsync(d => d.ShareToken == token && !d.IsDeleted, cancellationToken);
 
+    public async Task<Delivery?> GetByShareCodeAsync(string shareCode, CancellationToken cancellationToken = default)
+    {
+        var upperCode = shareCode.ToUpperInvariant();
+        return await context.Deliveries.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.ShareCode != null && d.ShareCode.ToUpper() == upperCode && !d.IsDeleted, cancellationToken);
+    }
+
+    public async Task<bool> IsShareCodeInUseAsync(string shareCode, DateTime utcNow, CancellationToken cancellationToken = default)
+    {
+        var upperCode = shareCode.ToUpperInvariant();
+        return await context.Deliveries.AsNoTracking().AnyAsync(
+            d => d.ShareCode != null
+                 && d.ShareCode.ToUpper() == upperCode
+                 && !d.IsDeleted
+                 && !d.ShareTokenRevokedAtUtc.HasValue
+                 && d.ShareTokenExpiresAtUtc.HasValue
+                 && d.ShareTokenExpiresAtUtc.Value > utcNow,
+            cancellationToken);
+    }
+
+    public async Task<Guid?> GetCustomerUserIdForDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var contractCustomerId = await (
+            from delivery in context.Deliveries.AsNoTracking()
+            join contract in context.Contracts.AsNoTracking() on delivery.ContractId equals contract.Id
+            where delivery.Id == deliveryId && !delivery.IsDeleted && !contract.IsDeleted
+            select (Guid?)contract.CustomerId
+        ).FirstOrDefaultAsync(cancellationToken);
+        if (contractCustomerId.HasValue) return contractCustomerId;
+
+        return await (
+            from delivery in context.Deliveries.AsNoTracking()
+            join order in context.Orders.AsNoTracking() on delivery.OrderId equals order.Id
+            where delivery.Id == deliveryId && !delivery.IsDeleted && !order.IsDeleted
+            select (Guid?)order.CustomerId
+        ).FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task AddWorkflowEventAsync(WorkflowEvent workflowEvent, CancellationToken cancellationToken = default)
+    {
+        context.WorkflowEvents.Add(workflowEvent);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<string?> GetReferenceCodeAsync(Delivery delivery, CancellationToken cancellationToken = default)
     {
         if (delivery.OrderId.HasValue)
@@ -342,6 +387,8 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                 from o in context.Orders.AsNoTracking()
                 join c in context.Users.AsNoTracking() on o.CustomerId equals c.Id into customerJoin
                 from c in customerJoin.DefaultIfEmpty()
+                join cp in context.CustomerProfiles.AsNoTracking() on o.CustomerId equals cp.UserId into cpJoin
+                from cp in cpJoin.DefaultIfEmpty()
                 join s in context.Shops.AsNoTracking() on o.ShopId equals s.Id into shopJoin
                 from s in shopJoin.DefaultIfEmpty()
                 where orderIds.Contains(o.Id) && !o.IsDeleted
@@ -350,11 +397,12 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                     o.Id,
                     o.OrderNumber,
                     CustomerName = c != null ? (c.FullName ?? c.Email) : null,
+                    CustomerCompanyName = cp != null ? cp.CompanyName : null,
                     SupplierName = s != null ? s.Name : null
                 }
             ).ToDictionaryAsync(
                 x => x.Id,
-                x => new DeliveryPartyContext(x.OrderNumber, null, x.CustomerName, x.SupplierName),
+                x => new DeliveryPartyContext(x.OrderNumber, null, x.CustomerName, x.SupplierName, x.CustomerCompanyName),
                 cancellationToken);
 
         var contractIds = deliveries.Where(d => d.ContractId.HasValue).Select(d => d.ContractId!.Value).Distinct().ToArray();
@@ -364,6 +412,8 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                 from ct in context.Contracts.AsNoTracking()
                 join c in context.Users.AsNoTracking() on ct.CustomerId equals c.Id into customerJoin
                 from c in customerJoin.DefaultIfEmpty()
+                join cp in context.CustomerProfiles.AsNoTracking() on ct.CustomerId equals cp.UserId into cpJoin
+                from cp in cpJoin.DefaultIfEmpty()
                 join sp in context.SupplierProfiles.AsNoTracking() on ct.SupplierId equals sp.Id into spJoin
                 from sp in spJoin.DefaultIfEmpty()
                 where contractIds.Contains(ct.Id) && !ct.IsDeleted
@@ -372,11 +422,12 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
                     ct.Id,
                     ct.ContractNumber,
                     CustomerName = c != null ? (c.FullName ?? c.Email) : null,
+                    CustomerCompanyName = cp != null ? cp.CompanyName : null,
                     SupplierName = sp != null ? sp.CompanyName : null
                 }
             ).ToDictionaryAsync(
                 x => x.Id,
-                x => new DeliveryPartyContext(null, x.ContractNumber, x.CustomerName, x.SupplierName),
+                x => new DeliveryPartyContext(null, x.ContractNumber, x.CustomerName, x.SupplierName, x.CustomerCompanyName),
                 cancellationToken);
 
         foreach (var delivery in deliveries)
@@ -389,6 +440,187 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
             {
                 result[delivery.Id] = ctr;
             }
+        }
+
+        return result;
+    }
+
+    public async Task<IReadOnlyList<DeliveryItem>> GetDeliveryItemsAsync(Guid deliveryId, CancellationToken cancellationToken = default) =>
+        await context.DeliveryItems.AsNoTracking()
+            .Where(di => di.DeliveryId == deliveryId && !di.IsDeleted)
+            .OrderBy(di => di.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<DeliveryItem>>?> GetDeliveryItemsMapAsync(
+        IReadOnlyCollection<Guid> deliveryIds, CancellationToken cancellationToken = default)
+    {
+        if (deliveryIds.Count == 0)
+            return new Dictionary<Guid, IReadOnlyList<DeliveryItem>>();
+
+        var items = await context.DeliveryItems.AsNoTracking()
+            .Where(di => deliveryIds.Contains(di.DeliveryId) && !di.IsDeleted)
+            .OrderBy(di => di.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return items
+            .GroupBy(di => di.DeliveryId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<DeliveryItem>)g.ToList());
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, int>?> GetContractTotalBatchesMapAsync(
+        IReadOnlyCollection<Guid> contractIds, CancellationToken cancellationToken = default)
+    {
+        if (contractIds.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        return await context.Deliveries.AsNoTracking()
+            .Where(d => d.ContractId.HasValue && contractIds.Contains(d.ContractId.Value) && !d.IsDeleted)
+            .GroupBy(d => d.ContractId!.Value)
+            .Select(g => new { ContractId = g.Key, MaxBatch = g.Max(d => (int?)d.BatchNumber) ?? g.Count() })
+            .ToDictionaryAsync(x => x.ContractId, x => x.MaxBatch, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DeliveryItem>> CreateDeliveryItemsAsync(
+        IReadOnlyCollection<DeliveryItem> items, CancellationToken cancellationToken = default)
+    {
+        if (items.Count == 0)
+            return [];
+
+        context.DeliveryItems.AddRange(items);
+        await context.SaveChangesAsync(cancellationToken);
+        return items.ToList();
+    }
+
+    public async Task<IReadOnlyList<DeliveryItem>> SnapshotOrderItemsAsync(
+        Guid deliveryId, Guid orderId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var orderItems = await (
+            from oi in context.OrderItems.AsNoTracking()
+            join p in context.Products.AsNoTracking() on oi.ProductId equals p.Id into prodJoin
+            from p in prodJoin.DefaultIfEmpty()
+            where oi.OrderId == orderId && !oi.IsDeleted
+            orderby oi.CreatedAt
+            select new
+            {
+                OrderItemId = oi.Id,
+                ProductName = oi.ProductNameSnapshot,
+                oi.Quantity,
+                Unit = p != null ? p.Unit : null
+            }
+        ).ToListAsync(cancellationToken);
+
+        var items = orderItems.Select(oi => new DeliveryItem
+        {
+            Id = Guid.NewGuid(),
+            DeliveryId = deliveryId,
+            OrderItemId = oi.OrderItemId,
+            ProductName = oi.ProductName,
+            Unit = oi.Unit,
+            Quantity = oi.Quantity,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = userId
+        }).ToList();
+
+        if (items.Count > 0)
+        {
+            context.DeliveryItems.AddRange(items);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        return items;
+    }
+
+    public async Task<int> GetNextBatchNumberForContractAsync(Guid contractId, CancellationToken cancellationToken = default)
+    {
+        var max = await context.Deliveries.AsNoTracking()
+            .Where(d => d.ContractId == contractId && !d.IsDeleted)
+            .MaxAsync(d => (int?)d.BatchNumber, cancellationToken);
+        return (max ?? 0) + 1;
+    }
+
+    public async Task<int> GetTotalBatchesForContractAsync(Guid contractId, CancellationToken cancellationToken = default)
+    {
+        var max = await context.Deliveries.AsNoTracking()
+            .Where(d => d.ContractId == contractId && !d.IsDeleted)
+            .MaxAsync(d => (int?)d.BatchNumber, cancellationToken);
+        if (max.HasValue && max.Value > 0) return max.Value;
+
+        return await context.Deliveries.AsNoTracking()
+            .Where(d => d.ContractId == contractId && !d.IsDeleted)
+            .CountAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ContractLineInfo>> GetContractLinesAsync(Guid contractId, CancellationToken cancellationToken = default)
+    {
+        var contract = await context.Contracts.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contractId && !c.IsDeleted, cancellationToken);
+        if (contract == null) return [];
+
+        if (contract.RfqId.HasValue)
+        {
+            return await context.RfqItems.AsNoTracking()
+                .Where(r => r.RfqId == contract.RfqId.Value && !r.IsDeleted)
+                .OrderBy(r => r.CreatedAt)
+                .Select(r => new ContractLineInfo(r.Id, r.ProductName ?? string.Empty, r.Unit, r.Quantity))
+                .ToListAsync(cancellationToken);
+        }
+
+        if (contract.OrderId.HasValue)
+        {
+            return await (
+                from oi in context.OrderItems.AsNoTracking()
+                join p in context.Products.AsNoTracking() on oi.ProductId equals p.Id into prodJoin
+                from p in prodJoin.DefaultIfEmpty()
+                where oi.OrderId == contract.OrderId.Value && !oi.IsDeleted
+                orderby oi.CreatedAt
+                select new ContractLineInfo(oi.Id, oi.ProductNameSnapshot, p != null ? p.Unit : null, oi.Quantity)
+            ).ToListAsync(cancellationToken);
+        }
+
+        return [];
+    }
+
+    public async Task<IReadOnlyList<ContractFulfillmentLineResponse>> GetContractFulfillmentAsync(Guid contractId, CancellationToken cancellationToken = default)
+    {
+        var contract = await context.Contracts.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contractId && !c.IsDeleted, cancellationToken);
+        if (contract == null) return [];
+
+        var lines = await GetContractLinesAsync(contractId, cancellationToken);
+        if (lines.Count == 0) return [];
+
+        var deliveries = await context.Deliveries.AsNoTracking()
+            .Where(d => d.ContractId == contractId && !d.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var deliveryIds = deliveries.Select(d => d.Id).ToList();
+        var deliveryItems = deliveryIds.Count == 0
+            ? []
+            : await context.DeliveryItems.AsNoTracking()
+                .Where(di => deliveryIds.Contains(di.DeliveryId) && !di.IsDeleted)
+                .ToListAsync(cancellationToken);
+
+        var activeDeliveryIds = deliveries.Where(d => d.Status != DeliveryStatus.Returned).Select(d => d.Id).ToHashSet();
+        var deliveredDeliveryIds = deliveries.Where(d => d.Status == DeliveryStatus.Delivered).Select(d => d.Id).ToHashSet();
+
+        var result = new List<ContractFulfillmentLineResponse>(lines.Count);
+        foreach (var line in lines)
+        {
+            var lineDeliveryItems = deliveryItems.Where(di => di.RfqItemId == line.LineId || di.OrderItemId == line.LineId).ToList();
+            var scheduled = lineDeliveryItems.Where(di => activeDeliveryIds.Contains(di.DeliveryId)).Sum(di => di.Quantity);
+            var delivered = lineDeliveryItems.Where(di => deliveredDeliveryIds.Contains(di.DeliveryId)).Sum(di => di.Quantity);
+            var remaining = Math.Max(0, line.Quantity - scheduled);
+
+            result.Add(new ContractFulfillmentLineResponse
+            {
+                LineId = line.LineId,
+                RfqItemId = contract.RfqId.HasValue ? line.LineId : null,
+                OrderItemId = contract.OrderId.HasValue ? line.LineId : null,
+                ProductName = line.ProductName,
+                Unit = line.Unit,
+                TotalQuantity = line.Quantity,
+                ScheduledQuantity = scheduled,
+                DeliveredQuantity = delivered,
+                RemainingQuantity = remaining
+            });
         }
 
         return result;

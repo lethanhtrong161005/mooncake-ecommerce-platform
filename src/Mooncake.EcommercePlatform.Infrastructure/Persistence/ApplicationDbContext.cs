@@ -24,7 +24,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<CustomPackaging> CustomPackagings => Set<CustomPackaging>();
     public DbSet<PackagingTemplate> PackagingTemplates => Set<PackagingTemplate>();
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
+    public DbSet<DriverProfile> DriverProfiles => Set<DriverProfile>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
+    public DbSet<DeliveryItem> DeliveryItems => Set<DeliveryItem>();
     public DbSet<DeliveryProof> DeliveryProofs => Set<DeliveryProof>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Order> Orders => Set<Order>();

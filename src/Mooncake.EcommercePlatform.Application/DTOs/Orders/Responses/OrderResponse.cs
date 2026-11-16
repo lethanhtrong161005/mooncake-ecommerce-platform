@@ -34,6 +34,7 @@ public sealed record OrderResponse(
     public DateOnly? ProposedDeliveryDate { get; init; }
     public string? DeliveryProposalReason { get; init; }
     public DateTime? DeliveryApprovalDeadlineAtUtc { get; init; }
+    public DateTime? AutoConfirmAt { get; init; }
     public DateTime? CancelledAtUtc { get; init; }
     public string? CancellationReason { get; init; }
     public string? PriceSnapshotVersion { get; init; }

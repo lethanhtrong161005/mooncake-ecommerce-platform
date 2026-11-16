@@ -12,7 +12,7 @@ using Mooncake.EcommercePlatform.Infrastructure.Persistence;
 using Npgsql;
 
 /// <summary>Bounded projections and parameterized PostgreSQL locking for verification.</summary>
-public sealed class SupplierRepository(ApplicationDbContext context) : ISupplierRepository
+public sealed class SupplierRepository(ApplicationDbContext context, IDateTimeProvider? clock = null) : ISupplierRepository
 {
     public async Task<T> InTransactionAsync<T>(IReadOnlyList<Guid> userIds,
         Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken)
@@ -122,6 +122,154 @@ public sealed class SupplierRepository(ApplicationDbContext context) : ISupplier
                 x.Id, x.EventType, x.FromStatus, x.ToStatus, x.ActorUserId, x.Reason, x.CreatedAt, x.Metadata)).ToListAsync(ct);
         return new(items, page, pageSize, count);
     }
+    private const int VietnamUtcOffsetHours = 7;
+    private const string FoodSafetyExpiryWarningType = "supplier.license.attp_expiry_t30";
+    private const string SupplierFoodSafetyExpiredNotificationType = "supplier.license.attp_expired";
+    private const string AdminFoodSafetyExpiredNotificationType = "admin.supplier.license.attp_expired";
+    private const string ExpiredFoodSafetySuspensionReason = "Giấy ATTP hết hạn";
+
+    public async Task<int> ProcessLicenseExpiriesAsync(CancellationToken cancellationToken = default)
+    {
+        var nowUtc = clock?.UtcNow ?? DateTime.UtcNow;
+        var todayVn = DateOnly.FromDateTime(nowUtc.AddHours(VietnamUtcOffsetHours));
+        var warnThreshold = todayVn.AddDays(30);
+        var processed = 0;
+
+        var warningDocs = await context.SupplierVerificationDocuments.AsNoTracking()
+            .Where(d => !d.IsDeleted
+                     && d.DocumentType == SupplierVerificationConstants.FoodSafety
+                     && d.ReviewStatus == "Approved"
+                     && d.ExpiresOn != null
+                     && d.ExpiresOn <= warnThreshold
+                     && d.ExpiresOn >= todayVn)
+            .ToListAsync(cancellationToken);
+
+        foreach (var doc in warningDocs)
+        {
+            var alreadySent = await context.Notifications.AsNoTracking()
+                .AnyAsync(n => n.Type == FoodSafetyExpiryWarningType && n.ReferenceId == doc.Id && !n.IsDeleted, cancellationToken);
+            if (alreadySent) continue;
+
+            context.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = doc.OwnerUserId,
+                Type = FoodSafetyExpiryWarningType,
+                Title = "Giấy chứng nhận ATTP sắp hết hạn",
+                Content = $"Giấy chứng nhận ATTP của bạn hết hạn vào {doc.ExpiresOn:dd/MM/yyyy} (trong vòng 30 ngày). Hãy gia hạn và nộp giấy mới để cửa hàng không bị tạm ngưng.",
+                ReferenceType = "SupplierVerificationDocument",
+                ReferenceId = doc.Id,
+                CreatedAt = nowUtc
+            });
+            processed++;
+        }
+
+        var expiredDocs = await context.SupplierVerificationDocuments.AsNoTracking()
+            .Where(d => !d.IsDeleted
+                     && d.DocumentType == SupplierVerificationConstants.FoodSafety
+                     && d.ReviewStatus == "Approved"
+                     && d.ExpiresOn != null
+                     && d.ExpiresOn < todayVn)
+            .ToListAsync(cancellationToken);
+
+        var profileIdsWithExpired = expiredDocs.Select(d => d.SupplierProfileId).Distinct().ToList();
+
+        foreach (var profileId in profileIdsWithExpired)
+        {
+            var hasValidCert = await context.SupplierVerificationDocuments.AsNoTracking()
+                .AnyAsync(d => d.SupplierProfileId == profileId
+                            && !d.IsDeleted
+                            && d.DocumentType == SupplierVerificationConstants.FoodSafety
+                            && d.ReviewStatus == "Approved"
+                            && (d.ExpiresOn == null || d.ExpiresOn >= todayVn), cancellationToken);
+
+            if (hasValidCert) continue;
+
+            var shopsToSuspend = await context.Shops
+                .Where(s => s.SupplierId == profileId && !s.IsDeleted && s.Status != ShopStatus.Suspended)
+                .ToListAsync(cancellationToken);
+
+            if (shopsToSuspend.Count == 0) continue;
+
+            var profile = await context.SupplierProfiles.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == profileId && !p.IsDeleted, cancellationToken);
+
+            var adminIds = await context.Users.AsNoTracking()
+                .Where(u => u.Role == UserRole.Admin && u.IsActive && !u.IsDeleted)
+                .Select(u => u.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (var shop in shopsToSuspend)
+            {
+                shop.PreSuspensionStatus = shop.Status;
+                shop.Status = ShopStatus.Suspended;
+                shop.SuspendedAtUtc = nowUtc;
+                shop.SuspendedByUserId = null;
+                shop.SuspensionReason = ExpiredFoodSafetySuspensionReason;
+                shop.Version++;
+                shop.UpdatedAt = nowUtc;
+                processed++;
+
+                var supplierUserId = profile?.UserId ?? shop.OwnerUserId;
+                context.Notifications.Add(new Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = supplierUserId,
+                    Type = SupplierFoodSafetyExpiredNotificationType,
+                    Title = "Cửa hàng bị tạm ngưng do giấy phép hết hạn",
+                    Content = $"Cửa hàng \"{shop.Name}\" đã bị tạm ngưng vì giấy chứng nhận ATTP hết hạn. Hãy nộp giấy chứng nhận mới để được mở lại.",
+                    ReferenceType = "Shop",
+                    ReferenceId = shop.Id,
+                    CreatedAt = nowUtc
+                });
+
+                foreach (var adminId in adminIds)
+                {
+                    context.Notifications.Add(new Notification
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = adminId,
+                        Type = AdminFoodSafetyExpiredNotificationType,
+                        Title = "Cửa hàng bị tạm ngưng do giấy phép hết hạn",
+                        Content = $"Shop \"{shop.Name}\" (Supplier: {profile?.CompanyName ?? shop.OwnerUserId.ToString()}) has been suspended because its food safety certificate has expired.",
+                        ReferenceType = "Shop",
+                        ReferenceId = shop.Id,
+                        CreatedAt = nowUtc
+                    });
+                }
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        return processed;
+    }
+
+    public async Task<int> UnsuspendShopIfSuspendedForExpiredLicenseAsync(Guid supplierProfileId, CancellationToken cancellationToken = default)
+    {
+        var nowUtc = clock?.UtcNow ?? DateTime.UtcNow;
+        var suspendedShops = await context.Shops
+            .Where(s => s.SupplierId == supplierProfileId
+                     && !s.IsDeleted
+                     && s.Status == ShopStatus.Suspended
+                     && s.SuspendedByUserId == null
+                     && s.SuspensionReason == ExpiredFoodSafetySuspensionReason)
+            .ToListAsync(cancellationToken);
+
+        foreach (var shop in suspendedShops)
+        {
+            shop.Status = ShopStatus.Active;
+            shop.PreSuspensionStatus = null;
+            shop.SuspendedAtUtc = null;
+            shop.SuspendedByUserId = null;
+            shop.SuspensionReason = null;
+            shop.Version++;
+            shop.UpdatedAt = nowUtc;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        return suspendedShops.Count;
+    }
+
     public void AddProfile(SupplierProfile value) => context.SupplierProfiles.Add(value);
     public void AddSubmission(SupplierVerificationSubmission value) => context.SupplierVerificationSubmissions.Add(value);
     public void AddDocument(SupplierVerificationDocument value) => context.SupplierVerificationDocuments.Add(value);

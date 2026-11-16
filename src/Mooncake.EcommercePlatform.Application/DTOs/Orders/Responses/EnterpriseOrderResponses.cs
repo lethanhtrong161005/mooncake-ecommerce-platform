@@ -140,7 +140,10 @@ public sealed record OrderCancellationRequestResponse(
     decimal ProposedRefundAmount,
     DateTime CreatedAtUtc,
     DateTime? ReviewedAtUtc,
-    string? ReviewNotes);
+    string? ReviewNotes,
+    decimal? SuggestedRefundAmount = null,
+    decimal? SuggestedRefundPercent = null,
+    string? SuggestionReason = null);
 
 /// <summary>Refund case state in sandbox simulation mode.</summary>
 public sealed record OrderRefundCaseResponse(
@@ -158,7 +161,10 @@ public sealed record OrderRefundCaseResponse(
     string? AdminNotes,
     string? RefundReferenceCode,
     string? CustomerBankSnapshotJson = null,
-    string? TransferProofImageUrl = null);
+    string? TransferProofImageUrl = null,
+    decimal? SuggestedRefundAmount = null,
+    decimal? SuggestedRefundPercent = null,
+    string? SuggestionReason = null);
 
 /// <summary>Supplier settlement bank account details.</summary>
 public sealed record SupplierPayoutAccountResponse(
@@ -204,7 +210,15 @@ public sealed record OrderDeliveryDisputeResponse(
     DateTime CreatedAtUtc,
     DateTime? ResolvedAtUtc,
     string? RefundBankSnapshotJson = null,
-    decimal? OrderPaidAmount = null);
+    decimal? OrderPaidAmount = null,
+    string? SupplierRebuttalNotes = null,
+    IReadOnlyList<string>? SupplierRebuttalEvidenceUrls = null,
+    DateTime? SupplierRebuttalAtUtc = null,
+    DateTime? RebuttalDeadlineAtUtc = null)
+{
+    public DateTime? SupplierRebuttalAt => SupplierRebuttalAtUtc;
+    public DateTime? RebuttalDeadlineAt => RebuttalDeadlineAtUtc;
+}
 
 /// <summary>Compact Proof-of-Delivery photo and shipment snapshot embedded on an order.</summary>
 public sealed record OrderDeliverySnapshotResponse(
@@ -215,7 +229,11 @@ public sealed record OrderDeliverySnapshotResponse(
     DateOnly? ScheduledDate,
     DateOnly? ActualDeliveryDate,
     int ProofCount,
-    IReadOnlyList<OrderDeliveryProofPhotoResponse> Proofs);
+    IReadOnlyList<OrderDeliveryProofPhotoResponse> Proofs,
+    string? DriverName = null,
+    string? DriverPhone = null,
+    string? VehiclePlate = null,
+    DateTime? DriverClaimedAt = null);
 
 /// <summary>PoD photo entry embedded inside an order delivery snapshot.</summary>
 public sealed record OrderDeliveryProofPhotoResponse(

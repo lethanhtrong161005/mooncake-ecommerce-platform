@@ -133,7 +133,7 @@ public sealed class RfqWorkflowTests
         repository.Setup(r => r.IsActiveSupplierAsync(supplierProfileId, default)).ReturnsAsync(true);
         repository.Setup(r => r.GetRfqAsync(rfqId, default)).ReturnsAsync(new RequestForQuotation
         {
-            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(2)
+            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(35)
         });
         repository.Setup(r => r.GetInvitationAsync(rfqId, supplierProfileId, default)).ReturnsAsync(new RfqInvitation
         {
@@ -162,7 +162,7 @@ public sealed class RfqWorkflowTests
             Id = rfqId,
             CustomerId = customerId,
             Status = RfqStatus.Open,
-            BidDeadline = fixedNow.AddDays(3)
+            BidDeadline = fixedNow.AddDays(35)
         };
         var itemId = Guid.NewGuid();
 
@@ -252,7 +252,7 @@ public sealed class RfqWorkflowTests
         repository.Setup(r => r.IsActiveSupplierAsync(supplierProfileId, default)).ReturnsAsync(true);
         repository.Setup(r => r.GetRfqAsync(rfqId, default)).ReturnsAsync(new RequestForQuotation
         {
-            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(2)
+            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(35)
         });
         repository.Setup(r => r.GetInvitationAsync(rfqId, supplierProfileId, default)).ReturnsAsync((RfqInvitation?)null);
         repository.Setup(r => r.GetRfqItemsAsync(rfqId, default)).ReturnsAsync([
@@ -286,7 +286,7 @@ public sealed class RfqWorkflowTests
     }
 
     [Fact]
-    public async Task GetSupplierInvitationsAsync_IncludesOpenPublicRfqs_WithoutExposingCustomerTargetPrice()
+    public async Task GetSupplierInvitationsAsync_IncludesOpenPublicRfqs_WithCustomerTargetPrice()
     {
         var rfqId = Guid.NewGuid();
         var itemId = Guid.NewGuid();
@@ -327,7 +327,7 @@ public sealed class RfqWorkflowTests
         Assert.Equal(rfqId, response.Id);
         Assert.False(response.IsInvited);
         Assert.False(response.CanDecline);
-        Assert.Null(Assert.Single(response.Items).TargetPrice);
+        Assert.Equal(50000m, Assert.Single(response.Items).TargetPrice);
         Assert.NotNull(response.MyBid);
         Assert.Equal(125000m, Assert.Single(response.MyBid.Items).UnitPrice);
     }
@@ -343,7 +343,7 @@ public sealed class RfqWorkflowTests
         repository.Setup(r => r.IsActiveSupplierAsync(supplierProfileId, default)).ReturnsAsync(true);
         repository.Setup(r => r.GetRfqAsync(rfqId, default)).ReturnsAsync(new RequestForQuotation
         {
-            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(2)
+            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(35)
         });
         repository.Setup(r => r.GetInvitationAsync(rfqId, supplierProfileId, default)).ReturnsAsync((RfqInvitation?)null);
         repository.Setup(r => r.GetRfqItemsAsync(rfqId, default)).ReturnsAsync([
@@ -384,7 +384,7 @@ public sealed class RfqWorkflowTests
         repository.Setup(r => r.IsActiveSupplierAsync(supplierProfileId, default)).ReturnsAsync(true);
         repository.Setup(r => r.GetRfqAsync(rfqId, default)).ReturnsAsync(new RequestForQuotation
         {
-            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(2)
+            Id = rfqId, CustomerId = customerId, Status = RfqStatus.Open, BidDeadline = fixedNow.AddDays(35)
         });
         repository.Setup(r => r.GetInvitationAsync(rfqId, supplierProfileId, default)).ReturnsAsync((RfqInvitation?)null);
         repository.Setup(r => r.GetRfqItemsAsync(rfqId, default)).ReturnsAsync([

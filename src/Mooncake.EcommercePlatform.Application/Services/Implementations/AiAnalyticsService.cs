@@ -233,9 +233,25 @@ public class AiAnalyticsService : IAiAnalyticsService
         };
     }
 
-    public async Task<AiDashboardSummaryResponse> GetDashboardSummaryAsync(Guid? shopId, CancellationToken cancellationToken = default)
+    public async Task<AiDashboardSummaryResponse> GetDashboardSummaryAsync(Guid requestedBy, bool isAdmin, Guid? shopId, CancellationToken cancellationToken = default)
     {
-        return await _reportRepository.GetDashboardSummaryMetricsAsync(shopId, cancellationToken);
+        if (isAdmin)
+        {
+            return await _reportRepository.GetDashboardSummaryMetricsAsync(shopId, cancellationToken);
+        }
+
+        var supplierShopId = await _reportRepository.FindShopIdByUserIdAsync(requestedBy, cancellationToken);
+        if (!supplierShopId.HasValue)
+        {
+            throw new HttpException(404, "Shop not found for this supplier.", "SHOP_NOT_FOUND");
+        }
+
+        if (shopId.HasValue && shopId.Value != supplierShopId.Value)
+        {
+            throw new HttpException(403, "Access denied to other shop's metrics.", "ACCESS_DENIED");
+        }
+
+        return await _reportRepository.GetDashboardSummaryMetricsAsync(supplierShopId.Value, cancellationToken);
     }
 
     private static AiReportResultDto BuildFallbackReportResult(AiReportMetricsSummaryDto metrics)

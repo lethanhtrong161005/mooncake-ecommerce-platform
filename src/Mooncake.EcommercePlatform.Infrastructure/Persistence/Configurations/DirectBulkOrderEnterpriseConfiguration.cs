@@ -171,6 +171,7 @@ public static class DirectBulkOrderEnterpriseConfiguration
         deliveryDispute.Property(x => x.Description).HasMaxLength(2000);
         deliveryDispute.Property(x => x.Status).HasMaxLength(30);
         deliveryDispute.Property(x => x.ResolutionNotes).HasMaxLength(1000);
+        deliveryDispute.Property(x => x.SupplierRebuttalNotes).HasMaxLength(2000);
         deliveryDispute.HasOne<Order>().WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
         deliveryDispute.HasIndex(x => new { x.OrderId, x.Status }).HasDatabaseName("idx_order_delivery_disputes_order_status");
     }

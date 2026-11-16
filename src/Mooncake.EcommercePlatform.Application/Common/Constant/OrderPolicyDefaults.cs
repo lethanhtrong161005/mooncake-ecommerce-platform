@@ -19,6 +19,10 @@ public static class OrderPolicyDefaults
     public const int DefaultPodReviewDeadlineHours = 48;
     public const int CustomerPodReviewSlaHours = DefaultPodReviewDeadlineHours;
 
+    public const string DeliveryAutoConfirmHoursKey = "orders.delivery_auto_confirm_hours";
+    public const int DefaultDeliveryAutoConfirmHours = 72;
+    public const int DeliveryAutoConfirmHours = DefaultDeliveryAutoConfirmHours;
+
     public const string PackagingReservationBusinessDaysKey = "orders.packaging_reservation_business_days";
     public const int DefaultPackagingReservationBusinessDays = 5;
     public const int MockupReservationBusinessDays = DefaultPackagingReservationBusinessDays;
@@ -47,4 +51,10 @@ public static class OrderPolicyDefaults
     public const decimal MaxDepositPercent = 50m;
     public const decimal DefaultDepositPercent = 30m;
     public const decimal DefaultVatRatePercent = 8m;
+
+    /// <summary>Suggested refund percent when a Processing order with approved/in-production custom packaging is cancelled.</summary>
+    public const decimal InProductionCancelRefundPercent = 50m;
+
+    /// <summary>Suggested refund percent for every other cancellation.</summary>
+    public const decimal FullRefundPercent = 100m;
 }

@@ -70,6 +70,310 @@ public sealed class ContractManagementTests
         SignedBySupplierAt = fixedNow.AddDays(-2)
     };
 
+    private Contract CreatePendingSignatureContract() => new()
+    {
+        Id = contractId,
+        ContractNumber = "HD-2026-TEST01",
+        CustomerId = customerUserId,
+        SupplierId = supplierProfileId,
+        TotalValue = 50000000m,
+        Status = ContractStatus.PendingSignature,
+        DeliveryDeadline = DateOnly.FromDateTime(fixedNow.AddDays(15))
+    };
+
+    [Fact]
+    public async Task SignAsync_SupplierSignsFirst_RemainsPendingSignature()
+    {
+        var contract = CreatePendingSignatureContract();
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, supplierUserId, default)).ReturnsAsync(false);
+        authService.Setup(a => a.VerifyContractSignatureOtpAsync(supplierUserId, contractId, "123456", default))
+            .Returns(Task.CompletedTask);
+
+        var signed = new Contract
+        {
+            Id = contractId,
+            ContractNumber = contract.ContractNumber,
+            CustomerId = customerUserId,
+            SupplierId = supplierProfileId,
+            TotalValue = 50000000m,
+            Status = ContractStatus.PendingSignature,
+            SignedBySupplierAt = fixedNow
+        };
+        repository.Setup(r => r.SignAsync(contractId, supplierUserId, "127.0.0.1", "TestAgent", default))
+            .ReturnsAsync(signed);
+
+        var service = CreateService();
+        var result = await service.SignAsync(supplierUserId, contractId, "123456", true, "127.0.0.1", "TestAgent");
+
+        Assert.Equal(ContractStatus.PendingSignature, result.Status);
+        Assert.NotNull(result.SignedBySupplierAt);
+        Assert.Null(result.SignedByCustomerAt);
+        Assert.Null(result.SignedDocumentSha256);
+        Assert.True(result.IsSignedBySupplier);
+        Assert.False(result.IsSignedByCustomer);
+        authService.Verify(a => a.VerifyContractSignatureOtpAsync(supplierUserId, contractId, "123456", default), Times.Once);
+        repository.Verify(r => r.SignAsync(contractId, supplierUserId, "127.0.0.1", "TestAgent", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task SignAsync_CustomerSignsSecond_MovesToPendingDepositWithHash()
+    {
+        var contract = CreatePendingSignatureContract();
+        contract.SignedBySupplierAt = fixedNow.AddMinutes(-10);
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, customerUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, customerUserId, default)).ReturnsAsync(false);
+        authService.Setup(a => a.VerifyContractSignatureOtpAsync(customerUserId, contractId, "654321", default))
+            .Returns(Task.CompletedTask);
+
+        var fullySigned = new Contract
+        {
+            Id = contractId,
+            ContractNumber = contract.ContractNumber,
+            CustomerId = customerUserId,
+            SupplierId = supplierProfileId,
+            TotalValue = 50000000m,
+            Status = ContractStatus.PendingDeposit,
+            SignedBySupplierAt = contract.SignedBySupplierAt,
+            SignedByCustomerAt = fixedNow,
+            SignedDocumentSha256 = "6A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E6F7A8B"
+        };
+        repository.Setup(r => r.SignAsync(contractId, customerUserId, "192.168.1.1", "CustomerAgent", default))
+            .ReturnsAsync(fullySigned);
+
+        var service = CreateService();
+        var result = await service.SignAsync(customerUserId, contractId, "654321", true, "192.168.1.1", "CustomerAgent");
+
+        Assert.Equal(ContractStatus.PendingDeposit, result.Status);
+        Assert.NotNull(result.SignedBySupplierAt);
+        Assert.NotNull(result.SignedByCustomerAt);
+        Assert.Equal("6A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E6F7A8B", result.SignedDocumentSha256);
+        Assert.True(result.IsSignedBySupplier);
+        Assert.True(result.IsSignedByCustomer);
+        authService.Verify(a => a.VerifyContractSignatureOtpAsync(customerUserId, contractId, "654321", default), Times.Once);
+        repository.Verify(r => r.SignAsync(contractId, customerUserId, "192.168.1.1", "CustomerAgent", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task SignAsync_CustomerSignsFirst_RemainsPendingSignature()
+    {
+        var contract = CreatePendingSignatureContract();
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, customerUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, customerUserId, default)).ReturnsAsync(false);
+        authService.Setup(a => a.VerifyContractSignatureOtpAsync(customerUserId, contractId, "111222", default))
+            .Returns(Task.CompletedTask);
+
+        var signed = new Contract
+        {
+            Id = contractId,
+            ContractNumber = contract.ContractNumber,
+            CustomerId = customerUserId,
+            SupplierId = supplierProfileId,
+            TotalValue = 50000000m,
+            Status = ContractStatus.PendingSignature,
+            SignedByCustomerAt = fixedNow
+        };
+        repository.Setup(r => r.SignAsync(contractId, customerUserId, "192.168.1.1", "CustomerAgent", default))
+            .ReturnsAsync(signed);
+
+        var service = CreateService();
+        var result = await service.SignAsync(customerUserId, contractId, "111222", true, "192.168.1.1", "CustomerAgent");
+
+        Assert.Equal(ContractStatus.PendingSignature, result.Status);
+        Assert.NotNull(result.SignedByCustomerAt);
+        Assert.Null(result.SignedBySupplierAt);
+        Assert.Null(result.SignedDocumentSha256);
+        Assert.True(result.IsSignedByCustomer);
+        Assert.False(result.IsSignedBySupplier);
+        authService.Verify(a => a.VerifyContractSignatureOtpAsync(customerUserId, contractId, "111222", default), Times.Once);
+        repository.Verify(r => r.SignAsync(contractId, customerUserId, "192.168.1.1", "CustomerAgent", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task SignAsync_SupplierSignsSecond_MovesToPendingDepositWithHash()
+    {
+        var contract = CreatePendingSignatureContract();
+        contract.SignedByCustomerAt = fixedNow.AddMinutes(-20);
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, supplierUserId, default)).ReturnsAsync(false);
+        authService.Setup(a => a.VerifyContractSignatureOtpAsync(supplierUserId, contractId, "333444", default))
+            .Returns(Task.CompletedTask);
+
+        var fullySigned = new Contract
+        {
+            Id = contractId,
+            ContractNumber = contract.ContractNumber,
+            CustomerId = customerUserId,
+            SupplierId = supplierProfileId,
+            TotalValue = 50000000m,
+            Status = ContractStatus.PendingDeposit,
+            SignedByCustomerAt = contract.SignedByCustomerAt,
+            SignedBySupplierAt = fixedNow,
+            SignedDocumentSha256 = "EEDDCCBBAA99887766554433221100FF"
+        };
+        repository.Setup(r => r.SignAsync(contractId, supplierUserId, "127.0.0.1", "SupplierAgent", default))
+            .ReturnsAsync(fullySigned);
+
+        var service = CreateService();
+        var result = await service.SignAsync(supplierUserId, contractId, "333444", true, "127.0.0.1", "SupplierAgent");
+
+        Assert.Equal(ContractStatus.PendingDeposit, result.Status);
+        Assert.NotNull(result.SignedByCustomerAt);
+        Assert.NotNull(result.SignedBySupplierAt);
+        Assert.Equal("EEDDCCBBAA99887766554433221100FF", result.SignedDocumentSha256);
+        Assert.True(result.IsSignedByCustomer);
+        Assert.True(result.IsSignedBySupplier);
+        authService.Verify(a => a.VerifyContractSignatureOtpAsync(supplierUserId, contractId, "333444", default), Times.Once);
+        repository.Verify(r => r.SignAsync(contractId, supplierUserId, "127.0.0.1", "SupplierAgent", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task SignAsync_Throws400_WhenOtpCodeIsEmpty()
+    {
+        var contract = CreatePendingSignatureContract();
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, supplierUserId, default)).ReturnsAsync(false);
+
+        var service = CreateService();
+        var ex = await Assert.ThrowsAsync<HttpException>(() =>
+            service.SignAsync(supplierUserId, contractId, "", true, null, null));
+
+        Assert.Equal(400, ex.StatusCode);
+        authService.Verify(a => a.VerifyContractSignatureOtpAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(r => r.SignAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SignAsync_Throws_AndDoesNotSign_WhenOtpIsInvalid()
+    {
+        var contract = CreatePendingSignatureContract();
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, supplierUserId, default)).ReturnsAsync(false);
+        authService.Setup(a => a.VerifyContractSignatureOtpAsync(supplierUserId, contractId, "999999", default))
+            .ThrowsAsync(new HttpException(400, "Invalid signature verification code."));
+
+        var service = CreateService();
+        var ex = await Assert.ThrowsAsync<HttpException>(() =>
+            service.SignAsync(supplierUserId, contractId, "999999", true, null, null));
+
+        Assert.Equal(400, ex.StatusCode);
+        repository.Verify(r => r.SignAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SignAsync_ReturnsEarly_WhenAlreadySigned_WithoutCallingVerifyOtp()
+    {
+        var contract = CreatePendingSignatureContract();
+        contract.SignedBySupplierAt = fixedNow.AddDays(-1);
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+
+        var service = CreateService();
+        var result = await service.SignAsync(supplierUserId, contractId, "123456", true, null, null);
+
+        Assert.NotNull(result);
+        authService.Verify(a => a.VerifyContractSignatureOtpAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(r => r.SignAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SignAsync_ReturnsEarly_WhenCustomerAlreadySigned_WithoutCallingVerifyOtp()
+    {
+        var contract = CreatePendingSignatureContract();
+        contract.SignedByCustomerAt = fixedNow.AddDays(-1);
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, customerUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.HasSignedAsync(contract, customerUserId, default)).ReturnsAsync(true);
+
+        var service = CreateService();
+        var result = await service.SignAsync(customerUserId, contractId, "123456", true, null, null);
+
+        Assert.NotNull(result);
+        authService.Verify(a => a.VerifyContractSignatureOtpAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(r => r.SignAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SubmitMilestoneProgress_Throws409_WhenMilestoneAlreadyCompletedOnTime()
+    {
+        var contract = CreateActiveContract();
+        var milestone = new ContractMilestone
+        {
+            Id = milestoneId,
+            ContractId = contractId,
+            SequenceNumber = 2,
+            Name = "Production & Delivery M2",
+            Status = MilestoneStatus.CompletedOnTime,
+            DueDate = DateOnly.FromDateTime(fixedNow.AddDays(5))
+        };
+
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.GetMilestoneAsync(contractId, milestoneId, default)).ReturnsAsync(milestone);
+
+        var service = CreateService();
+        var request = new SubmitMilestoneProgressRequest
+        {
+            ProgressNotes = "Resubmitting completed milestone",
+            EvidenceUrls = ["https://example.com/batch2.jpg"]
+        };
+
+        var ex = await Assert.ThrowsAsync<HttpException>(() =>
+            service.SubmitMilestoneProgressAsync(supplierUserId, contractId, milestoneId, request));
+
+        Assert.Equal(409, ex.StatusCode);
+        repository.Verify(r => r.SubmitMilestoneProgressAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<string>?>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SubmitMilestoneProgress_Succeeds_WhenMilestoneIsFailed()
+    {
+        var contract = CreateActiveContract();
+        var milestone = new ContractMilestone
+        {
+            Id = milestoneId,
+            ContractId = contractId,
+            SequenceNumber = 2,
+            Name = "Production & Delivery M2",
+            Status = MilestoneStatus.Failed,
+            DueDate = DateOnly.FromDateTime(fixedNow.AddDays(5))
+        };
+
+        var updated = new ContractMilestone
+        {
+            Id = milestoneId,
+            ContractId = contractId,
+            SequenceNumber = 2,
+            Name = "Production & Delivery M2",
+            Status = MilestoneStatus.PendingReview,
+            ProgressNotes = "Corrected batch and resubmitted"
+        };
+
+        repository.Setup(r => r.GetContractAsync(contractId, default)).ReturnsAsync(contract);
+        repository.Setup(r => r.IsPartyAsync(contract, supplierUserId, default)).ReturnsAsync(true);
+        repository.Setup(r => r.GetMilestoneAsync(contractId, milestoneId, default)).ReturnsAsync(milestone);
+        repository.Setup(r => r.SubmitMilestoneProgressAsync(contractId, milestoneId, "Corrected batch and resubmitted", It.IsAny<IReadOnlyList<string>?>(), supplierUserId, default))
+            .ReturnsAsync(updated);
+
+        var service = CreateService();
+        var request = new SubmitMilestoneProgressRequest
+        {
+            ProgressNotes = "Corrected batch and resubmitted"
+        };
+
+        var result = await service.SubmitMilestoneProgressAsync(supplierUserId, contractId, milestoneId, request);
+
+        Assert.Equal(MilestoneStatus.PendingReview, result.Status);
+        repository.Verify(r => r.SubmitMilestoneProgressAsync(contractId, milestoneId, "Corrected batch and resubmitted", It.IsAny<IReadOnlyList<string>?>(), supplierUserId, default), Times.Once);
+    }
+
     [Fact]
     public async Task SubmitMilestoneProgress_ThrowsWhenCustomerTriesToSubmit()
     {

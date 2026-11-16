@@ -15,6 +15,8 @@ public interface IDeliveryService
 
     Task<IReadOnlyList<DeliveryResponse>> GetByContractAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ContractFulfillmentLineResponse>> GetContractFulfillmentAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<DeliveryResponse>> GetByOrderAsync(Guid userId, Guid orderId, CancellationToken cancellationToken = default);
 
     Task<DeliveryResponse> CreateAsync(Guid userId, CreateDeliveryRequest request, CancellationToken cancellationToken = default);
@@ -40,7 +42,16 @@ public interface IDeliveryService
 
     Task RevokeShareLinkAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default);
 
+    Task<AssignDriverResponse> AssignDriverAsync(Guid userId, Guid deliveryId,
+        AssignDeliveryDriverRequest request, CancellationToken cancellationToken = default);
+
+    Task RevokeDriverAssignmentAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default);
+
     Task<PublicDriverDeliveryResponse> GetPublicByTokenAsync(string token, CancellationToken cancellationToken = default);
+
+    Task<PublicDriverDeliveryResponse> GetPublicByShareCodeAsync(string shareCode, CancellationToken cancellationToken = default);
+
+    Task<PublicDriverDeliveryResponse> ClaimTripAsync(string token, ClaimDeliveryTripRequest request, CancellationToken cancellationToken = default);
 
     Task EnsurePublicTokenSubmittableAsync(string token, CancellationToken cancellationToken = default);
 

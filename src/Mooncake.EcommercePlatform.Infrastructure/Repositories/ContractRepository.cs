@@ -66,8 +66,57 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
     {
         var shipments = context.Deliveries.AsNoTracking()
             .Where(delivery => delivery.ContractId == contractId && !delivery.IsDeleted);
-        return await shipments.AnyAsync(cancellationToken)
-            && !await shipments.AnyAsync(delivery => delivery.Status != DeliveryStatus.Delivered, cancellationToken);
+
+        if (!await shipments.AnyAsync(cancellationToken))
+            return false;
+
+        if (await shipments.AnyAsync(delivery => delivery.Status != DeliveryStatus.Delivered, cancellationToken))
+            return false;
+
+        var contract = await context.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == contractId && !c.IsDeleted, cancellationToken);
+        if (contract == null)
+            return false;
+
+        IReadOnlyList<(Guid Id, int Quantity)> contractLines = [];
+        if (contract.RfqId.HasValue)
+        {
+            contractLines = await context.RfqItems.AsNoTracking()
+                .Where(ri => ri.RfqId == contract.RfqId.Value && !ri.IsDeleted)
+                .Select(ri => new ValueTuple<Guid, int>(ri.Id, ri.Quantity))
+                .ToListAsync(cancellationToken);
+        }
+        else if (contract.OrderId.HasValue)
+        {
+            contractLines = await context.OrderItems.AsNoTracking()
+                .Where(oi => oi.OrderId == contract.OrderId.Value && !oi.IsDeleted)
+                .Select(oi => new ValueTuple<Guid, int>(oi.Id, oi.Quantity))
+                .ToListAsync(cancellationToken);
+        }
+
+        if (contractLines.Count == 0)
+            return true;
+
+        var deliveredShipmentIds = await shipments
+            .Where(d => d.Status == DeliveryStatus.Delivered)
+            .Select(d => d.Id)
+            .ToListAsync(cancellationToken);
+
+        var deliveryItems = await context.DeliveryItems.AsNoTracking()
+            .Where(di => deliveredShipmentIds.Contains(di.DeliveryId) && !di.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        foreach (var (lineId, requiredQuantity) in contractLines)
+        {
+            var deliveredQty = deliveryItems
+                .Where(di => di.RfqItemId == lineId || di.OrderItemId == lineId)
+                .Sum(di => di.Quantity);
+
+            if (deliveredQty < requiredQuantity)
+                return false;
+        }
+
+        return true;
     }
 
     public Task<bool> HasCompletedFullContractPaymentAsync(Guid contractId, CancellationToken cancellationToken = default) =>
@@ -140,16 +189,28 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var contract = await context.Contracts.FromSqlInterpolated($"SELECT * FROM contracts WHERE id = {contractId} FOR UPDATE")
             .FirstOrDefaultAsync(cancellationToken);
-        if (contract is null || contract.IsDeleted || contract.Status != ContractStatus.PendingSignature) return null;
+        if (contract is null || contract.IsDeleted) return null;
         var isCustomer = contract.CustomerId == actorUserId;
         var isSupplier = !isCustomer && await context.SupplierProfiles.AsNoTracking().AnyAsync(profile => profile.Id == contract.SupplierId
             && profile.UserId == actorUserId && !profile.IsDeleted, cancellationToken);
-        if (!isSupplier) return null;
+        if (!isCustomer && !isSupplier) return null;
+        if (isCustomer && contract.SignedByCustomerAt.HasValue) return contract;
+        if (isSupplier && contract.SignedBySupplierAt.HasValue) return contract;
+        if (contract.Status != ContractStatus.PendingSignature) return null;
+
         var now = clock.UtcNow;
-        if (contract.SignedBySupplierAt.HasValue) return contract;
-        contract.SignedBySupplierAt = now;
-        contract.SupplierSignatureIp = ipAddress;
-        contract.SupplierSignatureUserAgent = userAgent;
+        if (isCustomer)
+        {
+            contract.SignedByCustomerAt = now;
+            contract.CustomerSignatureIp = ipAddress;
+            contract.CustomerSignatureUserAgent = userAgent;
+        }
+        else
+        {
+            contract.SignedBySupplierAt = now;
+            contract.SupplierSignatureIp = ipAddress;
+            contract.SupplierSignatureUserAgent = userAgent;
+        }
         contract.UpdatedAt = now;
         contract.UpdatedBy = actorUserId;
         context.WorkflowEvents.Add(new WorkflowEvent
@@ -159,13 +220,45 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             ActorUserId = actorUserId,
             Metadata = JsonSerializer.Serialize(new
             {
+                party = isCustomer ? "Customer" : "Supplier",
                 ipAddress = ipAddress ?? "unknown",
                 userAgent = userAgent ?? "unknown"
             })
         });
-        if (contract.SignedBySupplierAt.HasValue)
+
+        var supplierUserId = isSupplier ? actorUserId : await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
+        if (isCustomer)
         {
-            var snapshot = $"{contract.ContractNumber}\n{contract.Title}\n{contract.TotalValue:0.00}\n{contract.DeliveryDeadline:yyyy-MM-dd}\n{contract.TermsAndConditions}";
+            if (supplierUserId != Guid.Empty)
+            {
+                context.Notifications.Add(new Notification
+                {
+                    UserId = supplierUserId,
+                    Type = "contract.party_signed",
+                    Title = "Customer signed the contract",
+                    Content = $"Customer signed contract {contract.ContractNumber}.",
+                    ReferenceType = "contract",
+                    ReferenceId = contract.Id
+                });
+            }
+        }
+        else
+        {
+            context.Notifications.Add(new Notification
+            {
+                UserId = contract.CustomerId,
+                Type = "contract.party_signed",
+                Title = "Supplier signed the contract",
+                Content = $"Supplier signed contract {contract.ContractNumber}.",
+                ReferenceType = "contract",
+                ReferenceId = contract.Id
+            });
+        }
+
+        var bothSigned = contract.SignedByCustomerAt.HasValue && contract.SignedBySupplierAt.HasValue;
+        if (bothSigned)
+        {
+            var snapshot = $"{contract.ContractNumber}\n{contract.Title}\n{contract.TotalValue:0.00}\n{contract.DeliveryDeadline:yyyy-MM-dd}\n{contract.TermsAndConditions}\n{contract.SignedByCustomerAt:O}\n{contract.CustomerSignatureIp}\n{contract.SignedBySupplierAt:O}\n{contract.SupplierSignatureIp}";
             contract.SignedDocumentSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot)));
             var totalValue = contract.TotalValue ?? 0m;
             var depositRule = await context.ContractDepositRules.AsNoTracking()
@@ -228,13 +321,15 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                     Content = $"Pay {depositAmount:0.00} VND by {payment.ExpiresAt:O} to activate the contract. Use {payment.PaymentNumber} as the transfer reference.",
                     ReferenceType = "contract", ReferenceId = contract.Id
                 });
-                var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
-                context.Notifications.Add(new Notification
+                if (supplierUserId != Guid.Empty)
                 {
-                    UserId = supplierUserId, Type = "contract.deposit_required", Title = "Waiting for contract deposit",
-                    Content = "The customer must pay the mandatory deposit before the contract can become active.",
-                    ReferenceType = "contract", ReferenceId = contract.Id
-                });
+                    context.Notifications.Add(new Notification
+                    {
+                        UserId = supplierUserId, Type = "contract.deposit_required", Title = "Waiting for contract deposit",
+                        Content = "The customer must pay the mandatory deposit before the contract can become active.",
+                        ReferenceType = "contract", ReferenceId = contract.Id
+                    });
+                }
             }
             else
             {
@@ -253,12 +348,6 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
                 Metadata = JsonSerializer.Serialize(new { signedDocumentSha256 = contract.SignedDocumentSha256 })
             });
         }
-        context.Notifications.Add(new Notification
-        {
-            UserId = contract.CustomerId, Type = "contract.supplier_confirmed", Title = "Supplier confirmed the contract",
-            Content = $"Supplier confirmed contract {contract.ContractNumber}. Review the contract terms and pay the M1 deposit to activate it.",
-            ReferenceType = "contract", ReferenceId = contract.Id
-        });
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return contract;
@@ -332,6 +421,15 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             .FirstOrDefaultAsync(cancellationToken);
         if (milestone == null || milestone.ContractId != contractId || milestone.IsDeleted) return null;
 
+        if (milestone.Status != MilestoneStatus.Pending
+            && milestone.Status != MilestoneStatus.InProgress
+            && milestone.Status != MilestoneStatus.Failed
+            && milestone.Status != MilestoneStatus.Overdue)
+        {
+            throw new Mooncake.EcommercePlatform.Application.Common.Exceptions.HttpException(409, "Mốc này đã hoàn tất hoặc đang chờ khách duyệt nên chưa thể nộp lại tiến độ. Hãy chờ khách phản hồi.");
+        }
+
+        var fromStatus = milestone.Status;
         milestone.ProgressNotes = notes;
         milestone.EvidenceUrls = evidenceUrls != null && evidenceUrls.Count > 0 ? JsonSerializer.Serialize(evidenceUrls) : null;
         milestone.Status = MilestoneStatus.PendingReview;
@@ -344,7 +442,7 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
             context.WorkflowEvents.Add(new WorkflowEvent
             {
                 AggregateType = "ContractMilestone", AggregateId = milestone.Id, EventType = "MilestoneProgressSubmitted",
-                FromStatus = MilestoneStatus.InProgress.ToString(), ToStatus = MilestoneStatus.PendingReview.ToString(), ActorUserId = actorUserId,
+                FromStatus = fromStatus.ToString(), ToStatus = MilestoneStatus.PendingReview.ToString(), ActorUserId = actorUserId,
                 Metadata = JsonSerializer.Serialize(new { notes })
             });
             context.Notifications.Add(new Notification
@@ -831,4 +929,122 @@ public sealed class ContractRepository(ApplicationDbContext context, IDateTimePr
 
     public Task<ContractDispute?> GetDisputeByIdAsync(Guid disputeId, CancellationToken cancellationToken = default) =>
         context.ContractDisputes.AsNoTracking().FirstOrDefaultAsync(d => d.Id == disputeId && !d.IsDeleted, cancellationToken);
+
+    private const int VietnamUtcOffsetHours = 7;
+    private const int MilestoneDeadlineBatchSize = 200;
+    private static readonly int[] MilestoneReminderDays = [7, 3, 1];
+    private const string MilestoneAggregateType = "ContractMilestone";
+    private const string MilestoneMarkedOverdueEvent = "MilestoneMarkedOverdue";
+    private const string MilestoneOverdueNotificationType = "contract.milestone.overdue";
+    private const string MilestoneReferenceType = "contract_milestone";
+    private const string MilestoneOverdueReason = "Milestone due date passed without completion.";
+
+    /// <inheritdoc />
+    public async Task<int> ProcessMilestoneDeadlinesAsync(CancellationToken cancellationToken = default)
+    {
+        var today = DateOnly.FromDateTime(clock.UtcNow.AddHours(VietnamUtcOffsetHours));
+        var openStatuses = new[] { MilestoneStatus.Pending, MilestoneStatus.InProgress };
+        var processed = 0;
+
+        var overdueIds = await (from milestone in context.ContractMilestones.AsNoTracking()
+                                join contract in context.Contracts.AsNoTracking() on milestone.ContractId equals contract.Id
+                                where !milestone.IsDeleted && !contract.IsDeleted && contract.Status == ContractStatus.Active
+                                      && !milestone.IsDeposit && milestone.DueDate != null && milestone.DueDate < today
+                                      && openStatuses.Contains(milestone.Status)
+                                orderby milestone.DueDate
+                                select milestone.Id).Take(MilestoneDeadlineBatchSize).ToListAsync(cancellationToken);
+        foreach (var milestoneId in overdueIds)
+            if (await MarkMilestoneOverdueAsync(milestoneId, today, openStatuses, cancellationToken)) processed++;
+
+        foreach (var days in MilestoneReminderDays)
+        {
+            var dueDate = today.AddDays(days);
+            var reminderIds = await (from milestone in context.ContractMilestones.AsNoTracking()
+                                     join contract in context.Contracts.AsNoTracking() on milestone.ContractId equals contract.Id
+                                     where !milestone.IsDeleted && !contract.IsDeleted && contract.Status == ContractStatus.Active
+                                           && !milestone.IsDeposit && milestone.DueDate == dueDate
+                                           && openStatuses.Contains(milestone.Status)
+                                     select milestone.Id).Take(MilestoneDeadlineBatchSize).ToListAsync(cancellationToken);
+            foreach (var milestoneId in reminderIds)
+                if (await SendMilestoneReminderAsync(milestoneId, days, dueDate, openStatuses, cancellationToken)) processed++;
+        }
+
+        return processed;
+    }
+
+    private async Task<ContractMilestone?> LockMilestoneAsync(Guid milestoneId, CancellationToken cancellationToken) =>
+        context.Database.IsRelational()
+            ? await context.ContractMilestones.FromSqlInterpolated(
+                    $"SELECT * FROM contract_milestones WHERE id = {milestoneId} FOR UPDATE SKIP LOCKED")
+                .SingleOrDefaultAsync(cancellationToken)
+            : await context.ContractMilestones.SingleOrDefaultAsync(item => item.Id == milestoneId, cancellationToken);
+
+    private async Task<bool> MarkMilestoneOverdueAsync(Guid milestoneId, DateOnly today, MilestoneStatus[] openStatuses,
+        CancellationToken cancellationToken)
+    {
+        context.ChangeTracker.Clear();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var milestone = await LockMilestoneAsync(milestoneId, cancellationToken);
+        if (milestone is null || milestone.IsDeleted || milestone.IsDeposit || milestone.DueDate is null
+            || milestone.DueDate >= today || !openStatuses.Contains(milestone.Status)) return false;
+
+        var contract = await context.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == milestone.ContractId && !item.IsDeleted && item.Status == ContractStatus.Active, cancellationToken);
+        if (contract is null) return false;
+
+        var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
+        var fromStatus = milestone.Status;
+        milestone.Status = MilestoneStatus.Overdue;
+        milestone.UpdatedAt = clock.UtcNow;
+        context.WorkflowEvents.Add(new WorkflowEvent
+        {
+            AggregateType = MilestoneAggregateType, AggregateId = milestone.Id, EventType = MilestoneMarkedOverdueEvent,
+            FromStatus = fromStatus.ToString(), ToStatus = MilestoneStatus.Overdue.ToString(),
+            Reason = MilestoneOverdueReason,
+            Metadata = JsonSerializer.Serialize(new { contractId = contract.Id, dueDate = milestone.DueDate })
+        });
+        var content = $"Milestone \"{milestone.Name}\" of contract {contract.ContractNumber} passed its due date ({milestone.DueDate:yyyy-MM-dd}) and is now overdue.";
+        foreach (var userId in new[] { supplierUserId, contract.CustomerId })
+        {
+            context.Notifications.Add(new Notification
+            {
+                UserId = userId, Type = MilestoneOverdueNotificationType, Title = "Milestone overdue", Content = content,
+                ReferenceType = MilestoneReferenceType, ReferenceId = milestone.Id
+            });
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> SendMilestoneReminderAsync(Guid milestoneId, int days, DateOnly dueDate,
+        MilestoneStatus[] openStatuses, CancellationToken cancellationToken)
+    {
+        context.ChangeTracker.Clear();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var milestone = await LockMilestoneAsync(milestoneId, cancellationToken);
+        if (milestone is null || milestone.IsDeleted || milestone.IsDeposit || milestone.DueDate != dueDate
+            || !openStatuses.Contains(milestone.Status)) return false;
+
+        var contract = await context.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == milestone.ContractId && !item.IsDeleted && item.Status == ContractStatus.Active, cancellationToken);
+        if (contract is null) return false;
+
+        var type = $"contract.milestone.due_t{days}";
+        var alreadySent = await context.Notifications.AsNoTracking()
+            .AnyAsync(item => item.Type == type && item.ReferenceId == milestone.Id && !item.IsDeleted, cancellationToken);
+        if (alreadySent) return false;
+
+        var supplierUserId = await GetSupplierUserIdAsync(contract.SupplierId, cancellationToken);
+        context.Notifications.Add(new Notification
+        {
+            UserId = supplierUserId, Type = type, Title = "Milestone due soon",
+            Content = $"Milestone \"{milestone.Name}\" of contract {contract.ContractNumber} is due in {days} day(s) on {dueDate:yyyy-MM-dd}.",
+            ReferenceType = MilestoneReferenceType, ReferenceId = milestone.Id
+        });
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
 }

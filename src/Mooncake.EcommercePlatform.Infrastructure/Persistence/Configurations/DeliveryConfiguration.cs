@@ -59,6 +59,20 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
             builder.Property(e => e.UpdatedBy).HasColumnName("updated_by");
         builder.Property(e => e.DeliveryType).HasColumnName("delivery_type");
         builder.Property(e => e.Status).HasColumnName("status");
+        builder.Property(e => e.BatchNumber).HasColumnName("batch_number");
+        builder.Property(e => e.DriverName)
+            .HasMaxLength(255)
+            .HasColumnName("driver_name");
+        builder.Property(e => e.DriverPhone)
+            .HasMaxLength(20)
+            .HasColumnName("driver_phone");
+        builder.Property(e => e.VehiclePlate)
+            .HasMaxLength(50)
+            .HasColumnName("vehicle_plate");
+        builder.Property(e => e.ShareCode)
+            .HasMaxLength(16)
+            .HasColumnName("share_code");
+        builder.Property(e => e.DriverClaimedAt).HasColumnName("driver_claimed_at");
         builder.Property(e => e.ShareToken)
             .HasMaxLength(128)
             .HasColumnName("share_token");
@@ -69,5 +83,8 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         builder.HasIndex(e => e.ShareToken, "idx_del_share_token")
             .IsUnique()
             .HasFilter("(share_token IS NOT NULL)");
+        builder.HasIndex(e => e.ShareCode, "idx_del_share_code")
+            .IsUnique()
+            .HasFilter("(share_code IS NOT NULL)");
     }
 }

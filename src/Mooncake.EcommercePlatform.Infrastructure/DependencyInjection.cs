@@ -109,12 +109,14 @@ public static class DependencyInjection
         services.AddScoped<ICustomPackagingRepository, CustomPackagingRepository>();
         services.AddScoped<IPackagingTemplateRepository, PackagingTemplateRepository>();
         services.AddScoped<IPackagingTemplateImageProcessor, PackagingTemplateImageProcessor>();
+        services.AddScoped<ILogoImageSanitizer, LogoImageSanitizer>();
         services.AddScoped<IPlatformBootstrapRepository, PlatformBootstrapRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRfqRepository, RfqRepository>();
         services.AddScoped<IContractRepository, ContractRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IDeliveryRepository, DeliveryRepository>();
+        services.AddScoped<IDriverRepository, DriverRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<IAiConversationRepository, AiConversationRepository>();
         services.AddScoped<IAiAnalyticsReportRepository, AiAnalyticsReportRepository>();

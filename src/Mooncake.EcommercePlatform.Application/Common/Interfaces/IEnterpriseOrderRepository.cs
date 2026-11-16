@@ -76,6 +76,10 @@ public interface IEnterpriseOrderRepository
     Task<OrderDeliveryDisputeResponse> ResolveDeliveryDisputeAsync(Guid disputeId, Guid adminUserId,
         ResolveOrderDeliveryDisputeRequest request, CancellationToken cancellationToken = default);
 
+    Task<OrderDeliveryDisputeResponse> SubmitDeliveryDisputeRebuttalAsync(
+        Guid supplierUserId, Guid orderId, Guid disputeId, SubmitSupplierDeliveryDisputeRebuttalRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<OrderRefundCaseResponse> CreateRefundCaseAsync(Order order, Guid customerId,
         CreateOrderRefundRequest request, CancellationToken cancellationToken = default);
 
@@ -105,5 +109,7 @@ public interface IEnterpriseOrderRepository
         CancellationToken cancellationToken = default);
 
     Task<int> ExpireOverdueOrdersAsync(CancellationToken cancellationToken = default);
+
+    Task<int> AutoConfirmDeliveredOrdersAsync(CancellationToken cancellationToken = default);
 }
 

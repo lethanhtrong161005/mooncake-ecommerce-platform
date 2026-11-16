@@ -8,6 +8,7 @@ using Mooncake.EcommercePlatform.Application.Common.DTOs;
 using Mooncake.EcommercePlatform.Application.Common.Exceptions;
 using Mooncake.EcommercePlatform.Application.Common.Helpers;
 using Mooncake.EcommercePlatform.Application.Common.Interfaces;
+using Mooncake.EcommercePlatform.Application.Common.Utils;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Requests;
 using Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
 using Mooncake.EcommercePlatform.Application.Services.Interfaces;
@@ -19,7 +20,8 @@ public sealed class DeliveryService(
     IDeliveryRepository repository,
     IDateTimeProvider clock,
     IContractRepository? contractRepository = null,
-    INotificationService? notificationService = null) : IDeliveryService
+    INotificationService? notificationService = null,
+    ILogoImageSanitizer? imageSanitizer = null) : IDeliveryService
 {
     public async Task<PagedResult<DeliveryResponse>> GetMinePageAsync(Guid userId, bool isSupplier,
         DeliveryPageQueryRequest query, CancellationToken cancellationToken = default)
@@ -28,13 +30,24 @@ public sealed class DeliveryService(
         PagedQueryHelper.ValidateSort(query.Sort, "createdAtDesc", "createdAtAsc", "scheduledDateAsc", "scheduledDateDesc");
         if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value)
             || query.ScheduledFrom > query.ScheduledTo)
-            throw new HttpException(400, "Invalid delivery filter.", OrderErrorCodes.ValidationError);
+            throw new HttpException(400, "Bộ lọc chuyến giao chưa hợp lệ. Hãy chọn lại trạng thái cần xem.", OrderErrorCodes.ValidationError);
         var page = await repository.GetDeliveriesPageAsync(userId, isSupplier, query, cancellationToken);
         var items = await MapDeliveryListAsync(page.Items, cancellationToken);
         return new PagedResult<DeliveryResponse>(items, page.Page, page.PageSize, page.TotalCount);
     }
 
     private static readonly Regex PhoneRegex = new(@"^(0|\+84)(3|5|7|8|9)[0-9]{8}$", RegexOptions.Compiled);
+    private const int MaxSignaturePayloadBytes = 500 * 1024;
+    private const string DataImagePrefix = "data:image/";
+    private const string Base64Marker = ";base64,";
+    private const string InvalidCloudinaryPhotoUrlMessage = "Ảnh bằng chứng cần được tải lên qua hệ thống. Hãy chọn ảnh từ thiết bị và tải lên lại.";
+    private const int MaxProofPhotos = 5;
+    private const int MaxProofPhotoBytes = 2 * 1024 * 1024;
+    private const string InvalidProofPhotoMessage = "Ảnh bằng chứng chưa hợp lệ. Hãy dùng ảnh JPEG, PNG hoặc WEBP dung lượng tối đa 2 MB.";
+    private const string TooManyProofPhotosMessage = "Mỗi lần chỉ gửi tối đa 5 ảnh bằng chứng. Hãy bỏ bớt ảnh rồi gửi lại.";
+    private static readonly string[] AllowedProofPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+    private const string InvalidSignatureDataUrlMessage = "Chữ ký chưa hợp lệ. Hãy ký lại và gửi lại.";
+    private const string SignatureTooLargeMessage = "Ảnh chữ ký vượt quá 500 KB. Hãy ký lại với nét vẽ gọn hơn rồi gửi lại.";
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetMineAsync(Guid userId, bool isSupplier, CancellationToken cancellationToken = default)
     {
@@ -54,7 +67,12 @@ public sealed class DeliveryService(
         var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
         var contexts = await repository.GetPartyContextsAsync([delivery], cancellationToken);
         var context = contexts?.GetValueOrDefault(delivery.Id);
-        return DeliveryResponseHelper.ToDetailResponse(delivery, proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray(), context);
+        var items = ((await repository.GetDeliveryItemsAsync(deliveryId, cancellationToken)) ?? [])
+            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
+        var totalBatches = delivery.ContractId.HasValue
+            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
+            : (int?)null;
+        return DeliveryResponseHelper.ToDetailResponse(delivery, proofs.Select(DeliveryResponseHelper.ToProofResponse).ToArray(), context, items, totalBatches);
     }
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetByContractAsync(Guid userId, Guid contractId, CancellationToken cancellationToken = default)
@@ -64,6 +82,15 @@ public sealed class DeliveryService(
 
         var deliveries = await repository.GetByContractIdAsync(contractId, cancellationToken);
         return await MapDeliveryListAsync(deliveries, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ContractFulfillmentLineResponse>> GetContractFulfillmentAsync(
+        Guid userId, Guid contractId, CancellationToken cancellationToken = default)
+    {
+        if (!await repository.CanAccessContractAsync(contractId, userId, cancellationToken))
+            throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
+
+        return await repository.GetContractFulfillmentAsync(contractId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<DeliveryResponse>> GetByOrderAsync(Guid userId, Guid orderId, CancellationToken cancellationToken = default)
@@ -95,6 +122,9 @@ public sealed class DeliveryService(
         if (string.IsNullOrWhiteSpace(request.RecipientPhone) || !PhoneRegex.IsMatch(request.RecipientPhone.Trim()))
             throw new HttpException(400, DeliveryMessages.RecipientPhoneInvalid, OrderErrorCodes.ValidationError);
 
+        int? batchNumber = null;
+        IReadOnlyList<ContractLineInfo> contractLines = [];
+
         if (request.ContractId.HasValue)
         {
             if (!request.ScheduledDate.HasValue)
@@ -111,6 +141,48 @@ public sealed class DeliveryService(
 
             if (!await repository.CanManageContractAsync(request.ContractId.Value, userId, cancellationToken))
                 throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
+
+            contractLines = (await repository.GetContractLinesAsync(request.ContractId.Value, cancellationToken)) ?? [];
+            if (contractLines.Count > 0 && (request.Items == null || request.Items.Count == 0))
+                throw new HttpException(400, "Chuyến giao theo hợp đồng cần có ít nhất một sản phẩm. Hãy thêm sản phẩm và số lượng giao.", OrderErrorCodes.ValidationError);
+
+            if (request.Items != null && request.Items.Count == 0)
+                throw new HttpException(400, "Chuyến giao theo hợp đồng cần có ít nhất một sản phẩm. Hãy thêm sản phẩm và số lượng giao.", OrderErrorCodes.ValidationError);
+
+            if (request.Items is { Count: > 0 })
+            {
+                foreach (var item in request.Items)
+                {
+                    var lineId = item.RfqItemId ?? item.ItemId ?? Guid.Empty;
+                    if (lineId == Guid.Empty)
+                        throw new HttpException(400, "Mỗi dòng giao hàng cần chọn một sản phẩm thuộc hợp đồng. Hãy chọn sản phẩm cho dòng còn trống.", OrderErrorCodes.ValidationError);
+
+                    if (item.Quantity <= 0)
+                        throw new HttpException(400, "Số lượng giao phải lớn hơn 0. Hãy nhập lại số lượng cho từng sản phẩm.", OrderErrorCodes.ValidationError);
+
+                    if (contractLines.Count > 0 && !contractLines.Any(l => l.LineId == lineId))
+                        throw new HttpException(400, $"Sản phẩm này không thuộc hợp đồng đang chọn (mã dòng {lineId}). Hãy tải lại hợp đồng và chọn lại sản phẩm.", OrderErrorCodes.ValidationError);
+                }
+
+                var fulfillment = (await repository.GetContractFulfillmentAsync(request.ContractId.Value, cancellationToken)) ?? [];
+                var fulfillmentMap = fulfillment.ToDictionary(f => f.LineId);
+
+                foreach (var item in request.Items)
+                {
+                    var lineId = item.RfqItemId ?? item.ItemId ?? Guid.Empty;
+                    if (fulfillmentMap.TryGetValue(lineId, out var fLine))
+                    {
+                        if (item.Quantity > fLine.RemainingQuantity)
+                        {
+                            throw new HttpException(409,
+                                $"Số lượng đợt này ({item.Quantity}) vượt số còn lại của '{fLine.ProductName}' ({fLine.RemainingQuantity}). Hãy nhập tối đa {fLine.RemainingQuantity}.",
+                                OrderErrorCodes.StateConflict);
+                        }
+                    }
+                }
+            }
+
+            batchNumber = await repository.GetNextBatchNumberForContractAsync(request.ContractId.Value, cancellationToken);
         }
         else if (request.OrderId.HasValue)
         {
@@ -123,6 +195,8 @@ public sealed class DeliveryService(
             var existingOrderDeliveries = await repository.GetByOrderIdAsync(request.OrderId.Value, cancellationToken) ?? [];
             if (existingOrderDeliveries.Any(d => d.Status is not (DeliveryStatus.Failed or DeliveryStatus.Returned)))
                 throw new HttpException(409, DeliveryMessages.SingleDeliveryLimitExceeded, OrderErrorCodes.SingleDeliveryLimit);
+
+            batchNumber = 1;
         }
 
         var deliveryNumber = $"DEL-{clock.UtcNow:yyyyMM}-{Random.Shared.Next(1000, 9999)}";
@@ -141,11 +215,38 @@ public sealed class DeliveryService(
             RecipientPhone = request.RecipientPhone.Trim(),
             TrackingCode = string.IsNullOrWhiteSpace(request.TrackingCode) ? null : request.TrackingCode.Trim(),
             Notes = request.Notes?.Trim(),
+            BatchNumber = batchNumber,
             CreatedBy = userId,
             CreatedAt = clock.UtcNow
         };
 
         var created = await repository.CreateAsync(delivery, cancellationToken);
+        if (created.ContractId.HasValue && request.Items is { Count: > 0 })
+        {
+            var deliveryItems = new List<DeliveryItem>();
+            foreach (var item in request.Items)
+            {
+                var lineId = item.RfqItemId ?? item.ItemId ?? Guid.Empty;
+                var line = contractLines.FirstOrDefault(l => l.LineId == lineId);
+                deliveryItems.Add(new DeliveryItem
+                {
+                    Id = Guid.NewGuid(),
+                    DeliveryId = created.Id,
+                    RfqItemId = line?.LineId ?? lineId,
+                    ProductName = line?.ProductName ?? string.Empty,
+                    Unit = line?.Unit,
+                    Quantity = item.Quantity,
+                    CreatedAt = clock.UtcNow,
+                    CreatedBy = userId
+                });
+            }
+            await repository.CreateDeliveryItemsAsync(deliveryItems, cancellationToken);
+        }
+        else if (created.OrderId.HasValue)
+        {
+            await repository.SnapshotOrderItemsAsync(created.Id, created.OrderId.Value, userId, cancellationToken);
+        }
+
         if (created.ContractId.HasValue && contractRepository is not null && notificationService is not null)
         {
             var contract = await contractRepository.GetContractAsync(created.ContractId.Value, cancellationToken);
@@ -163,7 +264,7 @@ public sealed class DeliveryService(
                     cancellationToken);
             }
         }
-        return DeliveryResponseHelper.ToResponse(created, 0);
+        return await BuildDeliveryResponseAsync(created, 0, cancellationToken);
     }
 
     public async Task<DeliveryResponse> UpdateStatusAsync(Guid userId, Guid deliveryId, UpdateDeliveryStatusRequest request, CancellationToken cancellationToken = default)
@@ -176,7 +277,7 @@ public sealed class DeliveryService(
             throw new HttpException(403, DeliveryMessages.ManageDenied, OrderErrorCodes.TenantForbidden);
 
         if (delivery.OrderId.HasValue && request.Status == DeliveryStatus.Delivered)
-            throw new HttpException(409, "Direct order deliveries can only be marked delivered after customer receipt confirmation.", OrderErrorCodes.StateConflict);
+            throw new HttpException(409, "Chuyến giao của đơn đặt trực tiếp chỉ chuyển sang Đã giao sau khi khách xác nhận đã nhận hàng. Hãy chờ khách xác nhận.", OrderErrorCodes.StateConflict);
 
         ValidateStateTransition(delivery.Status, request.Status);
 
@@ -200,7 +301,7 @@ public sealed class DeliveryService(
 
         var updated = await repository.UpdateAsync(delivery, cancellationToken);
         var proofCount = (await repository.GetProofsAsync(deliveryId, cancellationToken)).Count;
-        return DeliveryResponseHelper.ToResponse(updated, proofCount);
+        return await BuildDeliveryResponseAsync(updated, proofCount, cancellationToken);
     }
 
     public async Task<DeliveryResponse> ConfirmReceiptAsync(Guid customerId, Guid deliveryId, CancellationToken cancellationToken = default)
@@ -212,7 +313,7 @@ public sealed class DeliveryService(
             throw new HttpException(403, DeliveryMessages.AccessDenied, OrderErrorCodes.TenantForbidden);
 
         if (delivery.Status != DeliveryStatus.AwaitingCustomerConfirmation)
-            throw new HttpException(409, "The shipment must have delivery proof submitted before receipt can be confirmed.", OrderErrorCodes.StateConflict);
+            throw new HttpException(409, "Chuyến giao chưa có bằng chứng giao hàng nên chưa thể xác nhận đã nhận. Hãy chờ xưởng gửi ảnh bàn giao.", OrderErrorCodes.StateConflict);
 
         var proofs = await repository.GetProofsAsync(deliveryId, cancellationToken);
         if (!proofs.Any(proof => proof.ProofType == ProofType.Delivery))
@@ -237,7 +338,7 @@ public sealed class DeliveryService(
                 "high",
                 cancellationToken);
         }
-        return DeliveryResponseHelper.ToResponse(updated, proofs.Count);
+        return await BuildDeliveryResponseAsync(updated, proofs.Count, cancellationToken);
     }
 
     public async Task<DeliveryResponse> UpdateCarrierInfoAsync(Guid userId, Guid deliveryId, UpdateCarrierInfoRequest request, CancellationToken cancellationToken = default)
@@ -276,7 +377,7 @@ public sealed class DeliveryService(
 
         var updated = await repository.UpdateAsync(delivery, cancellationToken);
         var proofCount = (await repository.GetProofsAsync(deliveryId, cancellationToken)).Count;
-        return DeliveryResponseHelper.ToResponse(updated, proofCount);
+        return await BuildDeliveryResponseAsync(updated, proofCount, cancellationToken);
     }
 
     public Task<DeliveryProofResponse> SubmitProofAsync(Guid userId, Guid deliveryId, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default) =>
@@ -317,12 +418,27 @@ public sealed class DeliveryService(
             && delivery.ShareTokenExpiresAtUtc.Value > clock.UtcNow;
 
         if (hasActiveLink && !request.Reshare)
+        {
+            if (string.IsNullOrWhiteSpace(delivery.ShareCode))
+            {
+                delivery.ShareCode = await GenerateUniqueShareCodeAsync(cancellationToken);
+                delivery.UpdatedAt = clock.UtcNow;
+                delivery = await repository.UpdateAsync(delivery, cancellationToken);
+            }
+
             return DeliveryResponseHelper.ToShareLinkResponse(delivery, clock.UtcNow);
+        }
 
         delivery.ShareToken = GenerateShareToken();
+        delivery.ShareCode = await GenerateUniqueShareCodeAsync(cancellationToken);
         delivery.ShareTokenCreatedAtUtc = clock.UtcNow;
         delivery.ShareTokenExpiresAtUtc = clock.UtcNow.AddHours(request.ExpiresInHours);
         delivery.ShareTokenRevokedAtUtc = null;
+        if (request.Reshare)
+        {
+            delivery.DriverClaimedAt = null;
+        }
+
         delivery.UpdatedBy = userId;
         delivery.UpdatedAt = clock.UtcNow;
 
@@ -342,12 +458,199 @@ public sealed class DeliveryService(
         await repository.UpdateAsync(delivery, cancellationToken);
     }
 
+    public async Task<AssignDriverResponse> AssignDriverAsync(
+        Guid userId, Guid deliveryId, AssignDeliveryDriverRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverName))
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneRequired, OrderErrorCodes.ValidationError);
+
+        var normalizedPhone = PhoneNumberUtils.Normalize(request.DriverPhone);
+        if (!PhoneNumberUtils.IsValid(normalizedPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneInvalid, OrderErrorCodes.ValidationError);
+
+        var delivery = await GetManagedDeliveryAsync(userId, deliveryId, cancellationToken);
+        if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
+            throw new HttpException(409, DeliveryMessages.DeliveryCannotAcceptShareLink, OrderErrorCodes.StateConflict);
+
+        delivery.DriverName = request.DriverName.Trim();
+        delivery.DriverPhone = normalizedPhone;
+        delivery.VehiclePlate = string.IsNullOrWhiteSpace(request.VehiclePlate) ? null : request.VehiclePlate.Trim();
+        delivery.DriverClaimedAt = null;
+
+        delivery.ShareToken = GenerateShareToken();
+        delivery.ShareCode = await GenerateUniqueShareCodeAsync(cancellationToken);
+        delivery.ShareTokenCreatedAtUtc = clock.UtcNow;
+        delivery.ShareTokenExpiresAtUtc = clock.UtcNow.AddHours(24);
+        delivery.ShareTokenRevokedAtUtc = null;
+        delivery.UpdatedBy = userId;
+        delivery.UpdatedAt = clock.UtcNow;
+
+        var updated = await repository.UpdateAsync(delivery, cancellationToken);
+
+        if (notificationService is not null)
+        {
+            var customerUserId = await repository.GetCustomerUserIdForDeliveryAsync(delivery.Id, cancellationToken);
+            if (customerUserId.HasValue)
+            {
+                var plateText = string.IsNullOrWhiteSpace(updated.VehiclePlate) ? string.Empty : $" - Biển số: {updated.VehiclePlate}";
+                await notificationService.DispatchNotificationAsync(
+                    customerUserId.Value,
+                    "delivery.driver_assigned",
+                    "Chuyến giao hàng đã được gán tài xế",
+                    $"Chuyến giao {updated.DeliveryNumber} đã được gán cho tài xế {updated.DriverName} - SĐT: {updated.DriverPhone}{plateText}.",
+                    "Delivery",
+                    updated.Id,
+                    ct: cancellationToken);
+            }
+        }
+
+        return new AssignDriverResponse
+        {
+            Token = updated.ShareToken!,
+            ShareCode = updated.ShareCode!,
+            ExpiresAt = updated.ShareTokenExpiresAtUtc!.Value,
+            Driver = new DriverInfoDto
+            {
+                DriverName = updated.DriverName,
+                DriverPhone = updated.DriverPhone,
+                VehiclePlate = updated.VehiclePlate,
+                DriverClaimedAt = updated.DriverClaimedAt
+            }
+        };
+    }
+
+    public async Task RevokeDriverAssignmentAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken = default)
+    {
+        var delivery = await GetManagedDeliveryAsync(userId, deliveryId, cancellationToken);
+        delivery.DriverName = null;
+        delivery.DriverPhone = null;
+        delivery.VehiclePlate = null;
+        delivery.DriverClaimedAt = null;
+        delivery.ShareTokenRevokedAtUtc = clock.UtcNow;
+        delivery.UpdatedBy = userId;
+        delivery.UpdatedAt = clock.UtcNow;
+
+        await repository.UpdateAsync(delivery, cancellationToken);
+    }
+
     public async Task<PublicDriverDeliveryResponse> GetPublicByTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
-        var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
-        var referenceCode = await repository.GetReferenceCodeAsync(delivery, cancellationToken);
-        return DeliveryResponseHelper.ToPublicDriverResponse(delivery, proofs.Count, referenceCode);
+        return await BuildPublicDriverResponseAsync(delivery, cancellationToken);
+    }
+
+    public async Task<PublicDriverDeliveryResponse> GetPublicByShareCodeAsync(string shareCode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(shareCode))
+            throw new HttpException(404, DeliveryMessages.ShareLinkNotFound);
+
+        var delivery = await repository.GetByShareCodeAsync(shareCode.Trim(), cancellationToken)
+            ?? throw new HttpException(404, DeliveryMessages.ShareLinkNotFound);
+
+        if (delivery.ShareTokenRevokedAtUtc.HasValue)
+            throw new HttpException(404, DeliveryMessages.ShareLinkRevokedError, OrderErrorCodes.StateConflict);
+
+        if (!delivery.ShareTokenExpiresAtUtc.HasValue || delivery.ShareTokenExpiresAtUtc.Value <= clock.UtcNow)
+            throw new HttpException(404, DeliveryMessages.ShareLinkExpiredError, OrderErrorCodes.StateConflict);
+
+        return await BuildPublicDriverResponseAsync(delivery, cancellationToken);
+    }
+
+    public async Task<PublicDriverDeliveryResponse> ClaimTripAsync(
+        string token, ClaimDeliveryTripRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverName))
+            throw new HttpException(400, DeliveryMessages.DriverNameRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.DriverPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneRequired, OrderErrorCodes.ValidationError);
+
+        if (string.IsNullOrWhiteSpace(request.VehiclePlate))
+            throw new HttpException(400, DeliveryMessages.VehiclePlateRequired, OrderErrorCodes.ValidationError);
+
+        var normalizedPhone = PhoneNumberUtils.Normalize(request.DriverPhone);
+        if (!PhoneNumberUtils.IsValid(normalizedPhone))
+            throw new HttpException(400, DeliveryMessages.DriverPhoneInvalid, OrderErrorCodes.ValidationError);
+
+        var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
+            throw new HttpException(409, DeliveryMessages.DeliveryAlreadyCompleted, OrderErrorCodes.StateConflict);
+
+        if (delivery.DriverClaimedAt.HasValue)
+        {
+            var existingNormalized = PhoneNumberUtils.Normalize(delivery.DriverPhone ?? string.Empty);
+            if (!string.Equals(existingNormalized, normalizedPhone, StringComparison.Ordinal))
+            {
+                throw new HttpException(409, DeliveryMessages.DriverAlreadyClaimedConflict, OrderErrorCodes.StateConflict);
+            }
+
+            delivery.DriverName = request.DriverName.Trim();
+            delivery.VehiclePlate = request.VehiclePlate.Trim();
+            delivery.UpdatedAt = clock.UtcNow;
+            var updatedSame = await repository.UpdateAsync(delivery, cancellationToken);
+            return await BuildPublicDriverResponseAsync(updatedSame, cancellationToken);
+        }
+
+        delivery.DriverName = request.DriverName.Trim();
+        delivery.DriverPhone = normalizedPhone;
+        delivery.VehiclePlate = request.VehiclePlate.Trim();
+        delivery.DriverClaimedAt = clock.UtcNow;
+        delivery.UpdatedAt = clock.UtcNow;
+
+        var updated = await repository.UpdateAsync(delivery, cancellationToken);
+
+        await repository.AddWorkflowEventAsync(new WorkflowEvent
+        {
+            AggregateType = "Delivery",
+            AggregateId = updated.Id,
+            EventType = "DriverClaimed",
+            FromStatus = updated.Status.ToString(),
+            ToStatus = updated.Status.ToString(),
+            ActorUserId = updated.UpdatedBy ?? updated.CreatedBy,
+            Reason = $"Tài xế {updated.DriverName} – {updated.DriverPhone} – {updated.VehiclePlate} đã nhận chuyến"
+        }, cancellationToken);
+
+        if (notificationService is not null)
+        {
+            var supplierUserId = await repository.GetSupplierUserIdForDeliveryAsync(updated.Id, cancellationToken);
+            var customerUserId = await repository.GetCustomerUserIdForDeliveryAsync(updated.Id, cancellationToken);
+            var claimMessage = $"Tài xế {updated.DriverName} – {updated.DriverPhone} – {updated.VehiclePlate} đã nhận chuyến";
+
+            if (supplierUserId.HasValue)
+            {
+                await notificationService.DispatchNotificationAsync(
+                    supplierUserId.Value,
+                    "delivery.driver_claimed",
+                    "Tài xế đã nhận chuyến giao hàng",
+                    claimMessage,
+                    "Delivery",
+                    updated.Id,
+                    ct: cancellationToken);
+            }
+
+            if (customerUserId.HasValue)
+            {
+                await notificationService.DispatchNotificationAsync(
+                    customerUserId.Value,
+                    "delivery.driver_claimed",
+                    "Tài xế đã nhận chuyến giao hàng",
+                    claimMessage,
+                    "Delivery",
+                    updated.Id,
+                    ct: cancellationToken);
+            }
+        }
+
+        return await BuildPublicDriverResponseAsync(updated, cancellationToken);
     }
 
     public async Task EnsurePublicTokenSubmittableAsync(string token, CancellationToken cancellationToken = default)
@@ -355,14 +658,169 @@ public sealed class DeliveryService(
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
         if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Returned)
             throw new HttpException(409, DeliveryMessages.DeliveryAlreadyCompleted, OrderErrorCodes.StateConflict);
+
+        if (!delivery.DriverClaimedAt.HasValue)
+            throw new HttpException(409, DeliveryMessages.MustClaimTripFirst, OrderErrorCodes.StateConflict);
     }
 
     public async Task<DeliveryProofResponse> SubmitPublicProofAsync(string token, CreateDeliveryProofRequest request, CancellationToken cancellationToken = default)
     {
         var delivery = await ValidatePublicTokenAsync(token, cancellationToken);
+        if (!delivery.DriverClaimedAt.HasValue)
+            throw new HttpException(409, DeliveryMessages.MustClaimTripFirst, OrderErrorCodes.StateConflict);
+
+        ValidatePublicProofRequest(request);
         var actorUserId = delivery.UpdatedBy ?? delivery.CreatedBy;
         return await CreateProofsAndAdvanceStatusAsync(delivery, actorUserId, request, cancellationToken);
     }
+
+    private void ValidatePublicProofRequest(CreateDeliveryProofRequest request)
+    {
+        if (request is null)
+            throw new HttpException(400, DeliveryMessages.PhotoRequired, OrderErrorCodes.ValidationError);
+
+        var photoUrls = new List<string>();
+        if (request.PhotoUrls is not null)
+            photoUrls.AddRange(request.PhotoUrls);
+        if (!string.IsNullOrWhiteSpace(request.PhotoUrl))
+            photoUrls.Add(request.PhotoUrl);
+
+        if (photoUrls.Count == 0)
+            throw new HttpException(400, DeliveryMessages.PhotoRequired, OrderErrorCodes.ValidationError);
+
+        if (photoUrls.Count > MaxProofPhotos)
+            throw new HttpException(400, TooManyProofPhotosMessage, OrderErrorCodes.ValidationError);
+
+        foreach (var url in photoUrls)
+        {
+            if (url.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                ValidateProofPhotoDataUrl(url.Trim());
+            else if (!IsValidCloudinaryUrl(url))
+                throw new HttpException(400, InvalidCloudinaryPhotoUrlMessage, OrderErrorCodes.ValidationError);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.PhotoBase64))
+            throw new HttpException(400, InvalidCloudinaryPhotoUrlMessage, OrderErrorCodes.ValidationError);
+
+        ValidatePublicSignature(request);
+    }
+
+    private void ValidateProofPhotoDataUrl(string dataUrl)
+    {
+        const string prefix = "data:";
+        var markerIndex = dataUrl.IndexOf(Base64Marker, StringComparison.OrdinalIgnoreCase);
+        if (imageSanitizer is null || markerIndex < prefix.Length)
+            throw new HttpException(400, InvalidProofPhotoMessage, OrderErrorCodes.ValidationError);
+
+        var mimeType = dataUrl[prefix.Length..markerIndex].Trim().ToLowerInvariant();
+        if (!AllowedProofPhotoMimeTypes.Contains(mimeType))
+            throw new HttpException(400, InvalidProofPhotoMessage, OrderErrorCodes.ValidationError);
+
+        var base64Part = dataUrl[(markerIndex + Base64Marker.Length)..].Trim();
+        if (string.IsNullOrEmpty(base64Part) || base64Part.Length * 3L / 4 > MaxProofPhotoBytes + 4)
+            throw new HttpException(400, InvalidProofPhotoMessage, OrderErrorCodes.ValidationError);
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(base64Part);
+        }
+        catch (FormatException)
+        {
+            throw new HttpException(400, InvalidProofPhotoMessage, OrderErrorCodes.ValidationError);
+        }
+
+        if (bytes.Length == 0 || bytes.Length > MaxProofPhotoBytes)
+            throw new HttpException(400, InvalidProofPhotoMessage, OrderErrorCodes.ValidationError);
+
+        var extension = mimeType switch { "image/png" => ".png", "image/webp" => ".webp", _ => ".jpg" };
+        try
+        {
+            imageSanitizer.Sanitize(bytes, "proof" + extension, mimeType, MaxProofPhotoBytes);
+        }
+        catch (Exception)
+        {
+            throw new HttpException(400, InvalidProofPhotoMessage, OrderErrorCodes.ValidationError);
+        }
+    }
+
+    private static bool IsValidCloudinaryUrl(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        if (!Uri.TryCreate(candidate.Trim(), UriKind.Absolute, out var uri))
+            return false;
+
+        if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(uri.AbsolutePath) || uri.AbsolutePath == "/")
+            return false;
+
+        return uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.EndsWith(".cloudinary.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ValidatePublicSignature(CreateDeliveryProofRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.SignatureBase64))
+        {
+            ValidateImageDataUrl(request.SignatureBase64.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SignatureUrl))
+        {
+            var sigUrl = request.SignatureUrl.Trim();
+            if (sigUrl.StartsWith(DataImagePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateImageDataUrl(sigUrl);
+            }
+            else if (!IsValidCloudinaryUrl(sigUrl))
+            {
+                throw new HttpException(400, InvalidCloudinaryPhotoUrlMessage, OrderErrorCodes.ValidationError);
+            }
+        }
+    }
+
+    private static void ValidateImageDataUrl(string dataUrl)
+    {
+        if (!dataUrl.StartsWith(DataImagePrefix, StringComparison.OrdinalIgnoreCase))
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        var markerIndex = dataUrl.IndexOf(Base64Marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < DataImagePrefix.Length)
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        var mimeSubtype = dataUrl[DataImagePrefix.Length..markerIndex].Trim();
+        if (!IsAllowedSignatureImageFormat(mimeSubtype))
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        var base64Part = dataUrl[(markerIndex + Base64Marker.Length)..].Trim();
+        if (string.IsNullOrEmpty(base64Part))
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+
+        if ((base64Part.Length * 3L) / 4 > MaxSignaturePayloadBytes + 4)
+            throw new HttpException(400, SignatureTooLargeMessage, OrderErrorCodes.ValidationError);
+
+        try
+        {
+            var bytes = Convert.FromBase64String(base64Part);
+            if (bytes.Length > MaxSignaturePayloadBytes)
+                throw new HttpException(400, SignatureTooLargeMessage, OrderErrorCodes.ValidationError);
+        }
+        catch (FormatException)
+        {
+            throw new HttpException(400, InvalidSignatureDataUrlMessage, OrderErrorCodes.ValidationError);
+        }
+    }
+
+    private static bool IsAllowedSignatureImageFormat(string subtype) =>
+        subtype.Equals("png", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("jpeg", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("jpg", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("webp", StringComparison.OrdinalIgnoreCase) ||
+        subtype.Equals("svg+xml", StringComparison.OrdinalIgnoreCase);
 
     private async Task<Delivery> GetManagedDeliveryAsync(Guid userId, Guid deliveryId, CancellationToken cancellationToken)
     {
@@ -391,6 +849,43 @@ public sealed class DeliveryService(
             throw new HttpException(410, DeliveryMessages.ShareLinkExpiredError, OrderErrorCodes.StateConflict);
 
         return delivery;
+    }
+
+    private async Task<string> GenerateUniqueShareCodeAsync(CancellationToken cancellationToken)
+    {
+        for (var i = 0; i < 10; i++)
+        {
+            var code = DeliveryCodeHelper.GenerateShareCode();
+            if (!await repository.IsShareCodeInUseAsync(code, clock.UtcNow, cancellationToken))
+            {
+                return code;
+            }
+        }
+
+        throw new InvalidOperationException("Failed to generate a unique share code.");
+    }
+
+    private async Task<PublicDriverDeliveryResponse> BuildPublicDriverResponseAsync(
+        Delivery delivery, CancellationToken cancellationToken)
+    {
+        var proofs = await repository.GetProofsAsync(delivery.Id, cancellationToken);
+        var referenceCode = await repository.GetReferenceCodeAsync(delivery, cancellationToken);
+        var items = ((await repository.GetDeliveryItemsAsync(delivery.Id, cancellationToken)) ?? [])
+            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
+        var totalBatches = delivery.ContractId.HasValue
+            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
+            : (int?)null;
+        var partyContextMap = await repository.GetPartyContextsAsync([delivery], cancellationToken);
+        DeliveryPartyContext? partyContext = null;
+        partyContextMap?.TryGetValue(delivery.Id, out partyContext);
+
+        return DeliveryResponseHelper.ToPublicDriverResponse(
+            delivery,
+            proofs.Count,
+            referenceCode,
+            items,
+            totalBatches,
+            partyContext);
     }
 
     private static string GenerateShareToken()
@@ -549,13 +1044,30 @@ public sealed class DeliveryService(
         return proof is not null && !string.IsNullOrWhiteSpace(proof.TamperProofHash) && proof.TamperProofHash.Length == 64;
     }
 
+    private async Task<DeliveryResponse> BuildDeliveryResponseAsync(Delivery delivery, int proofCount, CancellationToken cancellationToken)
+    {
+        var contexts = await repository.GetPartyContextsAsync([delivery], cancellationToken);
+        var context = contexts?.GetValueOrDefault(delivery.Id);
+        var items = ((await repository.GetDeliveryItemsAsync(delivery.Id, cancellationToken)) ?? [])
+            .Select(DeliveryResponseHelper.ToItemResponse).ToArray();
+        var totalBatches = delivery.ContractId.HasValue
+            ? await repository.GetTotalBatchesForContractAsync(delivery.ContractId.Value, cancellationToken)
+            : (int?)null;
+        return DeliveryResponseHelper.ToResponse(delivery, proofCount, context, items, totalBatches);
+    }
+
     private async Task<IReadOnlyList<DeliveryResponse>> MapDeliveryListAsync(IReadOnlyList<Delivery> deliveries, CancellationToken cancellationToken)
     {
         if (deliveries.Count == 0)
             return [];
 
-        var counts = await repository.GetProofCountsAsync(deliveries.Select(d => d.Id).ToArray(), cancellationToken);
+        var deliveryIds = deliveries.Select(d => d.Id).ToArray();
+        var counts = await repository.GetProofCountsAsync(deliveryIds, cancellationToken);
         var contexts = await repository.GetPartyContextsAsync(deliveries, cancellationToken);
+        var itemsMap = await repository.GetDeliveryItemsMapAsync(deliveryIds, cancellationToken);
+        var contractIds = deliveries.Where(d => d.ContractId.HasValue).Select(d => d.ContractId!.Value).Distinct().ToArray();
+        var totalBatchesMap = await repository.GetContractTotalBatchesMapAsync(contractIds, cancellationToken);
+
         var responses = new List<DeliveryResponse>(deliveries.Count);
         foreach (var delivery in deliveries)
         {
@@ -563,7 +1075,9 @@ public sealed class DeliveryService(
                 ? counts.GetValueOrDefault(delivery.Id, 0)
                 : (await repository.GetProofsAsync(delivery.Id, cancellationToken)).Count;
             var context = contexts?.GetValueOrDefault(delivery.Id);
-            responses.Add(DeliveryResponseHelper.ToResponse(delivery, proofCount, context));
+            var items = itemsMap?.GetValueOrDefault(delivery.Id)?.Select(DeliveryResponseHelper.ToItemResponse).ToArray() ?? [];
+            var totalBatches = delivery.ContractId.HasValue ? totalBatchesMap?.GetValueOrDefault(delivery.ContractId.Value) : null;
+            responses.Add(DeliveryResponseHelper.ToResponse(delivery, proofCount, context, items, totalBatches));
         }
 
         return responses;
@@ -588,6 +1102,6 @@ public sealed class DeliveryService(
         };
 
         if (!isValid)
-            throw new HttpException(400, $"Cannot transition delivery status from '{current}' to '{next}'.", OrderErrorCodes.StateConflict);
+            throw new HttpException(400, $"Không thể chuyển chuyến giao từ trạng thái '{current}' sang '{next}'. Hãy tải lại trang để xem trạng thái mới nhất.", OrderErrorCodes.StateConflict);
     }
 }

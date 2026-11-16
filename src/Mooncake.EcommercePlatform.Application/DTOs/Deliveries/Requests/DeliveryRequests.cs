@@ -23,6 +23,19 @@ public record CreateDeliveryRequest
     public string? TrackingCode { get; init; }
 
     public string? Notes { get; init; }
+
+    public IReadOnlyList<CreateDeliveryItemRequest>? Items { get; init; }
+}
+
+public record CreateDeliveryItemRequest
+{
+    public Guid? RfqItemId { get; init; }
+
+    public Guid? OrderItemId { get; init; }
+
+    public Guid? ItemId { get; init; }
+
+    public int Quantity { get; init; }
 }
 
 public record UpdateDeliveryStatusRequest
@@ -90,5 +103,23 @@ public record CarrierWebhookPayload
     public DateTime EventTimeUtc { get; init; }
 
     public string? Notes { get; init; }
+}
+
+public record AssignDeliveryDriverRequest
+{
+    public string DriverName { get; init; } = string.Empty;
+
+    public string DriverPhone { get; init; } = string.Empty;
+
+    public string? VehiclePlate { get; init; }
+}
+
+public record ClaimDeliveryTripRequest
+{
+    public string DriverName { get; init; } = string.Empty;
+
+    public string DriverPhone { get; init; } = string.Empty;
+
+    public string VehiclePlate { get; init; } = string.Empty;
 }
 

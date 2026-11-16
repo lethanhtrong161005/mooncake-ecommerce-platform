@@ -2,6 +2,52 @@ namespace Mooncake.EcommercePlatform.Application.DTOs.Deliveries.Responses;
 
 using Mooncake.EcommercePlatform.Domain.Enums;
 
+public record DeliveryItemResponse
+{
+    public Guid Id { get; init; }
+
+    public Guid DeliveryId { get; init; }
+
+    public Guid? OrderItemId { get; init; }
+
+    public Guid? RfqItemId { get; init; }
+
+    public string ProductName { get; init; } = string.Empty;
+
+    public string? Unit { get; init; }
+
+    public int Quantity { get; init; }
+}
+
+public record ContractFulfillmentLineResponse
+{
+    public Guid LineId { get; init; }
+
+    public Guid? RfqItemId { get; init; }
+
+    public Guid? OrderItemId { get; init; }
+
+    public string ProductName { get; init; } = string.Empty;
+
+    public string? Unit { get; init; }
+
+    public int TotalQuantity { get; init; }
+
+    public int ScheduledQuantity { get; init; }
+
+    public int DeliveredQuantity { get; init; }
+
+    public int RemainingQuantity { get; init; }
+
+    public int Total => TotalQuantity;
+
+    public int Scheduled => ScheduledQuantity;
+
+    public int Delivered => DeliveredQuantity;
+
+    public int Remaining => RemainingQuantity;
+}
+
 public record DeliveryProofResponse
 {
     public Guid Id { get; init; }
@@ -61,6 +107,12 @@ public record DeliveryResponse
 
     public string? Notes { get; init; }
 
+    public int? BatchNumber { get; init; }
+
+    public int? TotalBatches { get; init; }
+
+    public IReadOnlyList<DeliveryItemResponse> Items { get; init; } = Array.Empty<DeliveryItemResponse>();
+
     public int ProofCount { get; init; }
 
     public string? ContractNumber { get; init; }
@@ -70,6 +122,16 @@ public record DeliveryResponse
     public string? CustomerName { get; init; }
 
     public string? SupplierName { get; init; }
+
+    public string? DriverName { get; init; }
+
+    public string? DriverPhone { get; init; }
+
+    public string? VehiclePlate { get; init; }
+
+    public string? ShareCode { get; init; }
+
+    public DateTime? DriverClaimedAt { get; init; }
 
     public DateTime CreatedAt { get; init; }
 
@@ -89,6 +151,8 @@ public record DeliveryShareLinkResponse
 
     public string? Token { get; init; }
 
+    public string? ShareCode { get; init; }
+
     public DateTime? CreatedAtUtc { get; init; }
 
     public DateTime? ExpiresAtUtc { get; init; }
@@ -100,6 +164,28 @@ public record DeliveryShareLinkResponse
     public bool IsExpired { get; init; }
 
     public bool IsRevoked { get; init; }
+}
+
+public record DriverInfoDto
+{
+    public string? DriverName { get; init; }
+
+    public string? DriverPhone { get; init; }
+
+    public string? VehiclePlate { get; init; }
+
+    public DateTime? DriverClaimedAt { get; init; }
+}
+
+public record AssignDriverResponse
+{
+    public string Token { get; init; } = string.Empty;
+
+    public string ShareCode { get; init; } = string.Empty;
+
+    public DateTime ExpiresAt { get; init; }
+
+    public DriverInfoDto Driver { get; init; } = new();
 }
 
 public record PublicDriverDeliveryResponse
@@ -130,6 +216,12 @@ public record PublicDriverDeliveryResponse
 
     public string? ReferenceCode { get; init; }
 
+    public int? BatchNumber { get; init; }
+
+    public int? TotalBatches { get; init; }
+
+    public IReadOnlyList<DeliveryItemResponse> Items { get; init; } = Array.Empty<DeliveryItemResponse>();
+
     public bool RequiresSignature { get; init; }
 
     public int ProofCount { get; init; }
@@ -137,5 +229,27 @@ public record PublicDriverDeliveryResponse
     public DateTime ExpiresAtUtc { get; init; }
 
     public bool CanSubmitProof { get; init; }
+
+    public bool RequiresClaim { get; init; }
+
+    public string? Token { get; init; }
+
+    public string? ShareCode { get; init; }
+
+    public string? DriverName { get; init; }
+
+    public string? DriverPhone { get; init; }
+
+    public string? VehiclePlate { get; init; }
+
+    public DateTime? DriverClaimedAt { get; init; }
+
+    public string? OrderType { get; init; }
+
+    public string? OrderNumber { get; init; }
+
+    public string? ContractNumber { get; init; }
+
+    public string? RecipientCompanyName { get; init; }
 }
 

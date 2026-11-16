@@ -45,6 +45,16 @@ public sealed class SupplierOrderOperationsController(IDirectBulkOrderService en
         Success(await enterpriseService.GetMyFinancialOverviewAsync(CurrentUserId, cancellationToken),
             "Supplier financial overview retrieved successfully.");
 
+    /// <summary>Submits a supplier rebuttal for a reported delivery dispute within 48h.</summary>
+    [HttpPost("orders/{orderId:guid}/delivery-disputes/{disputeId:guid}/rebuttal")]
+    public async Task<IActionResult> SubmitDeliveryDisputeRebuttalAsync(
+        [FromRoute] Guid orderId,
+        [FromRoute] Guid disputeId,
+        [FromBody] SubmitSupplierDeliveryDisputeRebuttalRequest request,
+        CancellationToken cancellationToken) =>
+        Success(await enterpriseService.SubmitDeliveryDisputeRebuttalAsync(CurrentUserId, orderId, disputeId, request, cancellationToken),
+            "Supplier dispute rebuttal submitted successfully.");
+
     private Guid CurrentUserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }
 

@@ -38,7 +38,7 @@ public static class ShopFeatureConfiguration
             table.HasCheckConstraint("ck_shop_version", "version > 0");
             table.HasCheckConstraint("ck_shop_slug", "slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(slug) BETWEEN 3 AND 80");
             table.HasCheckConstraint("ck_shop_colors", "jsonb_typeof(custom_colors) = 'object'");
-            table.HasCheckConstraint("ck_shop_suspension", "(status = 'Suspended' AND pre_suspension_status IN ('Active','Inactive') AND suspended_at_utc IS NOT NULL AND suspended_by_user_id IS NOT NULL AND length(suspension_reason) >= 10) OR (status <> 'Suspended' AND pre_suspension_status IS NULL AND suspended_at_utc IS NULL AND suspended_by_user_id IS NULL AND suspension_reason IS NULL)");
+            table.HasCheckConstraint("ck_shop_suspension", "(status = 'Suspended' AND pre_suspension_status IN ('Active','Inactive') AND suspended_at_utc IS NOT NULL AND (suspended_by_user_id IS NOT NULL OR suspension_reason = 'Giấy ATTP hết hạn') AND length(suspension_reason) >= 10) OR (status <> 'Suspended' AND pre_suspension_status IS NULL AND suspended_at_utc IS NULL AND suspended_by_user_id IS NULL AND suspension_reason IS NULL)");
         });
 
         var template = model.Entity<ShopTemplate>(); Names(template, "shop_templates");

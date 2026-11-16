@@ -75,21 +75,23 @@ public sealed class DirectBulkOrderTestSeedTests(ITestOutputHelper output)
         {
             var orderIdsArray = oldTestOrders.ToArray();
             var orderIdStrings = oldTestOrders.Select(id => id.ToString()).ToArray();
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_items WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM payments WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM payment_parts WHERE obligation_id IN (SELECT id FROM order_payment_schedule WHERE order_id = ANY({orderIdsArray}))");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_payment_schedule WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM inventory_reservations WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM product_inventory_movements WHERE source_id = ANY({orderIdStrings})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM packaging_fee_change_requests WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_cancellation_requests WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_financial_ledger_entries WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM supplier_payout_requests WHERE order_id = ANY({orderIdsArray})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_refund_cases WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM delivery_items WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_id = ANY({orderIdsArray})) OR order_item_id IN (SELECT id FROM order_items WHERE order_id = ANY({orderIdsArray}))");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM delivery_proofs WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_id = ANY({orderIdsArray}))");
             await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_delivery_disputes WHERE order_id = ANY({orderIdsArray})");
             await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM deliveries WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_financial_ledger_entries WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_refund_cases WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM supplier_payout_requests WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_cancellation_requests WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM packaging_fee_change_requests WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM payments WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM payment_parts WHERE order_id = ANY({orderIdsArray}) OR obligation_id IN (SELECT id FROM order_payment_schedule WHERE order_id = ANY({orderIdsArray}))");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_payment_schedule WHERE order_id = ANY({orderIdsArray})");
             await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM custom_packaging_revisions WHERE \"CustomPackagingId\" IN (SELECT id FROM custom_packagings WHERE order_id = ANY({orderIdsArray}))");
             await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM custom_packagings WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM inventory_reservations WHERE order_id = ANY({orderIdsArray})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM product_inventory_movements WHERE source_id = ANY({orderIdStrings})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM order_items WHERE order_id = ANY({orderIdsArray})");
             await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM orders WHERE id = ANY({orderIdsArray})");
         }
 

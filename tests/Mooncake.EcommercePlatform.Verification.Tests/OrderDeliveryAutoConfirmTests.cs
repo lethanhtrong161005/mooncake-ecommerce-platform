@@ -293,11 +293,15 @@ public sealed class OrderDeliveryAutoConfirmTests(PostgresVerificationFixture fi
         };
         db.SupplierProfiles.Add(profile);
 
+        var (templateId, revisionId) = await ShopTestHelper.EnsurePublishedTemplateRevisionAsync(db, FixedNow);
+
         var shop = new Shop
         {
             Id = Guid.NewGuid(),
             OwnerUserId = supplierUser.Id,
             SupplierId = profile.Id,
+            TemplateId = templateId,
+            TemplateRevisionId = revisionId,
             Name = "Test Artisan Bakery",
             Slug = $"test-artisan-{Guid.NewGuid():N}",
             Status = ShopStatus.Active

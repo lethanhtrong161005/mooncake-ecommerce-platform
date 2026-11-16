@@ -24,7 +24,7 @@ public static class ShopTestSchemaHelper
         foreach (var index in shop.Metadata.GetIndexes().Where(x => x.GetDatabaseName() == "IX_shops_status_created_at_id").ToArray())
             shop.Metadata.RemoveIndex(index);
         foreach (var name in new[] { "OwnerUserId", "Version", "TemplateRevisionId", "LogoAssetId", "BannerAssetId",
-            "PublicContactEmail", "PublicContactPhone", "PublicAddress", "PreSuspensionStatus", "SuspendedAtUtc", "SuspendedByUserId", "SuspensionReason" }) shop.Ignore(name);
+            "PublicContactEmail", "PublicContactPhone", "PublicAddress", "PreSuspensionStatus", "SuspendedAtUtc", "SuspendedByUserId", "SuspensionReason", "RegionCode" }) shop.Ignore(name);
         shop.Property(x => x.Name).IsRequired(false).HasMaxLength(255);
         shop.Property(x => x.Slug).HasMaxLength(255);
         shop.Property(x => x.Description).HasColumnType("text").Metadata.SetMaxLength(null);

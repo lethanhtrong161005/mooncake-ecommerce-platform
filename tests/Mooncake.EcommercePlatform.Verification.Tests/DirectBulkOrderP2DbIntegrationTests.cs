@@ -22,6 +22,7 @@ using Xunit;
 using Xunit.Abstractions;
 
 /// <summary>Real PostgreSQL concurrency, locking, multi-part VNPay, late-IPN, and simulated ledger integration tests for Phase 2.</summary>
+[Collection("DirectBulkOrderIntegration")]
 public sealed class DirectBulkOrderP2DbIntegrationTests(ITestOutputHelper output)
 {
     private const string SampleMockupUrl = "https://images.unsplash.com/photo-1631206753348-db44968fd440?auto=format&fit=crop&w=800&q=80";
@@ -585,6 +586,7 @@ public sealed class DirectBulkOrderP2DbIntegrationTests(ITestOutputHelper output
             var pastDeadline = DateTime.UtcNow.AddMinutes(-10);
             await s.Db.Orders.Where(o => o.Id == lateOrder.Id)
                 .ExecuteUpdateAsync(u => u.SetProperty(o => o.ReservationExpiresAt, pastDeadline));
+            s.Db.ChangeTracker.Clear();
             await s.EnterpriseRepo.ExpireOverdueOrdersAsync();
 
             var expiredCheck = await s.Db.Orders.AsNoTracking().SingleAsync(o => o.Id == lateOrder.Id);

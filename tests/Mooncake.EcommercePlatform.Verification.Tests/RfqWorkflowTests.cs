@@ -286,7 +286,7 @@ public sealed class RfqWorkflowTests
     }
 
     [Fact]
-    public async Task GetSupplierInvitationsAsync_IncludesOpenPublicRfqs_WithoutExposingCustomerTargetPrice()
+    public async Task GetSupplierInvitationsAsync_IncludesOpenPublicRfqs_WithCustomerTargetPrice()
     {
         var rfqId = Guid.NewGuid();
         var itemId = Guid.NewGuid();
@@ -327,7 +327,7 @@ public sealed class RfqWorkflowTests
         Assert.Equal(rfqId, response.Id);
         Assert.False(response.IsInvited);
         Assert.False(response.CanDecline);
-        Assert.Null(Assert.Single(response.Items).TargetPrice);
+        Assert.Equal(50000m, Assert.Single(response.Items).TargetPrice);
         Assert.NotNull(response.MyBid);
         Assert.Equal(125000m, Assert.Single(response.MyBid.Items).UnitPrice);
     }

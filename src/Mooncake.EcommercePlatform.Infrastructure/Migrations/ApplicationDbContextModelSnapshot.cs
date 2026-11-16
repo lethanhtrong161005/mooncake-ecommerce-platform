@@ -43,7 +43,7 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_invitation_status", new[] { "Invited", "Viewed", "BidSubmitted", "Declined" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "rfq_status", new[] { "Draft", "Open", "InNegotiation", "Awarded", "Closed", "Cancelled" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "shop_status", new[] { "Active", "Inactive", "Suspended" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "user_role", new[] { "Customer", "Supplier", "Admin" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "user_role", new[] { "Customer", "Supplier", "Admin", "Driver" });
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "extensions", "pgcrypto");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "extensions", "uuid-ossp");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
@@ -2033,6 +2033,72 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                     b.HasIndex(new[] { "ProofType" }, "idx_dp_proof_type");
 
                     b.ToTable("delivery_proofs", (string)null);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.DriverProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DefaultVehiclePlate")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("default_vehicle_plate");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("full_name");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("driver_profiles_pkey");
+
+                    b.HasIndex(new[] { "Phone" }, "idx_driver_profiles_phone");
+
+                    b.HasIndex(new[] { "UserId" }, "idx_driver_profiles_user_id")
+                        .IsUnique();
+
+                    b.ToTable("driver_profiles", (string)null);
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.GoogleLoginAttempt", b =>
@@ -7195,6 +7261,16 @@ namespace Mooncake.EcommercePlatform.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("SubmittedByUserId")
                         .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.DriverProfile", b =>
+                {
+                    b.HasOne("Mooncake.EcommercePlatform.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_driver_profiles_users");
                 });
 
             modelBuilder.Entity("Mooncake.EcommercePlatform.Domain.Entities.InventoryReservation", b =>

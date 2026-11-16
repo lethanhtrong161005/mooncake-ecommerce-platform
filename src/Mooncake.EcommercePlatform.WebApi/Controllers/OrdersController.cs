@@ -171,7 +171,11 @@ public sealed class OrdersController(IOrderService orderService) : BaseApiContro
         [FromBody] CreateOrderPartVnPayUrlRequest? request, [FromServices] IDirectBulkOrderService enterpriseService,
         CancellationToken cancellationToken) =>
         Success(await enterpriseService.CreatePartVnPayUrlAsync(GetCurrentUserId(), orderId, partId,
-            request ?? new CreateOrderPartVnPayUrlRequest(), HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken),
+            request ?? new CreateOrderPartVnPayUrlRequest(),
+            Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                ?? Request.Headers["X-Real-IP"].FirstOrDefault()
+                ?? HttpContext.Connection.RemoteIpAddress?.ToString(),
+            cancellationToken),
             "VNPay payment URL generated for order payment part.");
 
     /// <summary>Returns the order's payment schedule, 100M-capped parts, and production/shipping gates.</summary>

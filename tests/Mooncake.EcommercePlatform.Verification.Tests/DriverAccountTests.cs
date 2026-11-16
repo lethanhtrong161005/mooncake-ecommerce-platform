@@ -309,6 +309,8 @@ public sealed class DriverAccountTests
             DeliveryNumber = "DEL-CLAIM-01",
             Status = DeliveryStatus.Confirmed,
             DriverClaimedAt = null,
+            ShareToken = "open-token",
+            ShareTokenExpiresAtUtc = fixedNow.AddHours(5),
             CreatedAt = fixedNow.AddHours(-1)
         };
 
@@ -349,7 +351,9 @@ public sealed class DriverAccountTests
             Id = DeliveryId,
             DriverPhone = "0912345678", // Different driver's phone
             DriverClaimedAt = fixedNow.AddHours(-1),
-            Status = DeliveryStatus.InTransit
+            Status = DeliveryStatus.InTransit,
+            ShareToken = "open-token",
+            ShareTokenExpiresAtUtc = fixedNow.AddHours(5)
         };
 
         deliveryRepository.Setup(r => r.GetByIdAsync(DeliveryId, It.IsAny<CancellationToken>()))
@@ -360,6 +364,59 @@ public sealed class DriverAccountTests
 
         Assert.Equal(409, ex.StatusCode);
         Assert.Equal("Chuyến đã có tài xế khác nhận. Liên hệ xưởng nếu cần đổi tài xế.", ex.Message);
+    }
+
+    [Fact]
+    public async Task ClaimTrip_WhenSupplierRevokedLink_Throws409AndDoesNotReopenLink()
+    {
+        var service = CreateService();
+        driverRepository.Setup(r => r.GetProfileByUserIdAsync(DriverUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DriverProfile { UserId = DriverUserId, Phone = "0987654321", FullName = "Tài xế A" });
+
+        var revokedAt = fixedNow.AddMinutes(-10);
+        var delivery = new Delivery
+        {
+            Id = DeliveryId,
+            DriverPhone = "0987654321", // assigned to this driver, but the supplier revoked the link
+            Status = DeliveryStatus.Confirmed,
+            ShareToken = "revoked-token",
+            ShareTokenExpiresAtUtc = fixedNow.AddHours(5),
+            ShareTokenRevokedAtUtc = revokedAt
+        };
+        deliveryRepository.Setup(r => r.GetByIdAsync(DeliveryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+
+        var ex = await Assert.ThrowsAsync<HttpException>(() =>
+            service.ClaimTripAsync(DriverUserId, DeliveryId, new DriverClaimTripRequest()));
+
+        Assert.Equal(409, ex.StatusCode);
+        Assert.Equal(revokedAt, delivery.ShareTokenRevokedAtUtc);
+        Assert.Null(delivery.DriverClaimedAt);
+        deliveryRepository.Verify(r => r.UpdateAsync(It.IsAny<Delivery>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ClaimTrip_WhenLinkExpiredAndNotAssignedToDriver_Throws409()
+    {
+        var service = CreateService();
+        driverRepository.Setup(r => r.GetProfileByUserIdAsync(DriverUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DriverProfile { UserId = DriverUserId, Phone = "0987654321", FullName = "Tài xế A" });
+
+        var delivery = new Delivery
+        {
+            Id = DeliveryId,
+            Status = DeliveryStatus.Confirmed,
+            ShareToken = "old-token",
+            ShareTokenExpiresAtUtc = fixedNow.AddHours(-1)
+        };
+        deliveryRepository.Setup(r => r.GetByIdAsync(DeliveryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(delivery);
+
+        var ex = await Assert.ThrowsAsync<HttpException>(() =>
+            service.ClaimTripAsync(DriverUserId, DeliveryId, new DriverClaimTripRequest()));
+
+        Assert.Equal(409, ex.StatusCode);
+        Assert.Null(delivery.DriverClaimedAt);
     }
 
     [Fact]

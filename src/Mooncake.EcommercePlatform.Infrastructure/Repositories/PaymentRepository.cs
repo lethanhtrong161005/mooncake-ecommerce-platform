@@ -347,6 +347,78 @@ public sealed class PaymentRepository(ApplicationDbContext context, IDateTimePro
         return payment;
     }
 
+    public async Task<Payment?> RecordCashMilestonePaymentAsync(Guid customerId, Guid contractId, Guid milestoneId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var contract = await context.Contracts.FromSqlInterpolated(
+                $"SELECT * FROM contracts WHERE id = {contractId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
+        var milestone = await context.ContractMilestones.FromSqlInterpolated(
+                $"SELECT * FROM contract_milestones WHERE id = {milestoneId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (contract is null || milestone is null || contract.CustomerId != customerId
+            || contract.Status != ContractStatus.Active || milestone.ContractId != contractId
+            || milestone.IsDeleted || milestone.IsDeposit || milestone.SequenceNumber != 3
+            || milestone.Amount is not > 0 || milestone.Status == MilestoneStatus.Paid)
+            return null;
+
+        var milestone2Paid = await context.ContractMilestones.AsNoTracking().AnyAsync(item =>
+            item.ContractId == contractId && item.SequenceNumber == 2 && item.Status == MilestoneStatus.Paid
+            && !item.IsDeleted, cancellationToken);
+        var shipments = context.Deliveries.AsNoTracking()
+            .Where(item => item.ContractId == contractId && !item.IsDeleted);
+        var shipmentsDelivered = await shipments.AnyAsync(cancellationToken)
+            && !await shipments.AnyAsync(item => item.Status != DeliveryStatus.Delivered, cancellationToken);
+        if (!milestone2Paid || !shipmentsDelivered)
+            return null;
+
+        if (await context.Payments.AnyAsync(payment => payment.ContractId == contractId && !payment.IsDeleted
+            && (payment.Status == PaymentStatus.Pending || payment.Status == PaymentStatus.Processing
+                || payment.Status == PaymentStatus.Completed)
+            && (payment.MilestoneId == null || payment.MilestoneId == milestoneId), cancellationToken))
+            return null;
+
+        var now = clock.UtcNow;
+        var payment = new Payment
+        {
+            Id = Guid.NewGuid(),
+            ContractId = contractId,
+            MilestoneId = milestoneId,
+            CustomerId = customerId,
+            PaymentNumber = $"PAY-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..22].ToUpperInvariant(),
+            Amount = milestone.Amount.Value,
+            Currency = "VND",
+            Method = PaymentMethod.Cash,
+            Status = PaymentStatus.Completed,
+            Provider = "Customer cash payment confirmation",
+            PaidAt = now,
+            CreatedBy = customerId,
+            CreatedAt = now
+        };
+        var previousStatus = milestone.Status;
+        milestone.Status = MilestoneStatus.Paid;
+        milestone.UpdatedAt = now;
+        milestone.UpdatedBy = customerId;
+        context.Payments.Add(payment);
+        context.WorkflowEvents.Add(new WorkflowEvent
+        {
+            AggregateType = "ContractMilestone",
+            AggregateId = milestone.Id,
+            EventType = "CashMilestonePaymentRecorded",
+            FromStatus = previousStatus.ToString(),
+            ToStatus = MilestoneStatus.Paid.ToString(),
+            ActorUserId = customerId,
+            Metadata = JsonSerializer.Serialize(new { milestone.SequenceNumber, method = "Cash", recordedAt = now })
+        });
+        await NotifyPaymentPartiesAsync(payment, "payment.cash_reported", "Customer reported cash payment",
+            $"Customer reported cash payment for milestone M3 of contract {contract.ContractNumber}.", cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return payment;
+    }
+
     public async Task<Payment?> PrepareFullContractVnPayPaymentAsync(Guid customerId, Guid contractId,
         CancellationToken cancellationToken = default)
     {

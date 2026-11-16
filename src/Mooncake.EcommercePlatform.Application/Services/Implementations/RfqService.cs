@@ -36,7 +36,7 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
                 ? await repository.GetInvitationAsync(rfq.Id, supplierProfileId.Value, cancellationToken)
                 : null;
             if (invitation?.Status == RfqInvitationStatus.Declined) continue;
-            responses.Add(await ToResponseAsync(rfq, supplier, cancellationToken,
+            responses.Add(await ToResponseAsync(rfq, false, cancellationToken,
                 invitation is not null,
                 invitation?.Status is RfqInvitationStatus.Invited or RfqInvitationStatus.Viewed,
                 supplierProfileId));
@@ -78,6 +78,34 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
         }).ToList();
         if (!await repository.CreateRfqAsync(rfq, items, cancellationToken))
             throw new HttpException(409, "The RFQ could not be created. Please retry the request.");
+        return await ToResponseAsync(rfq, false, cancellationToken);
+    }
+
+    public async Task<RfqResponse> UpdateAsync(Guid customerUserId, Guid rfqId, CreateRfqRequest request, CancellationToken cancellationToken = default)
+    {
+        ValidateRequest(request);
+        var rfq = await GetOwnedRfqAsync(customerUserId, rfqId, cancellationToken);
+        if (rfq.Status is not (RfqStatus.Draft or RfqStatus.Open) || rfq.AwardedBidId.HasValue)
+            throw new HttpException(409, "Only an unselected draft or open RFQ can be edited.");
+        if (await repository.HasAnyBidAsync(rfqId, cancellationToken))
+            throw new HttpException(409, "An RFQ cannot be edited after a supplier has submitted a bid.");
+
+        rfq.Title = request.Title.Trim();
+        rfq.Description = request.Description?.Trim();
+        rfq.DeliveryAddress = request.DeliveryAddress.Trim();
+        rfq.DeliveryDateRequired = request.DeliveryDateRequired;
+        rfq.BudgetRangeMin = request.BudgetRangeMin;
+        rfq.BudgetRangeMax = request.BudgetRangeMax;
+        rfq.BidDeadline = request.BidDeadline;
+        rfq.UpdatedBy = customerUserId;
+        var items = request.Items.Select(item => new RfqItem
+        {
+            ProductName = item.ProductName.Trim(), Description = item.Description?.Trim(), Quantity = item.Quantity,
+            Unit = item.Unit.Trim(), TargetPrice = item.TargetPrice, Specifications = item.Specifications?.Trim(),
+            PackagingRequirements = item.PackagingRequirements?.Trim(), NeedsCustomPackaging = item.NeedsCustomPackaging
+        }).ToArray();
+        if (!await repository.UpdateRfqAsync(rfq, items, cancellationToken))
+            throw new HttpException(409, "The RFQ changed before it could be updated.");
         return await ToResponseAsync(rfq, false, cancellationToken);
     }
 
@@ -127,7 +155,7 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
             var invitation = await repository.GetInvitationAsync(rfq.Id, supplierId, cancellationToken);
             if (invitation?.Status == RfqInvitationStatus.Declined)
                 continue;
-            responses.Add(await ToResponseAsync(rfq, true, cancellationToken, invitation is not null,
+            responses.Add(await ToResponseAsync(rfq, false, cancellationToken, invitation is not null,
                 invitation?.Status is RfqInvitationStatus.Invited or RfqInvitationStatus.Viewed, supplierId));
         }
         return responses;
@@ -160,7 +188,7 @@ public sealed class RfqService(IRfqRepository repository, IDateTimeProvider cloc
             if (rfq.Status == RfqStatus.Open && rfq.BidDeadline > clock.UtcNow)
                 if (invitation is not null)
                     await MarkViewedAsync(rfqId, supplierId.Value, cancellationToken);
-            return await ToResponseAsync(rfq, true, cancellationToken, isInvited,
+            return await ToResponseAsync(rfq, false, cancellationToken, isInvited,
                 invitation?.Status is RfqInvitationStatus.Invited or RfqInvitationStatus.Viewed, supplierId.Value);
         }
         return await ToResponseAsync(rfq, false, cancellationToken);

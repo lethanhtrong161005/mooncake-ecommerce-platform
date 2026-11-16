@@ -5,5 +5,6 @@ public enum UserRole
 {
     Customer,
     Supplier,
-    Admin
+    Admin,
+    Driver
 }

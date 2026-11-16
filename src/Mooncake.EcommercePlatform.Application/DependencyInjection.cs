@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IWishlistService, WishlistService>();
         services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<IDriverService, DriverService>();
         return services;
     }
 }

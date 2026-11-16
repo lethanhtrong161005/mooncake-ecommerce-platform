@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Mooncake.EcommercePlatform.Application.DTOs.Payments.Requests;
@@ -30,11 +31,16 @@ public sealed class PaymentsControllerHttpTests
 
     private readonly Mock<IPaymentService> paymentService = new();
 
-    private HttpClient CreateClient(string role = "Customer")
+    private HttpClient CreateClient(
+        string role = "Customer",
+        string environmentName = "Development",
+        IReadOnlyDictionary<string, string?>? configOverrides = null)
     {
         var userId = role == "Admin" ? AdminUserId : role == "Supplier" ? SupplierUserId : CustomerUserId;
 
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environmentName });
+        if (configOverrides is not null)
+            builder.Configuration.AddInMemoryCollection(configOverrides);
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
 
@@ -297,6 +303,50 @@ public sealed class PaymentsControllerHttpTests
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(200, json.GetProperty("status").GetInt32());
         Assert.True(json.GetProperty("data").GetProperty("isSuccess").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("Staging", null, null, true)]
+    [InlineData("Production", "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html", null, true)]
+    [InlineData("Production", "https://pay.vnpay.vn/vpcpay.html", null, false)]
+    [InlineData("Staging", "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html", "false", false)]
+    public async Task VerifyReturnCallback_ResolvesConfirmPaymentFromReturnFlagByEnvironmentAndConfig(
+        string environmentName,
+        string? baseUrl,
+        string? confirmOnReturnOverride,
+        bool expectedConfirmFromReturn)
+    {
+        bool? capturedConfirmFromReturn = null;
+        paymentService.Setup(s => s.VerifyReturnCallbackAsync(
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>()))
+            .Callback<IReadOnlyDictionary<string, string>, CancellationToken, bool>((_, _, confirm) =>
+                capturedConfirmFromReturn = confirm)
+            .ReturnsAsync(new VnPayReturnCallbackResponse(
+                "PAY-202610-001",
+                OrderId,
+                null,
+                null,
+                25000000m,
+                true,
+                "00",
+                "NCB",
+                "14556677",
+                DateTime.UtcNow
+            ));
+
+        var configOverrides = new Dictionary<string, string?>();
+        if (baseUrl is not null)
+            configOverrides["VnPay:BaseUrl"] = baseUrl;
+        if (confirmOnReturnOverride is not null)
+            configOverrides["VnPay:ConfirmPaymentOnReturn"] = confirmOnReturnOverride;
+
+        using var client = CreateClient("Customer", environmentName, configOverrides);
+        var response = await client.GetAsync("/api/v1/payments/vnpay/return-callback?vnp_ResponseCode=00&vnp_TxnRef=PAY-202610-001");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expectedConfirmFromReturn, capturedConfirmFromReturn);
     }
 
     [Fact]

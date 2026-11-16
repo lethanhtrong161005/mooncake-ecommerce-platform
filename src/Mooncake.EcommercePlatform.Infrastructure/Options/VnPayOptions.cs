@@ -7,6 +7,7 @@ public sealed class VnPayOptions
     public string TmnCode { get; init; } = string.Empty;
     public string HashSecret { get; init; } = string.Empty;
     public string BaseUrl { get; init; } = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
+    public bool? ConfirmPaymentOnReturn { get; init; }
 
     public bool IsValid() => !string.IsNullOrWhiteSpace(TmnCode) && !string.IsNullOrWhiteSpace(HashSecret) &&
         Uri.TryCreate(BaseUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps;

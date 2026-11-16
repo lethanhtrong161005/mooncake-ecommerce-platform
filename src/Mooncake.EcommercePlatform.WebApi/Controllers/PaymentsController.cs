@@ -36,7 +36,7 @@ public sealed class PaymentsController(
     public async Task<IActionResult> CreateVnPayUrlAsync([FromBody] CreateVnPayUrlRequest request,
         CancellationToken cancellationToken) =>
         Success(await paymentService.CreateVnPayUrlAsync(CurrentUserId, request,
-            HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken),
+            ResolveClientIpAddress(), cancellationToken),
             "VNPay payment URL generated successfully.");
 
     [Authorize(Roles = "Customer")]
@@ -44,7 +44,7 @@ public sealed class PaymentsController(
     public async Task<IActionResult> CreateContractVnPayUrlAsync([FromBody] CreateVnPayUrlRequest request,
         CancellationToken cancellationToken) =>
         Success(await paymentService.CreateVnPayUrlAsync(CurrentUserId, request,
-            HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken),
+            ResolveClientIpAddress(), cancellationToken),
             "VNPay contract payment URL generated successfully.");
 
     [Authorize(Roles = "Customer")]
@@ -59,7 +59,7 @@ public sealed class PaymentsController(
     public async Task<IActionResult> CreateOrderVnPayUrlAsync([FromBody] CreateOrderVnPayUrlRequest request,
         CancellationToken cancellationToken) =>
         Success(await paymentService.CreateOrderVnPayUrlAsync(CurrentUserId, request,
-            HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken),
+            ResolveClientIpAddress(), cancellationToken),
             "VNPay order payment URL generated successfully.");
 
     [Authorize(Roles = "Customer")]
@@ -126,6 +126,11 @@ public sealed class PaymentsController(
             && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
             && uri.Host.Equals("sandbox.vnpayment.vn", StringComparison.OrdinalIgnoreCase);
     }
+
+    private string? ResolveClientIpAddress() =>
+        Request.Headers["X-Forwarded-For"].FirstOrDefault()
+        ?? Request.Headers["X-Real-IP"].FirstOrDefault()
+        ?? HttpContext.Connection.RemoteIpAddress?.ToString();
 
     private Guid CurrentUserId => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
         ? userId : throw new UnauthorizedAccessException("A valid user identity is required.");
